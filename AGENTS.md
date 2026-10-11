@@ -38,6 +38,9 @@ device or the Claude/ChatGPT OAuth connectors (see "Not verified yet" in the com
    (under *Unreleased*, in your area's subsection), and `docs/learnings.md` when you learned
    something about quality.
 7. AI answers must come only from the owner's entries, with dates cited.
+8. **Every new or changed test must be described in `docs/test-cases.md`**: one plain-English
+   line ("Checks that ...") under a section whose `File:` line names the test file, ending with
+   the test name. `tests/test_docs_test_cases.py` fails on missing or stale entries.
 
 ## Shared contracts (do not change casually)
 
@@ -74,9 +77,9 @@ Cross-component rules that are not visible in any one module:
 | integration | `tests/e2e/**` | `docs/architecture.md` (with foundation) |
 
 Shared files everyone edits (keep edits inside your own subsection to avoid merge conflicts):
-`CHANGELOG.md`, `docs/learnings.md`, `docs/runbook.md`. If you need a new dependency or a
-contract change, say so in your final report instead of editing `pyproject.toml` or shared modules
-in parallel.
+`CHANGELOG.md`, `docs/learnings.md`, `docs/runbook.md`, `docs/test-cases.md`. If you need a new
+dependency or a contract change, say so in your final report instead of editing `pyproject.toml`
+or shared modules in parallel.
 
 ## Conventions
 

@@ -96,7 +96,8 @@ LifeLog/
 
 `tests/e2e/test_full_flow.py` runs all three programs in-process on local storage with the
 offline providers: captures through the API, indexing via a real nudge, every MCP tool, an owner
-edit producing edit signals, and an additive capture that keeps the edit.
+edit producing edit signals, and an additive capture that keeps the edit. Every test, with
+what it checks in plain English: `docs/test-cases.md`.
 
 ## Self-improvement loop
 
