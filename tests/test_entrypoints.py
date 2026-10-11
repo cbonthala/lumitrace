@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from lifelog.api.app import create_app
 from lifelog.config import Settings
 from lifelog.indexer.__main__ import main as indexer_main
-from lifelog.mcp_server.__main__ import build_placeholder_server
+from lifelog.mcp_server.server import build_server
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -22,15 +22,22 @@ def test_api_health(settings: Settings) -> None:
     assert resp.json()["status"] == "ok"
 
 
-def test_mcp_placeholder_has_ping() -> None:
-    server = build_placeholder_server()
+def test_mcp_server_lists_tools(settings: Settings) -> None:
+    server = build_server(settings, transport="stdio")
     tools = anyio.run(server.list_tools)
-    assert [t.name for t in tools] == ["ping"]
+    assert {t.name for t in tools} == {
+        "search",
+        "get_day",
+        "query_facts",
+        "on_this_day",
+        "feedback",
+    }
 
 
-def test_indexer_placeholder_commands_not_implemented() -> None:
-    with pytest.raises(SystemExit, match="not implemented"):
-        indexer_main(["rebuild"])
+def test_indexer_cli_help() -> None:
+    with pytest.raises(SystemExit) as exc:
+        indexer_main(["--help"])
+    assert exc.value.code == 0
 
 
 def test_console_scripts_resolve() -> None:
