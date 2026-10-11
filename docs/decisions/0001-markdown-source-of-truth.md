@@ -11,7 +11,7 @@ editable by hand (in Obsidian). AI output will be wrong sometimes and must be co
 ## Decision
 
 One Markdown file per day with YAML front matter for facts, a generated journal region, a notes
-region the system never touches, and the raw transcript (`docs/books-format.md`). Every other
+region the system never touches, and the raw transcript (`docs/frames-format.md`). Every other
 store (the SQLite index) is derived and disposable. Generated content carries a hash so owner
 edits are detected and never overwritten.
 

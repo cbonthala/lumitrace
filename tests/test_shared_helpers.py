@@ -5,9 +5,9 @@ import math
 
 import httpx
 
-from bookshelf.config import Settings
-from bookshelf.embeddings import embed_texts, fake_embedding
-from bookshelf.nudge import nudge_indexer
+from lumen.config import Settings
+from lumen.embeddings import embed_texts, fake_embedding
+from lumen.nudge import nudge_indexer
 
 
 def test_fake_embeddings_are_deterministic_unit_vectors(settings: Settings) -> None:

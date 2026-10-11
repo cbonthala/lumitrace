@@ -11,7 +11,7 @@ third-party API yet, see 0006).
 
 ## Decision
 
-Google Drive first, behind the `Storage` interface (`bookshelf/books/storage/base.py`) with a `local`
+Google Drive first, behind the `Storage` interface (`lumen/frames/storage/base.py`) with a `local`
 backend for development and tests. The Drive backend uses only the `drive.file` scope: the app
 creates the `LifeLog` folder and can see only files it created. Changes are detected with the
 Drive changes API (page tokens). Audio links are the file's private `webViewLink`.

@@ -1,8 +1,8 @@
 # Index schema (schema version 1)
 
-One SQLite file (`BOOKSHELF_INDEX_PATH`, default `data/index/bookshelf.sqlite`) with FTS5 keyword
-search and sqlite-vec vector search. Code: `bookshelf/index/schema.py` (shared: Bookmarks writes,
-the Reading Lamp reads). Open it only with `connect(path, embedding_dimension)`, which loads
+One SQLite file (`LUMEN_INDEX_PATH`, default `data/index/lumen.sqlite`) with FTS5 keyword
+search and sqlite-vec vector search. Code: `lumen/index/schema.py` (shared: Spectrum writes,
+the Lens reads). Open it only with `connect(path, embedding_dimension)`, which loads
 sqlite-vec, creates the schema, turns on foreign keys and WAL, sets a 5-second busy timeout and
 returns `sqlite3.Row` rows.
 
@@ -11,8 +11,8 @@ the Markdown files with `reset_derived(conn)` followed by a full sync.
 
 ## Writers
 
-* **Bookmarks** (indexer): all derived tables, `meta`, `edit_signals`.
-* **Reading Lamp** (MCP server): `feedback` only (and reads everything else).
+* **Spectrum** (indexer): all derived tables, `meta`, `edit_signals`.
+* **Lens** (MCP server): `feedback` only (and reads everything else).
 
 ## Tables
 
@@ -26,7 +26,7 @@ the Markdown files with `reset_derived(conn)` followed by a full sync.
 | `sync_token` | last `Storage.list_changes` token (cleared by `reset_derived`) |
 | `last_sync_at`, `last_rebuild_at` | ISO-8601 UTC |
 | `indexer_retry_paths` | JSON list of paths that failed transiently; retried next sync (indexer) |
-| `last_full_scan_at`, `last_backup_at` | ISO-8601 UTC (indexer; see `docs/bookmarks.md`) |
+| `last_full_scan_at`, `last_backup_at` | ISO-8601 UTC (indexer; see `docs/spectrum.md`) |
 
 ### `files`: every storage file seen (incremental updates)
 

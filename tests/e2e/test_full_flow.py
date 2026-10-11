@@ -30,19 +30,19 @@ from fastapi.testclient import TestClient
 from mcp import Client
 from PIL import Image
 
-from bookshelf.bookmarks.core import Indexer
-from bookshelf.bookmarks.service import IndexerService
-from bookshelf.bookmarks.service import create_app as create_indexer_app
-from bookshelf.books.dayfile import day_file_path, generated_snapshot_path, parse
-from bookshelf.books.storage.local import LocalStorage
-from bookshelf.config import Settings
-from bookshelf.index.schema import connect
-from bookshelf.nudge import nudge_indexer
-from bookshelf.reading_lamp.server import build_server
-from bookshelf.typewriter.app import create_app as create_api_app
-from bookshelf.typewriter.pipeline.audio import AudioResult, compress_audio
-from bookshelf.typewriter.pipeline.llm import LLMClient
-from bookshelf.typewriter.pipeline.processor import CaptureProcessor
+from lumen.config import Settings
+from lumen.frames.dayfile import day_file_path, generated_snapshot_path, parse
+from lumen.frames.storage.local import LocalStorage
+from lumen.index.schema import connect
+from lumen.lens.server import build_server
+from lumen.nudge import nudge_indexer
+from lumen.prism.app import create_app as create_api_app
+from lumen.prism.pipeline.audio import AudioResult, compress_audio
+from lumen.prism.pipeline.llm import LLMClient
+from lumen.prism.pipeline.processor import CaptureProcessor
+from lumen.spectrum.core import Indexer
+from lumen.spectrum.service import IndexerService
+from lumen.spectrum.service import create_app as create_indexer_app
 
 ROOT = Path(__file__).resolve().parents[2]
 TOKEN = "e2e-token-0123456789abcdef"

@@ -1,51 +1,51 @@
 # Architecture
 
-You jot it on the **Notepad**, the **Typewriter** turns it into **Books**, **Bookmarks** mark
-every page worth finding, and the **Reading Lamp** lets you read any of it. (Why these names:
-decision 0008.)
+A **Flash** captures the moment, the **Prism** splits it into its colors, each day becomes a
+**Frame**, the **Spectrum** lays everything out in order, and the **Lens** lets you zoom into
+any day. (Why these names: decision 0009.)
 
 ```mermaid
 flowchart LR
-    Phone["Notepad: iPhone Shortcuts"] -->|"POST /recordings, /notes"| Typewriter["Typewriter: recording API"]
-    Typewriter -->|"day file, snapshot, audio, photos, _system records"| Books["Books: Google Drive (or local)"]
-    Typewriter -.->|"POST /nudge"| Bookmarks["Bookmarks: indexer"]
-    Books --> Obsidian["Obsidian"]
-    Books -->|"list_changes"| Bookmarks
-    Bookmarks --> Index[("SQLite index")]
-    AIApp["Claude or other AI app"] -->|MCP| Lamp["Reading Lamp: MCP server"]
-    Lamp --> Index
-    Lamp -->|"get_day, audio links, feedback copy"| Books
+    Phone["Flash: iPhone Shortcuts"] -->|"POST /recordings, /notes"| Prism["Prism: recording API"]
+    Prism -->|"day file, snapshot, audio, photos, _system records"| Frames["Frames: Google Drive (or local)"]
+    Prism -.->|"POST /nudge"| Spectrum["Spectrum: indexer"]
+    Frames --> Obsidian["Obsidian"]
+    Frames -->|"list_changes"| Spectrum
+    Spectrum --> Index[("SQLite index")]
+    AIApp["Claude or other AI app"] -->|MCP| LensNode["Lens: MCP server"]
+    LensNode --> Index
+    LensNode -->|"get_day, audio links, feedback copy"| Frames
 ```
 
-All three programs are the `bookshelf` Python package, built into one Docker image and started
-with different commands (`docker-compose.yml`, services `typewriter`, `bookmarks` and
-`reading-lamp`). They share a `/data` volume holding the SQLite index, the MCP OAuth state (and
-the local storage root when `BOOKSHELF_STORAGE_BACKEND=local`). Only the Typewriter (8000) and the
-Reading Lamp (8002) publish ports; Bookmarks (8001) is reachable only inside the Docker network
+All three programs are the `lumen` Python package, built into one Docker image and started
+with different commands (`docker-compose.yml`, services `prism`, `spectrum` and
+`lens`). They share a `/data` volume holding the SQLite index, the MCP OAuth state (and
+the local storage root when `LUMEN_STORAGE_BACKEND=local`). Only the Prism (8000) and the
+Lens (8002) publish ports; Spectrum (8001) is reachable only inside the Docker network
 because `POST /nudge` has no authentication.
 
 | Name | Program | Code | Reference |
 |---|---|---|---|
-| Notepad | iPhone Shortcuts (not in the repo) | none | `docs/notepad.md` |
-| Typewriter | recording API, `bookshelf-typewriter` | `bookshelf/typewriter/`, `bookshelf/typewriter/pipeline/`, `prompts/` | `docs/typewriter.md` |
-| Bookmarks | indexer, `bookshelf-bookmarks` | `bookshelf/bookmarks/` | `docs/bookmarks.md` |
-| Reading Lamp | MCP server, `bookshelf-reading-lamp` | `bookshelf/reading_lamp/` | `docs/reading-lamp.md` |
+| Flash | iPhone Shortcuts (not in the repo) | none | `docs/flash.md` |
+| Prism | recording API, `lumen-prism` | `lumen/prism/`, `lumen/prism/pipeline/`, `prompts/` | `docs/prism.md` |
+| Spectrum | indexer, `lumen-spectrum` | `lumen/spectrum/` | `docs/spectrum.md` |
+| Lens | MCP server, `lumen-lens` | `lumen/lens/` | `docs/lens.md` |
 
 ## Shared foundation
 
-* `bookshelf/config.py`: all settings, from `BOOKSHELF_*` environment variables / `.env`.
-* **Books** (`bookshelf/books/`): `dayfile.py` is the day-file format, paths and merge rules;
+* `lumen/config.py`: all settings, from `LUMEN_*` environment variables / `.env`.
+* **Frames** (`lumen/frames/`): `dayfile.py` is the day-file format, paths and merge rules;
   `storage/` is the `Storage` interface with `local` and `gdrive` backends.
-* `bookshelf/index/schema.py`: the SQLite schema. It stays outside `bookshelf/bookmarks/` because
-  Bookmarks writes the index and the Reading Lamp reads it.
-* `bookshelf/embeddings.py`, `bookshelf/nudge.py`: small helpers used by two programs each.
+* `lumen/index/schema.py`: the SQLite schema. It stays outside `lumen/spectrum/` because
+  Spectrum writes the index and the Lens reads it.
+* `lumen/embeddings.py`, `lumen/nudge.py`: small helpers used by two programs each.
 
 Precise signatures: `docs/contracts.md`.
 
-## Storage layout (the Books)
+## Storage layout (the Frames)
 
 ```
-Bookshelf/
+Lumen/
   2026/10/2026-10-10/
     2026-10-10.md          facts in the front matter, journal, notes, transcript
     2026-10-10-2130.m4a    compressed voice note
@@ -60,25 +60,25 @@ Bookshelf/
     reports/               weekly reports (later)
 ```
 
-## Typewriter: recording API (`bookshelf/typewriter/`, `bookshelf/typewriter/pipeline/`)
+## Prism: recording API (`lumen/prism/`, `lumen/prism/pipeline/`)
 
-1. Authenticate the bearer token (`BOOKSHELF_API_TOKEN`; missing, placeholder or short tokens make
+1. Authenticate the bearer token (`LUMEN_API_TOKEN`; missing, placeholder or short tokens make
    every request fail with `503`).
 2. Save the upload to `_system/inbox/<id>/` and a status to `_system/captures/`, answer `202`.
 3. One worker thread processes captures in order: entry date with `dayfile.entry_date` (before
    4 a.m. = previous day); compress audio to `.m4a` (ffmpeg → afconvert → keep the original);
-   transcribe (`BOOKSHELF_STT_*`); resize photos.
+   transcribe (`LUMEN_STT_*`); resize photos.
 4. Read the existing day file (if any), `merge_capture` the new capture, write the day file and
    its `_system/generated/` snapshot. The transcript is now safe.
-5. Extract facts and write the journal with LiteLLM (`BOOKSHELF_LLM_*`, prompts in `prompts/`).
+5. Extract facts and write the journal with LiteLLM (`LUMEN_LLM_*`, prompts in `prompts/`).
    If the day is not user-edited, `apply_generation`; otherwise `merge_generation_additive`.
    The day file is re-read before writing so an edit made meanwhile is never overwritten.
-6. Write the day file and its snapshot again (same text, same `generated_at`), nudge Bookmarks,
+6. Write the day file and its snapshot again (same text, same `generated_at`), nudge Spectrum,
    append an activity record, mark the capture `done`.
 
-## Bookmarks: indexer (`bookshelf/bookmarks/`)
+## Spectrum: indexer (`lumen/spectrum/`)
 
-* One worker thread owns the index. Every `BOOKSHELF_INDEXER_POLL_INTERVAL_SECONDS`, and right
+* One worker thread owns the index. Every `LUMEN_INDEXER_POLL_INTERVAL_SECONDS`, and right
   after a `POST /nudge`, it indexes the nudged paths, then calls
   `storage.list_changes(sync_token)` (a full scan once a day) and processes the changes.
 * For each changed day file: parse, upsert `days` and fact tables, split into `passages`, embed
@@ -86,15 +86,15 @@ Bookshelf/
   the `_system/generated/` snapshot to store `edit_signals` (only when both have the same
   `generated_at`). One transaction per day.
 * `rebuild` = `reset_derived` + full sync (automatic when the embedding model changes).
-* Copies the index to `_system/index-backup/` every `BOOKSHELF_INDEXER_BACKUP_INTERVAL_HOURS`.
+* Copies the index to `_system/index-backup/` every `LUMEN_INDEXER_BACKUP_INTERVAL_HOURS`.
 
-## Reading Lamp: MCP server (`bookshelf/reading_lamp/`)
+## Lens: MCP server (`lumen/lens/`)
 
 * Tools: `search` (FTS5 + vector, reciprocal rank fusion), `get_day` (day file from storage +
   private audio/photo links via `storage.get_share_link`), `query_facts` (fact tables with
   aggregates), `on_this_day`, `feedback` (writes the `feedback` table and a JSON copy under
   `_system/feedback/`).
-* Each call opens its own read-only index connection, so Bookmarks can sync at any time.
+* Each call opens its own read-only index connection, so Spectrum can sync at any time.
 * Transports: stdio for local apps, streamable HTTP for remote and phone apps with auth mode
   `token` (static bearer) or `oauth` (single-owner OAuth 2.1 with a password page). Server
   instructions tell the AI app to answer only from the entries and cite dates.
@@ -102,9 +102,8 @@ Bookshelf/
 ## Tested end to end
 
 `tests/e2e/test_full_flow.py` runs all three programs in-process on local storage with the
-offline providers: captures through the Typewriter, indexing by Bookmarks via a real nudge, every Reading Lamp
-tool, an owner
-edit producing edit signals, and an additive capture that keeps the edit. Every test, with
+offline providers: captures through the Prism, indexing by the Spectrum via a real nudge, every
+Lens tool, an owner edit producing edit signals, and an additive capture that keeps the edit. Every test, with
 what it checks in plain English: `docs/test-cases.md`.
 
 ## Self-improvement loop

@@ -1,6 +1,6 @@
 # 0008. Project and module names: Bookshelf
 
-- Status: accepted
+- Status: superseded by [0009](0009-rename-to-lumen.md)
 - Date: 2026-10-11
 
 ## Context

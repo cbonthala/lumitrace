@@ -30,4 +30,4 @@ of the server, or a small authorization server inside it. There is exactly one u
   leak usable tokens. `lifelog-mcp reset-oauth` disconnects every app.
 * One server process only (in-memory codes). Moving to multiple replicas would need shared
   storage for codes, or an external IdP (supersede this decision then).
-* Not yet verified against the real Claude/ChatGPT connectors (see `docs/reading-lamp.md`).
+* Not yet verified against the real Claude/ChatGPT connectors (see `docs/lens.md`).

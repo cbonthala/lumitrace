@@ -7,7 +7,34 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
-- **Renamed the project from LifeLog to Bookshelf** (decision 0008): *you jot it on the
+- **Renamed the project from Bookshelf to Lumen** (decision 0009, supersedes 0008): *A Flash
+  captures the moment, the Prism splits it into its colors, each day becomes a Frame, the
+  Spectrum lays everything out in order, and the Lens lets you zoom into any day.* Name map in
+  README and AGENTS.md.
+  - Package `bookshelf` → `lumen` (git mv): `typewriter` → `lumen/prism/` (pipeline in
+    `lumen/prism/pipeline/`), `books` → `lumen/frames/`, `bookmarks` → `lumen/spectrum/`,
+    `reading_lamp` → `lumen/lens/` (`ReadingLampTools` → `LensTools`). Shared modules stay at
+    the top. Tests mirror the layout (`tests/prism/`, `tests/frames/`, `tests/spectrum/`,
+    `tests/lens/`).
+  - Commands `lumen-prism`, `lumen-spectrum`, `lumen-lens`, `lumen-drive-login` replace the
+    `bookshelf-*` commands.
+  - Environment prefix `BOOKSHELF_` → `LUMEN_`; default Drive root folder `Lumen`, local root
+    `data/Lumen`, index `data/index/lumen.sqlite` (backup `_system/index-backup/lumen.sqlite`).
+    `_system/` subfolders unchanged.
+  - Docker: image `lumen`, services `prism`, `spectrum` (port still internal) and `lens`, volume
+    `lumen-data`.
+  - The Lens shows itself to AI apps as "Lumen"; OAuth scope `lumen`.
+  - Day files are written with `lumen:` markers and `lumen_format`; files with `bookshelf:` or
+    `lifelog:` markers and `bookshelf_format` or `lifelog_format` are still read (the
+    compatibility test now covers both). Prompt markers are `lumen-prompt:`.
+  - Docs renamed: `prism.md`, `spectrum.md`, `lens.md`, `flash.md`, `frames-format.md`.
+    Shortcuts **Flash Config**, **Flash Inbox** and **Send to Lumen** replace Notepad Config,
+    Notepad Inbox and Send to Bookshelf; Log My Day, Quick Note and Send pending keep their
+    names.
+  - Upgrading an existing setup (from LifeLog or Bookshelf): `docs/runbook.md` → *Upgrading
+    from LifeLog or Bookshelf*. The repository folder is renamed to `lumen` separately.
+- **Renamed the project from LifeLog to Bookshelf** (decision 0008, superseded by the Lumen
+  rename above; names in this entry are the Bookshelf ones): *you jot it on the
   Notepad, the Typewriter turns it into Books, Bookmarks mark every page worth finding, and the
   Reading Lamp lets you read any of it.* Name map in README and AGENTS.md.
   - Package `lifelog` → `bookshelf`: `api` + `pipeline` → `bookshelf/typewriter/` (pipeline in
@@ -41,16 +68,16 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
   describing every new or changed test; linked from README and `docs/architecture.md`;
   decision 0007.
 
-### Typewriter (recording API)
+### Prism (recording API)
 
-### Bookmarks (indexer)
+### Spectrum (indexer)
 
-### Reading Lamp (MCP server)
+### Lens (MCP server)
 
 ## [0.1.0] - 2026-10-10
 
 Released as **LifeLog**; the names below are the ones it shipped with (see *Unreleased* for the
-rename to Bookshelf).
+renames to Bookshelf and then Lumen).
 
 First working version: record on the iPhone, get a Markdown day file in storage, read it in
 Obsidian, ask through MCP. Tested offline end to end; not yet verified with real providers, real
