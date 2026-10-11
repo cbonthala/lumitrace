@@ -1,0 +1,42 @@
+# Local tooling and environments
+.tools/
+.venv/
+.tmp-skill/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Secrets and credentials (never commit)
+.env
+.env.*
+!.env.example
+*client_secret*.json
+*credentials*.json
+*token*.json
+secrets/
+
+# Personal data: vault, index, audio, photos (never commit).
+# The local storage root defaults to data/LifeLog. Don't add a "LifeLog/" pattern: git on
+# case-insensitive filesystems would also ignore the lifelog/ package.
+data/
+vault/
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+*.m4a
+*.mp3
+*.wav
+*.heic
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
