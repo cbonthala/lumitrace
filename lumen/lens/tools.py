@@ -43,12 +43,13 @@ from lumen.lens.search import hybrid_search, make_snippet, query_terms
 
 logger = logging.getLogger(__name__)
 
-FactKind = Literal["meals", "activities", "people", "family_events", "mood", "highlights"]
+FactKind = Literal["meals", "activities", "people", "places", "family", "mood", "highlights"]
 FACT_KINDS: tuple[str, ...] = (
     "meals",
     "activities",
     "people",
-    "family_events",
+    "places",
+    "family",
     "mood",
     "highlights",
 )
@@ -84,7 +85,13 @@ _FACT_SPECS: dict[str, _FactSpec] = {
     ),
     "activities": _FactSpec("activities", ("kind", "minutes"), ("kind",), "date DESC, position"),
     "people": _FactSpec("people", ("name",), ("name",), "date DESC, position"),
-    "family_events": _FactSpec("family_events", ("text",), ("text",), "date DESC, position"),
+    "places": _FactSpec("places", ("name",), ("name",), "date DESC, position"),
+    "family": _FactSpec(
+        "family_facts",
+        ("person", "category", "text", "minutes"),
+        ("text", "category"),
+        "date DESC, position",
+    ),
     "highlights": _FactSpec("highlights", ("text",), ("text",), "date DESC, position"),
     "mood": _FactSpec(
         "days",
@@ -200,7 +207,7 @@ class LensTools:
         result.update(
             found=True,
             title=day.title,
-            facts=day.meta.facts().model_dump(mode="json"),
+            facts=day.facts.model_dump(mode="json"),
             journal=day.journal,
             notes=day.notes,
             transcript=[
@@ -241,16 +248,21 @@ class LensTools:
         from_date: str | None = None,
         to_date: str | None = None,
         limit: int | None = 50,
+        person: str | None = None,
     ) -> dict[str, Any]:
         spec = _FACT_SPECS.get((kind or "").strip().lower())
         if spec is None:
             raise ToolInputError(f"kind must be one of: {', '.join(FACT_KINDS)}; got {kind!r}")
         kind = kind.strip().lower()
+        person = (person or "").strip() or None
+        if person and kind != "family":
+            raise ToolInputError("person only applies to kind 'family'")
         start, end = parse_range(from_date, to_date, self.settings)
         limit = _clamp(limit, 50, 1, MAX_FACT_LIMIT)
         contains = (contains or "").strip() or None
         result: dict[str, Any] = {
             "kind": kind,
+            "person": person,
             "contains": contains,
             "from_date": start.isoformat() if start else None,
             "to_date": end.isoformat() if end else None,
@@ -261,6 +273,9 @@ class LensTools:
 
         where: list[str] = [spec.base_where] if spec.base_where else []
         params: list[Any] = []
+        if person:
+            where.append("person = ? COLLATE NOCASE")
+            params.append(person)
         if start:
             where.append("date >= ?")
             params.append(start.isoformat())
@@ -329,8 +344,14 @@ class LensTools:
             for row in rows:
                 row["years_ago"] = reference_year - int(row["date"][:4])
                 row["highlights"] = _column(conn, "highlights", "text", row["date"])
-                row["family_events"] = _column(conn, "family_events", "text", row["date"])
+                row["family"] = _rows(
+                    conn,
+                    "SELECT person, category, text, minutes FROM family_facts WHERE date = ? "
+                    "ORDER BY position",
+                    [row["date"]],
+                )
                 row["people"] = _column(conn, "people", "name", row["date"])
+                row["places"] = _column(conn, "places", "name", row["date"])
                 summary = conn.execute(
                     "SELECT text FROM passages WHERE date = ? AND section = 'journal' "
                     "ORDER BY ordinal LIMIT 1",
@@ -491,15 +512,33 @@ def _fact_aggregates(
                 [*params, TOP_GROUPS],
             ),
         }
-    if kind == "people":
+    if kind in ("people", "places"):
         return {
-            "by_person": _rows(
+            "by_person" if kind == "people" else "by_place": _rows(
                 conn,
                 f"SELECT name, COUNT(DISTINCT date) AS days, MIN(date) AS first_date, "
                 f"MAX(date) AS last_date FROM {table}{where_sql} "
                 f"GROUP BY name COLLATE NOCASE ORDER BY days DESC, name LIMIT ?",
                 [*params, TOP_GROUPS],
             )
+        }
+    if kind == "family":
+        return {
+            "by_person_and_category": _rows(
+                conn,
+                f"SELECT person, category, COUNT(*) AS times, COUNT(DISTINCT date) AS days, "
+                f"SUM(minutes) AS total_minutes FROM {table}{where_sql} "
+                f"GROUP BY person COLLATE NOCASE, category ORDER BY person, times DESC",
+                params,
+            ),
+            "top_items": _rows(
+                conn,
+                f"SELECT person, category, lower(text) AS item, COUNT(*) AS times, "
+                f"COUNT(DISTINCT date) AS days FROM {table}{where_sql} "
+                f"GROUP BY person COLLATE NOCASE, category, lower(text) "
+                f"ORDER BY times DESC, person, item LIMIT ?",
+                [*params, TOP_GROUPS],
+            ),
         }
     if kind == "mood":
         stats = conn.execute(

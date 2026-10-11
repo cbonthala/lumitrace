@@ -61,11 +61,11 @@ def test_recording_end_to_end(
     day = read_day(api_storage)
     assert day.title == "Saturday, October 10, 2026 · Taco day"
     assert day.journal == "## Summary\n\nA day with 1 entries."
-    assert day.meta.people == ["Maya"]
-    assert day.meta.meals[0].items == ["fish tacos"]
+    assert day.facts.people == ["Maya"]
+    assert day.facts.meals[0].items == ["fish tacos"]
     assert day.meta.audio == ["2026-10-10-2130.m4a"]
     assert day.meta.photos == ["photo-01.jpg", "photo-02.jpg"]
-    assert day.meta.prompt_version == "extract_facts-v1+write_journal-v1"
+    assert day.meta.prompt_version == "extract_facts-v2+write_journal-v1"
     assert day.meta.models_used == {
         "stt": "fake",
         "extract_facts": "test/extract",
@@ -161,8 +161,8 @@ def test_note_merges_into_the_same_day(
     day = read_day(api_storage)
     assert [c.kind for c in day.captures] == ["note", "recording"]  # sorted by time
     assert day.journal == "## Summary\n\nA day with 2 entries."
-    assert day.meta.people == ["Priya"]
-    assert [a.kind for a in day.meta.activities] == ["run"]
+    assert day.facts.people == ["Priya"]
+    assert [a.kind for a in day.facts.activities] == ["run"]
     assert day.meta.models_used["stt"] == "fake"
     journal_calls = [c for c in fake_llm.calls if c[0] == "write_journal"]
     assert "Tacos with Priya." in journal_calls[-1][2][1]["content"]

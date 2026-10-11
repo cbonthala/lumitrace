@@ -16,7 +16,7 @@ from pathlib import Path
 
 import sqlite_vec
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 META_SCHEMA_VERSION = "schema_version"
 META_EMBEDDING_MODEL = "embedding_model"
@@ -32,7 +32,8 @@ DERIVED_TABLES: tuple[str, ...] = (
     "meals",
     "activities",
     "people",
-    "family_events",
+    "places",
+    "family_facts",
     "highlights",
     "days",
     "files",
@@ -64,7 +65,7 @@ CREATE TABLE IF NOT EXISTS files (
 );
 CREATE INDEX IF NOT EXISTS files_date ON files(date);
 
--- One row per day file: scalar facts and provenance from the front matter.
+-- One row per day file: scalar facts ("At a glance") and provenance (front matter).
 CREATE TABLE IF NOT EXISTS days (
     date            TEXT PRIMARY KEY,      -- YYYY-MM-DD
     path            TEXT NOT NULL,
@@ -86,7 +87,7 @@ CREATE TABLE IF NOT EXISTS days (
 CREATE TABLE IF NOT EXISTS meals (
     id         INTEGER PRIMARY KEY,
     date       TEXT NOT NULL REFERENCES days(date) ON DELETE CASCADE,
-    meal_type  TEXT NOT NULL,              -- breakfast|lunch|dinner|snack|drink|...
+    meal_type  TEXT NOT NULL,              -- breakfast|lunch|dinner|snacks|drinks
     item       TEXT NOT NULL,              -- one row per item
     position   INTEGER NOT NULL DEFAULT 0
 );
@@ -110,13 +111,27 @@ CREATE TABLE IF NOT EXISTS people (
 CREATE INDEX IF NOT EXISTS people_date ON people(date);
 CREATE INDEX IF NOT EXISTS people_name ON people(name COLLATE NOCASE);
 
-CREATE TABLE IF NOT EXISTS family_events (
+CREATE TABLE IF NOT EXISTS places (
     id        INTEGER PRIMARY KEY,
     date      TEXT NOT NULL REFERENCES days(date) ON DELETE CASCADE,
-    text      TEXT NOT NULL,
+    name      TEXT NOT NULL,
     position  INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS family_events_date ON family_events(date);
+CREATE INDEX IF NOT EXISTS places_date ON places(date);
+CREATE INDEX IF NOT EXISTS places_name ON places(name COLLATE NOCASE);
+
+-- One row per item in a family member's block: person "Leo", category "food", text "pasta".
+CREATE TABLE IF NOT EXISTS family_facts (
+    id        INTEGER PRIMARY KEY,
+    date      TEXT NOT NULL REFERENCES days(date) ON DELETE CASCADE,
+    person    TEXT NOT NULL,
+    category  TEXT NOT NULL,               -- mood|food|places|activities|moments|health|school
+    text      TEXT NOT NULL,               -- the item (activity kind for activities)
+    minutes   INTEGER,                     -- activities only
+    position  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS family_facts_date ON family_facts(date);
+CREATE INDEX IF NOT EXISTS family_facts_person ON family_facts(person COLLATE NOCASE, category);
 
 CREATE TABLE IF NOT EXISTS highlights (
     id        INTEGER PRIMARY KEY,
@@ -173,7 +188,7 @@ CREATE TABLE IF NOT EXISTS edit_signals (
     path            TEXT NOT NULL,
     detected_at     TEXT NOT NULL,         -- ISO-8601 UTC
     section         TEXT NOT NULL,         -- facts|title|journal|notes|transcript
-    field           TEXT,                  -- e.g. "meals", "people" for facts; NULL otherwise
+    field           TEXT,                  -- e.g. "meals", "places" for facts; NULL otherwise
     before          TEXT,                  -- system version (JSON for facts, text otherwise)
     after           TEXT,                  -- owner's version
     diff            TEXT,                  -- unified diff, for text sections

@@ -67,12 +67,45 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
   the catalog or the catalog names a test that no longer exists. AGENTS.md rule 8 requires
   describing every new or changed test; linked from README and `docs/architecture.md`;
   decision 0007.
+- **Day file format 2** (decision 0040): the facts move from the front matter into an
+  `## At a glance` section under the title (`lumen:facts` markers): Mood, City and Weather
+  lines, then Food, Places, People, Activities, Family and Highlights. New facts `places` and
+  `family` (one `#### name` block per family member: Mood, Ate, Went to, Did, Moments, Health,
+  School/work); `family_events` is removed. Values are normalised so render and parse agree,
+  and hand edits are tolerated (unplaceable lines move into My notes). Format 1 files are still
+  read: their `family_events` go into highlights and an unedited day stays unedited. New
+  setting `LUMEN_FAMILY` (comma-separated names; `Settings.family_members`).
+- **Strict, identical layout every day:** "At a glance" always has the same lines in the same
+  order, with `none` for empty ones (all six sections, five Food lines, seven lines per family
+  member; `NONE_TEXT`). Meal types are fixed (`MEAL_TYPES`: breakfast, lunch, dinner, snacks,
+  drinks; synonyms mapped, anything else → snacks). Generated journals only use the headings
+  Summary, Morning, Afternoon, Evening, Thoughts and Later (`normalize_journal`, applied by
+  `apply_generation`); additions to edited days go under `## Later` with a bold time label
+  (`merge_generation_additive(addendum_label=...)`, formerly `addendum_heading`, which wrote a
+  `###` heading). `render_facts_section(..., include_empty=False)` gives the view without
+  `none` lines.
+- Index schema version 2: new tables `places` and `family_facts`, `family_events` removed.
 
 ### Prism (recording API)
 
+- Prompt `extract_facts` v2: extracts `places` and per-member `family` facts for the names in
+  `LUMEN_FAMILY` (new `{{family}}` placeholder); anyone else is dropped and names are spelled as
+  configured (`keep_family`). Every configured member gets a block, empty if the day says
+  nothing about them. Meal types in the prompt are the fixed five. Additive generation also
+  merges places and family blocks, and late additions go under `## Later`.
+
 ### Spectrum (indexer)
 
+- Indexes `places` and `family_facts` from the day file's "At a glance" section; facts
+  passages are that section's rendered text without its `none` lines, one passage per heading
+  (one per family member with facts).
+- Rebuilds automatically when the index's schema version differs from the current one.
+
 ### Lens (MCP server)
+
+- `query_facts` kinds `places` and `family` (replacing `family_events`), with a `person`
+  filter for family and aggregates `by_place`, `by_person_and_category` and `top_items`.
+  `on_this_day` returns `places` and `family` rows.
 
 ## [0.1.0] - 2026-10-10
 

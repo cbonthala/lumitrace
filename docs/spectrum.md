@@ -83,9 +83,17 @@ Processing changes:
 Each day file is written in **one transaction**: `files` upsert, `days` and fact rows replaced,
 passages and vectors replaced, edit signals. The MCP server always sees a whole day, old or new.
 
-Facts: `meals.meal_type` is lower-cased (`breakfast`, ...), one `meals` row per item, empty
-strings dropped, `position` keeps the front-matter order. `days.user_edited` is
-`DayFile.is_user_edited()`.
+Facts come from the day file's "At a glance" section (`DayFile.facts`, parsed by
+`lumen.frames.dayfile`); Spectrum copies them and never re-derives facts from the text.
+`meals.meal_type` is one of `breakfast`, `lunch`, `dinner`, `snacks`, `drinks`, one `meals` row
+per item, `none` placeholders never become rows, one `places` row
+per place, one `family_facts` row per item of a family member's block (`category` = `mood`,
+`food`, `places`, `activities`, `moments`, `health` or `school`), and `position` keeps the order
+in the file. `days.user_edited` is `DayFile.is_user_edited()`.
+
+**Schema changes:** if the index's `meta.schema_version` differs from `SCHEMA_VERSION` (for
+example an index made before `places` and `family_facts` existed), `sync` and `run` rebuild
+automatically, like an embedding model change below.
 
 ## Passages and embeddings
 
@@ -95,7 +103,7 @@ section):
 | Section | Content | `heading` | `capture_id` |
 |---|---|---|---|
 | `title` | the `# title` | | |
-| `facts` | the front-matter facts as lines (`Mood: happy (4/5)`, `People: Maya, Leo`, `Breakfast: oatmeal, blueberries`, `Activities: run (40 min)`, ...) | | |
+| `facts` | the "At a glance" section without its `none` lines (`render_facts_section(facts, include_empty=False)`, so empty sections and empty family members make no passage), split at its headings: mood/city/weather lines, then Food, Places, People, Activities, one passage per family member, Highlights | heading text (`Food`, ..., the member's name) | |
 | `journal` | split at Markdown headings, then packed paragraphs | heading text | |
 | `notes` | same as journal; a heading with no text under it is its own passage | heading text | |
 | `transcript` | one or more passages per capture | `21:30 · Log My Day` | capture id |

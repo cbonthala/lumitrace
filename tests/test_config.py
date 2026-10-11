@@ -35,6 +35,12 @@ def test_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "tok-4f9a2c" not in repr(s)
 
 
+def test_family_members_from_a_comma_separated_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LUMEN_FAMILY", " Maya ,Leo,, leo , Grandma  Rose")
+    assert Settings(_env_file=None).family_members == ["Maya", "Leo", "Grandma Rose"]
+    assert Settings(_env_file=None, family="").family_members == []
+
+
 def test_validation() -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, timezone="Mars/Olympus")

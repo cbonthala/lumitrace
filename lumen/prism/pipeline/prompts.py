@@ -22,7 +22,7 @@ from pathlib import Path
 import lumen
 
 PROMPT_VERSIONS: dict[str, str] = {
-    "extract_facts": "v1",
+    "extract_facts": "v2",
     "write_journal": "v1",
     "journal_addendum": "v1",
 }

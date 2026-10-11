@@ -31,7 +31,7 @@ from mcp import Client
 from PIL import Image
 
 from lumen.config import Settings
-from lumen.frames.dayfile import day_file_path, generated_snapshot_path, parse
+from lumen.frames.dayfile import FamilyMember, day_file_path, generated_snapshot_path, parse
 from lumen.frames.storage.local import LocalStorage
 from lumen.index.schema import connect
 from lumen.lens.server import build_server
@@ -59,9 +59,16 @@ def fake_extract_facts(*, model: str, messages: list[dict[str, str]], **_: Any) 
         "mood": "content",
         "mood_score": 4,
         "people": [n for n in ("Maya", "Leo") if n in entries],
+        "places": ["the lake"] if "lake" in lower else [],
         "meals": [{"type": "Lunch", "items": ["fish tacos"]}] if "tacos" in lower else [],
         "activities": [{"kind": "run", "minutes": 40}] if " run " in lower else [],
         "highlights": ["Pumpkin patch"] if "pumpkin" in lower else [],
+        "family": ([{"name": "Maya", "food": ["fish tacos"]}] if "tacos" in lower else [])
+        + (
+            [{"name": "leo", "activities": [{"kind": "walk"}], "moments": ["saw the stars"]}]
+            if "Leo" in entries
+            else []
+        ),
     }
     content = json.dumps(facts)
     return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
@@ -199,6 +206,7 @@ def e2e_settings(settings: Settings) -> Settings:
             "llm_fallback_model": "fake",
             "indexer_nudge_url": "http://testserver/nudge",
             "indexer_backup_interval_hours": 0,
+            "family": "Leo",
         }
     )
 
@@ -248,7 +256,13 @@ def test_full_flow(stack: Stack) -> None:
     assert storage.read_text(generated_snapshot_path(DAY)) == storage.read_text(day_path)
     day = parse(storage.read_text(day_path))
     assert [c.id for c in day.captures] == ["e2e-note-1", "e2e-recording-1"]
-    assert day.meta.mood == "content"
+    assert day.facts.mood == "content"
+    assert day.facts.places == ["the lake"]
+    assert day.facts.family == [FamilyMember(name="Leo")], "only LUMEN_FAMILY members get a block"
+    text = storage.read_text(day_path)
+    assert "### Places\n\n- the lake" in text
+    assert "#### Leo\n\n- **Mood:** none\n- **Ate:** none\n" in text
+    assert "- **Snacks:** none" in text
     assert "Fish tacos for lunch" in day.journal
     assert storage.exists("2026/10/2026-10-10/2026-10-10-2130.wav")
     assert not storage.list("_system/inbox")
@@ -263,12 +277,13 @@ def test_full_flow(stack: Stack) -> None:
     stack.wait_indexed(LAST_YEAR)
 
     # 3. Ask: every MCP tool finds the content under the right date.
-    search, other_search, get_day, meals, runs, on_this_day, feedback = stack.mcp(
+    search, other_search, get_day, meals, runs, places, on_this_day, feedback = stack.mcp(
         ("search", {"query": "fish tacos"}),
         ("search", {"query": "pumpkin patch"}),
         ("get_day", {"date": "2026-10-10"}),
         ("query_facts", {"kind": "meals", "contains": "tacos"}),
         ("query_facts", {"kind": "activities"}),
+        ("query_facts", {"kind": "places"}),
         ("on_this_day", {"date": "2026-10-10"}),
         (
             "feedback",
@@ -297,6 +312,7 @@ def test_full_flow(stack: Stack) -> None:
 
     assert meals["rows"] == [{"date": "2026-10-10", "meal_type": "lunch", "item": "fish tacos"}]
     assert runs["rows"] == [{"date": "2026-10-10", "kind": "run", "minutes": 40}]
+    assert places["rows"] == [{"date": "2026-10-10", "name": "the lake"}]
     assert [d["date"] for d in on_this_day["days"]] == ["2025-10-10"]
     assert on_this_day["days"][0]["years_ago"] == 1
     assert on_this_day["days"][0]["highlights"] == ["Pumpkin patch"]
@@ -309,7 +325,7 @@ def test_full_flow(stack: Stack) -> None:
 
     # 4. The owner edits the day in Obsidian; a sync records edit signals.
     original = storage.read_text(day_path)
-    edited = original.replace("mood: content", "mood: great").replace(
+    edited = original.replace("**Mood:** content", "**Mood:** great").replace(
         "## Summary\n\n", "## Summary\n\nBest tacos in town, honestly.\n\n", 1
     )
     assert edited != original
@@ -341,21 +357,27 @@ def test_full_flow(stack: Stack) -> None:
     )
     assert late["generation"] == "additive"
     day = parse(storage.read_text(day_path))
-    assert day.meta.mood == "great"
+    assert day.facts.mood == "great"
     assert "Best tacos in town, honestly." in day.journal
-    assert "22:15 · Quick Note" in day.journal
+    assert "## Later\n\n**22:15 · Quick Note**" in day.journal
     assert "Late walk with Leo under the stars." in day.journal
-    assert day.meta.people == ["Maya", "Leo"]
+    assert day.facts.people == ["Maya", "Leo"]
+    assert [(m.name, m.moments) for m in day.facts.family] == [("Leo", ["saw the stars"])]
     assert [c.id for c in day.captures] == ["e2e-note-1", "e2e-recording-1", "e2e-note-2"]
     assert day.is_user_edited()
     assert storage.read_text(generated_snapshot_path(DAY)) == storage.read_text(day_path)
 
     stack.wait_indexed(DAY)
-    stars, people = stack.mcp(
+    stars, people, leo = stack.mcp(
         ("search", {"query": "stars", "from_date": "2026-10-10", "to_date": "2026-10-10"}),
         ("query_facts", {"kind": "people", "contains": "leo"}),
+        ("query_facts", {"kind": "family", "person": "leo"}),
     )
     assert stars["results"][0]["date"] == "2026-10-10"
     assert people["rows"] == [{"date": "2026-10-10", "name": "Leo"}]
+    assert [(r["category"], r["text"]) for r in leo["rows"]] == [
+        ("activities", "walk"),
+        ("moments", "saw the stars"),
+    ]
     kept = {(s["section"], s["field"]) for s in signals()}
     assert {("facts", "mood"), ("journal", None)} <= kept, "earlier edit signals were lost"

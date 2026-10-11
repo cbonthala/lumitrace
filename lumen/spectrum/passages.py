@@ -1,10 +1,12 @@
 """Split a parsed day file into searchable passages.
 
-One day becomes, in this order: a ``title`` passage, a ``facts`` passage (the front-matter facts
-written out as plain text, so keyword and meaning search also find people, foods and activities),
-``journal`` and ``notes`` passages split at Markdown headings, and ``transcript`` passages, one
-or more per capture. Every passage is at most :data:`MAX_CHARS` characters; longer text is cut at
-paragraph, then sentence, then word boundaries. ``ordinal`` counts passages within a section.
+One day becomes, in this order: a ``title`` passage, ``facts``, ``journal`` and ``notes``
+passages split at Markdown headings (the facts are the day file's "At a glance" text without
+its "none" lines, so a passage's heading is "Food", "Places", ... or a family member's name),
+and ``transcript``
+passages, one or more per capture. Every passage is at most :data:`MAX_CHARS` characters;
+longer text is cut at paragraph, then sentence, then word boundaries. ``ordinal`` counts
+passages within a section.
 """
 
 from __future__ import annotations
@@ -12,9 +14,9 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from lumen.frames.dayfile import CAPTURE_LABELS, DayFile
+from lumen.frames.dayfile import CAPTURE_LABELS, DayFile, render_facts_section
 
 MAX_CHARS = 1000
 """Upper bound for one passage: small enough for precise hits, big enough for context."""
@@ -49,8 +51,11 @@ def build_passages(day: DayFile, max_chars: int = MAX_CHARS) -> list[Passage]:
     out: list[Passage] = []
     if day.title.strip():
         out.append(Passage("title", None, None, 0, day.title.strip()))
-    for i, chunk in enumerate(_pack(facts_lines(day), max_chars, "\n")):
-        out.append(Passage("facts", None, None, i, chunk))
+    facts_text = render_facts_section(day.facts, include_empty=False)
+    facts = _markdown_passages("facts", facts_text, max_chars)
+    # "### Family" has nothing under it but the members' "####" blocks, which are passages.
+    facts = [p for p in facts if not (p.heading == "Family" and p.text == "Family")]
+    out.extend(replace(p, ordinal=i) for i, p in enumerate(facts))
     out.extend(_markdown_passages("journal", day.journal, max_chars))
     out.extend(_markdown_passages("notes", day.notes, max_chars))
     ordinal = 0
@@ -60,34 +65,6 @@ def build_passages(day: DayFile, max_chars: int = MAX_CHARS) -> list[Passage]:
             out.append(Passage("transcript", heading, capture.id, ordinal, chunk))
             ordinal += 1
     return out
-
-
-def facts_lines(day: DayFile) -> list[str]:
-    """The day's facts as short plain-text lines (empty facts are left out)."""
-    m = day.meta
-    lines: list[str] = []
-    if m.mood:
-        lines.append(f"Mood: {m.mood}" + (f" ({m.mood_score}/5)" if m.mood_score else ""))
-    elif m.mood_score:
-        lines.append(f"Mood: {m.mood_score}/5")
-    if m.city:
-        lines.append(f"City: {m.city}")
-    if m.weather:
-        lines.append(f"Weather: {m.weather}")
-    if m.people:
-        lines.append("People: " + ", ".join(m.people))
-    for meal in m.meals:
-        items = [i.strip() for i in meal.items if i.strip()]
-        if items:
-            lines.append(f"{meal.type.strip().capitalize()}: " + ", ".join(items))
-    if m.activities:
-        acts = [f"{a.kind} ({a.minutes} min)" if a.minutes else a.kind for a in m.activities]
-        lines.append("Activities: " + ", ".join(acts))
-    if m.family_events:
-        lines.append("Family: " + "; ".join(m.family_events))
-    if m.highlights:
-        lines.append("Highlights: " + "; ".join(m.highlights))
-    return lines
 
 
 def split_by_headings(markdown: str) -> list[tuple[str | None, str]]:

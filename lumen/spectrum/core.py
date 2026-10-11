@@ -47,7 +47,9 @@ from lumen.index.schema import (
     META_EMBEDDING_MODEL,
     META_LAST_REBUILD_AT,
     META_LAST_SYNC_AT,
+    META_SCHEMA_VERSION,
     META_SYNC_TOKEN,
+    SCHEMA_VERSION,
     EmbeddingDimensionMismatch,
     connect,
     create_schema,
@@ -155,7 +157,8 @@ def _open_unchecked(path: Path) -> sqlite3.Connection:
 
 def open_index(settings: Settings) -> tuple[sqlite3.Connection, str | None]:
     """Open the index. Returns ``(conn, reason)`` where ``reason`` says why the index must be
-    rebuilt before use (embedding model or dimension changed), or ``None``."""
+    rebuilt before use (embedding model or dimension changed, or an older schema version), or
+    ``None``."""
     model = settings.embedding_model
     try:
         conn = connect(settings.index_path, settings.embedding_dimension, embedding_model=model)
@@ -167,6 +170,9 @@ def open_index(settings: Settings) -> tuple[sqlite3.Connection, str | None]:
             set_meta(conn, META_EMBEDDING_MODEL, model)
     elif stored != model:
         return conn, f"index was built with embedding model {stored!r}, settings say {model!r}"
+    version = get_meta(conn, META_SCHEMA_VERSION)
+    if version != str(SCHEMA_VERSION):
+        return conn, f"index has schema version {version}, Lumen now uses {SCHEMA_VERSION}"
     return conn, None
 
 
@@ -260,6 +266,7 @@ class Indexer:
             self.conn.execute(
                 "DELETE FROM meta WHERE key IN (?, ?)", (META_RETRY_PATHS, META_LAST_FULL_SCAN_AT)
             )
+            set_meta(self.conn, META_SCHEMA_VERSION, str(SCHEMA_VERSION))
         self.rebuild_reason = None
         result = self.sync(full=True)
         result.kind = "rebuild"
@@ -582,6 +589,7 @@ class Indexer:
 
 def _insert_day(conn: sqlite3.Connection, path: str, day: DayFile) -> None:
     m = day.meta
+    f = day.facts
     date = day.date.isoformat()
     conn.execute(
         "INSERT INTO days(date, path, title, mood, mood_score, city, weather, audio_json,"
@@ -591,10 +599,10 @@ def _insert_day(conn: sqlite3.Connection, path: str, day: DayFile) -> None:
             date,
             path,
             day.title,
-            m.mood,
-            m.mood_score,
-            m.city,
-            m.weather,
+            f.mood,
+            f.mood_score,
+            f.city,
+            f.weather,
             json.dumps(m.audio, ensure_ascii=False),
             json.dumps(m.photos, ensure_ascii=False),
             m.prompt_version,
@@ -607,7 +615,7 @@ def _insert_day(conn: sqlite3.Connection, path: str, day: DayFile) -> None:
     )
     meal_rows = [
         (meal.type.strip().casefold(), item.strip())
-        for meal in m.meals
+        for meal in f.meals
         for item in meal.items
         if meal.type.strip() and item.strip()
     ]
@@ -615,18 +623,34 @@ def _insert_day(conn: sqlite3.Connection, path: str, day: DayFile) -> None:
         "INSERT INTO meals(date, meal_type, item, position) VALUES (?, ?, ?, ?)",
         [(date, t, item, pos) for pos, (t, item) in enumerate(meal_rows)],
     )
-    activities = [a for a in m.activities if a.kind.strip()]
+    activities = [a for a in f.activities if a.kind.strip()]
     conn.executemany(
         "INSERT INTO activities(date, kind, minutes, position) VALUES (?, ?, ?, ?)",
         [(date, a.kind.strip(), a.minutes, pos) for pos, a in enumerate(activities)],
     )
     for table, column, values in (
-        ("people", "name", m.people),
-        ("family_events", "text", m.family_events),
-        ("highlights", "text", m.highlights),
+        ("people", "name", f.people),
+        ("places", "name", f.places),
+        ("highlights", "text", f.highlights),
     ):
         clean = [v.strip() for v in values if v and v.strip()]
         conn.executemany(
             f"INSERT INTO {table}(date, {column}, position) VALUES (?, ?, ?)",
             [(date, v, pos) for pos, v in enumerate(clean)],
         )
+    family_rows: list[tuple[str, str, str, int | None]] = []
+    for member in f.family:
+        if member.mood:
+            family_rows.append((member.name, "mood", member.mood, None))
+        for category in ("food", "places"):
+            family_rows.extend((member.name, category, v, None) for v in getattr(member, category))
+        family_rows.extend(
+            (member.name, "activities", a.kind, a.minutes) for a in member.activities
+        )
+        for category in ("moments", "health", "school"):
+            family_rows.extend((member.name, category, v, None) for v in getattr(member, category))
+    conn.executemany(
+        "INSERT INTO family_facts(date, person, category, text, minutes, position)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        [(date, *row, pos) for pos, row in enumerate(family_rows)],
+    )

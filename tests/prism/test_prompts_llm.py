@@ -8,8 +8,8 @@ from types import SimpleNamespace
 import pytest
 
 from lumen.config import Settings
-from lumen.frames.dayfile import Capture, DayFacts
-from lumen.prism.pipeline.generate import Generator, parse_facts
+from lumen.frames.dayfile import Capture, DayFacts, FamilyMember
+from lumen.prism.pipeline.generate import Generator, keep_family, parse_facts
 from lumen.prism.pipeline.llm import LLMClient, LLMError, extract_json
 from lumen.prism.pipeline.prompts import (
     PROMPT_VERSIONS,
@@ -94,6 +94,36 @@ def test_parse_facts_validates_against_dayfacts() -> None:
         parse_facts(["not", "an", "object"])
     with pytest.raises(ValueError):
         parse_facts({"meals": [{"items": ["no type"]}]})
+
+
+def test_keep_family_drops_unknown_names_and_uses_configured_spelling() -> None:
+    facts = DayFacts(
+        family=[
+            FamilyMember(name="Sam", food=["cake"]),
+            FamilyMember(name="leo", food=["pizza"]),
+            FamilyMember(name="MAYA", moments=["new job"]),
+            FamilyMember(name="Leo", food=["soup"]),
+        ]
+    )
+    kept = keep_family(facts, ["Maya", "Leo"])
+    assert kept.family == [
+        FamilyMember(name="Maya", moments=["new job"]),
+        FamilyMember(name="Leo", food=["pizza"]),
+    ]
+    assert keep_family(facts, []).family == []
+    padded = keep_family(DayFacts(), ["Maya", "Leo"]).family
+    assert padded == [FamilyMember(name="Maya"), FamilyMember(name="Leo")]
+
+
+def test_extract_facts_sends_the_family_list(api_settings: Settings) -> None:
+    settings = api_settings.model_copy(update={"family": "Maya, Leo"})
+    llm = FakeLLM()
+    gen = Generator(LLMClient(settings, completion_fn=llm), settings.prompts_dir)
+    at = dt.datetime(2026, 10, 10, 13, 5, tzinfo=settings.tz)
+    gen.extract_facts(
+        dt.date(2026, 10, 10), [Capture(id="c", kind="note", captured_at=at, text="x")]
+    )
+    assert "Family members (may be empty): Maya, Leo" in llm.calls[0][2][1]["content"]
 
 
 def test_llm_client_passes_config_and_falls_back(api_settings: Settings) -> None:

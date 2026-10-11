@@ -98,12 +98,16 @@ def test_fact_tables_cascade_from_days() -> None:
     conn.execute("INSERT INTO meals(date, meal_type, item) VALUES ('2026-10-10', 'lunch', 'tacos')")
     conn.execute("INSERT INTO activities(date, kind, minutes) VALUES ('2026-10-10', 'run', 40)")
     conn.execute("INSERT INTO people(date, name) VALUES ('2026-10-10', 'Maya')")
-    conn.execute("INSERT INTO family_events(date, text) VALUES ('2026-10-10', 'tooth')")
+    conn.execute("INSERT INTO places(date, name) VALUES ('2026-10-10', 'the lake')")
+    conn.execute(
+        "INSERT INTO family_facts(date, person, category, text)"
+        " VALUES ('2026-10-10', 'Leo', 'moments', 'tooth')"
+    )
     conn.execute("INSERT INTO highlights(date, text) VALUES ('2026-10-10', 'book')")
     with pytest.raises(sqlite3.IntegrityError):
         conn.execute("INSERT INTO meals(date, meal_type, item) VALUES ('1999-01-01', 'x', 'y')")
     conn.execute("DELETE FROM days")
-    for table in ["meals", "activities", "people", "family_events", "highlights"]:
+    for table in ["meals", "activities", "people", "places", "family_facts", "highlights"]:
         assert conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] == 0
 
 

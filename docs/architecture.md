@@ -47,7 +47,7 @@ Precise signatures: `docs/contracts.md`.
 ```
 Lumen/
   2026/10/2026-10-10/
-    2026-10-10.md          facts in the front matter, journal, notes, transcript
+    2026-10-10.md          front matter, "At a glance" facts, journal, notes, transcript
     2026-10-10-2130.m4a    compressed voice note
     photo-01.jpg           resized copy without EXIF (originals stay in Google Photos)
   _system/

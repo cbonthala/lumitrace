@@ -1,36 +1,5 @@
 ---
 date: 2026-10-10
-mood: happy
-mood_score: 4
-city: Austin
-weather: sunny, 24°C
-people:
-- Maya
-- Leo
-meals:
-- type: breakfast
-  items:
-  - oatmeal
-  - blueberries
-- type: lunch
-  items:
-  - fish tacos
-- type: drink
-  items:
-  - horchata
-- type: dinner
-  items:
-  - pasta
-activities:
-- kind: run
-  minutes: 40
-- kind: reading
-  minutes: null
-family_events:
-- Leo lost his first tooth
-highlights:
-- Leo lost his first tooth
-- Finished a book
 audio:
 - 2026-10-10-2130.m4a
 photos:
@@ -42,11 +11,70 @@ models_used:
   extract_facts: openai/gpt-4o-mini
   write_journal: openai/gpt-4o
 generated_at: '2026-10-11T00:41:00-05:00'
-generated_hash: f95b9b427b956b91
-lumen_format: 1
+generated_hash: 2c4980bf67ca8a30
+lumen_format: 2
 ---
 
 # Saturday, October 10, 2026 · First tooth
+
+## At a glance
+
+<!-- lumen:facts:start (found by Lumen; if you edit them, your edits are kept) -->
+- **Mood:** happy (4/5)
+- **City:** Austin
+- **Weather:** sunny, 24°C
+
+### Food
+
+- **Breakfast:** oatmeal, blueberries
+- **Lunch:** fish tacos
+- **Dinner:** pasta
+- **Snacks:** none
+- **Drinks:** horchata
+
+### Places
+
+- the river trail
+- the taco truck
+- home
+
+### People
+
+- Maya
+- Leo
+
+### Activities
+
+- run (40 min)
+- reading
+
+### Family
+
+#### Leo
+
+- **Mood:** proud
+- **Ate:** pasta
+- **Went to:** none
+- **Did:** none
+- **Moments:** lost his first tooth
+- **Health:** none
+- **School/work:** none
+
+#### Maya
+
+- **Mood:** none
+- **Ate:** fish tacos
+- **Went to:** the taco truck
+- **Did:** none
+- **Moments:** none
+- **Health:** none
+- **School/work:** none
+
+### Highlights
+
+- Leo lost his first tooth
+- Finished a book
+<!-- lumen:facts:end -->
 
 <!-- lumen:journal:start (written by Lumen; if you edit it, your edits are kept) -->
 ## Summary

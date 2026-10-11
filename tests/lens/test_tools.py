@@ -46,7 +46,7 @@ def test_get_day_returns_everything(tools: LensTools, populated: Path) -> None:
     assert out["found"] is True
     assert out["path"] == "2026/10/2026-10-10/2026-10-10.md"
     assert out["title"].endswith("First tooth")
-    assert {"type": "drink", "items": ["horchata"]} in out["facts"]["meals"]
+    assert {"type": "drinks", "items": ["horchata"]} in out["facts"]["meals"]
     assert out["facts"]["mood_score"] == 4
     assert "## Morning" in out["journal"]
     assert "tooth under the pillow" in out["notes"]
@@ -130,6 +130,19 @@ def test_query_facts_people(tools: LensTools, populated: Path) -> None:
     assert tools.query_facts("people", contains="rose")["counts"]["days"] == 1
 
 
+def test_query_facts_places(tools: LensTools, populated: Path) -> None:
+    out = tools.query_facts("places")
+    assert out["rows"][:3] == [
+        {"date": "2026-10-10", "name": "the river trail"},
+        {"date": "2026-10-10", "name": "the taco truck"},
+        {"date": "2026-10-10", "name": "home"},
+    ]
+    by_place = {r["name"].lower(): r for r in out["aggregates"]["by_place"]}
+    assert by_place["home"]["days"] == 2
+    assert by_place["home"]["first_date"] == "2026-09-15"
+    assert tools.query_facts("places", contains="farm")["counts"]["days"] == 2
+
+
 def test_query_facts_mood(tools: LensTools, populated: Path) -> None:
     out = tools.query_facts("mood", from_date="2025-01-01")
     assert [r["date"] for r in out["rows"]] == ["2026-10-10", "2026-09-15", "2025-10-10"]
@@ -139,13 +152,39 @@ def test_query_facts_mood(tools: LensTools, populated: Path) -> None:
     assert {m["mood"] for m in agg["by_mood"]} == {"happy", "tired"}
 
 
-def test_query_facts_family_events_and_highlights(tools: LensTools, populated: Path) -> None:
-    events = tools.query_facts("family_events")
-    assert {r["text"] for r in events["rows"]} == {
-        "Pumpkin patch with the kids",
-        "Grandma Rose visited",
-        "Leo lost his first tooth",
-    }
+def test_query_facts_family(tools: LensTools, populated: Path) -> None:
+    leo_food = tools.query_facts("family", person="leo", contains="food")
+    assert leo_food["person"] == "leo"
+    assert [(r["date"], r["text"]) for r in leo_food["rows"]] == [
+        ("2026-10-10", "pasta"),
+        ("2026-09-15", "pasta"),
+        ("2026-09-15", "lemonade"),
+        ("2024-10-10", "pumpkin pie"),
+    ]
+    assert {r["person"] for r in leo_food["rows"]} == {"Leo"}
+    top = leo_food["aggregates"]["top_items"][0]
+    assert (top["person"], top["category"], top["item"], top["days"]) == ("Leo", "food", "pasta", 2)
+
+    everyone = tools.query_facts("family")
+    by = {(r["person"], r["category"]): r for r in everyone["aggregates"]["by_person_and_category"]}
+    assert by[("Maya", "activities")]["total_minutes"] == 90
+    assert by[("Leo", "moments")]["days"] == 2
+    assert tools.query_facts("family", contains="dentist")["rows"] == []
+    health = tools.query_facts("family", contains="runny")["rows"]
+    assert health == [
+        {
+            "date": "2026-09-15",
+            "person": "Leo",
+            "category": "health",
+            "text": "a runny nose",
+            "minutes": None,
+        }
+    ]
+    with pytest.raises(ToolInputError):
+        tools.query_facts("meals", person="Leo")
+
+
+def test_query_facts_highlights(tools: LensTools, populated: Path) -> None:
     highlights = tools.query_facts("highlights", contains="tooth")
     assert highlights["rows"] == [{"date": "2026-10-10", "text": "Leo lost his first tooth"}]
 
@@ -185,7 +224,15 @@ def test_on_this_day_with_full_date(tools: LensTools, populated: Path) -> None:
     assert first["people"] == ["Maya"]
     assert first["highlights"] == ["Finished the quarterly report"]
     assert "rainy Friday" in first["summary"]
-    assert out["days"][1]["family_events"] == ["Pumpkin patch with the kids"]
+    assert out["days"][1]["family"][0] == {
+        "person": "Leo",
+        "category": "food",
+        "text": "pumpkin pie",
+        "minutes": None,
+    }
+    assert first["family"] == []
+    assert out["days"][1]["places"] == ["Pumpkin patch", "the farm trail"]
+    assert first["places"] == []
 
 
 def test_on_this_day_month_day_uses_current_year(

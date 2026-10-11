@@ -16,7 +16,9 @@ from lumen.embeddings import embed_texts
 from lumen.frames.dayfile import (
     Activity,
     Capture,
+    DayFacts,
     DayFile,
+    FamilyMember,
     FrontMatter,
     Meal,
     day_dir,
@@ -41,14 +43,24 @@ def fixture_days(sample_day_markdown: str) -> list[DayFile]:
     d1, d2, d3 = dt.date(2024, 10, 10), dt.date(2025, 10, 10), dt.date(2026, 9, 15)
     return [
         DayFile(
-            meta=FrontMatter(
-                date=d1,
+            meta=FrontMatter(date=d1),
+            facts=DayFacts(
                 mood="cheerful",
                 mood_score=4,
                 people=["Maya", "Leo"],
+                places=["Pumpkin patch", "the farm trail"],
                 meals=[Meal(type="breakfast", items=["pancakes"])],
                 activities=[Activity(kind="hike", minutes=90)],
-                family_events=["Pumpkin patch with the kids"],
+                family=[
+                    FamilyMember(
+                        name="Leo", food=["pumpkin pie"], moments=["picked the biggest pumpkin"]
+                    ),
+                    FamilyMember(
+                        name="Maya",
+                        places=["the farm trail"],
+                        activities=[Activity(kind="hike", minutes=90)],
+                    ),
+                ],
                 highlights=["Leo picked the biggest pumpkin"],
             ),
             title="Thursday, October 10, 2024 · Pumpkin patch",
@@ -56,8 +68,8 @@ def fixture_days(sample_day_markdown: str) -> list[DayFile]:
             captures=[_capture(d1, 20, "Pumpkin patch today, Leo found a giant pumpkin.")],
         ),
         DayFile(
-            meta=FrontMatter(
-                date=d2,
+            meta=FrontMatter(date=d2),
+            facts=DayFacts(
                 mood="tired",
                 mood_score=2,
                 people=["Maya"],
@@ -76,17 +88,26 @@ def fixture_days(sample_day_markdown: str) -> list[DayFile]:
             captures=[_capture(d2, 21, "Rainy day, ramen, pasta, short run.")],
         ),
         DayFile(
-            meta=FrontMatter(
-                date=d3,
+            meta=FrontMatter(date=d3),
+            facts=DayFacts(
                 mood="happy",
                 mood_score=5,
                 people=["Leo", "Grandma Rose"],
+                places=["home", "the farmers market"],
                 meals=[
                     Meal(type="dinner", items=["pasta"]),
                     Meal(type="drink", items=["lemonade"]),
                 ],
                 activities=[Activity(kind="Run", minutes=45), Activity(kind="reading")],
-                family_events=["Grandma Rose visited"],
+                family=[
+                    FamilyMember(
+                        name="Leo",
+                        mood="happy",
+                        food=["pasta", "lemonade"],
+                        health=["a runny nose"],
+                        school=["spelling test"],
+                    ),
+                ],
                 highlights=["Grandma Rose visited"],
             ),
             title="Tuesday, September 15, 2026 · Grandma visits",
@@ -111,13 +132,13 @@ def _passages(day: DayFile) -> list[tuple[str, str | None, str | None, str]]:
     if day.notes:
         out.append(("notes", None, None, day.notes))
     out.extend(("transcript", None, c.id, c.text) for c in day.captures if c.text)
-    facts = day.meta.facts()
+    facts = day.facts
     fact_text = "; ".join(
         [
             *(f"{m.type}: {', '.join(m.items)}" for m in facts.meals),
             *(a.kind for a in facts.activities),
             *facts.people,
-            *facts.family_events,
+            *facts.places,
             *facts.highlights,
         ]
     )
@@ -138,6 +159,7 @@ def index_day(conn, settings: Settings, day: DayFile) -> None:
             (path, date),
         )
         m = day.meta
+        f = day.facts
         conn.execute(
             "INSERT INTO days(date, path, title, mood, mood_score, city, weather, audio_json, "
             "photos_json, user_edited, capture_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
@@ -145,38 +167,53 @@ def index_day(conn, settings: Settings, day: DayFile) -> None:
                 date,
                 path,
                 day.title,
-                m.mood,
-                m.mood_score,
-                m.city,
-                m.weather,
+                f.mood,
+                f.mood_score,
+                f.city,
+                f.weather,
                 json.dumps(m.audio),
                 json.dumps(m.photos),
                 len(day.captures),
             ),
         )
         pos = 0
-        for meal in m.meals:
+        for meal in f.meals:
             for item in meal.items:
                 conn.execute(
                     "INSERT INTO meals(date, meal_type, item, position) VALUES (?, ?, ?, ?)",
                     (date, meal.type, item, pos),
                 )
                 pos += 1
-        for i, act in enumerate(m.activities):
+        for i, act in enumerate(f.activities):
             conn.execute(
                 "INSERT INTO activities(date, kind, minutes, position) VALUES (?, ?, ?, ?)",
                 (date, act.kind, act.minutes, i),
             )
         for table, column, values in (
-            ("people", "name", m.people),
-            ("family_events", "text", m.family_events),
-            ("highlights", "text", m.highlights),
+            ("people", "name", f.people),
+            ("places", "name", f.places),
+            ("highlights", "text", f.highlights),
         ):
             for i, value in enumerate(values):
                 conn.execute(
                     f"INSERT INTO {table}(date, {column}, position) VALUES (?, ?, ?)",
                     (date, value, i),
                 )
+        family_pos = 0
+        for member in f.family:
+            items = [("mood", member.mood, None)] if member.mood else []
+            items += [("food", v, None) for v in member.food]
+            items += [("places", v, None) for v in member.places]
+            items += [("activities", a.kind, a.minutes) for a in member.activities]
+            for category in ("moments", "health", "school"):
+                items += [(category, v, None) for v in getattr(member, category)]
+            for category, text, minutes in items:
+                conn.execute(
+                    "INSERT INTO family_facts(date, person, category, text, minutes, position)"
+                    " VALUES (?, ?, ?, ?, ?, ?)",
+                    (date, member.name, category, text, minutes, family_pos),
+                )
+                family_pos += 1
         chunks = _passages(day)
         vectors = embed_texts([c[3] for c in chunks], settings)
         for ordinal, ((section, heading, capture_id, text), vector) in enumerate(

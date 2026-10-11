@@ -53,7 +53,7 @@ def test_edited_day_gets_additive_update(
 
     def edit(day) -> None:
         day.journal = "## Summary\n\nMy own words about the run."
-        day.meta.mood = "proud"
+        day.facts.mood = "proud"
         day.notes = "Private thought."
 
     owner_edits(api_storage, edit)
@@ -63,12 +63,14 @@ def test_edited_day_gets_additive_update(
     assert second.generation == "additive"
     day = parse(api_storage.read_text(day_file_path(OCT10)))
     assert day.journal.startswith("## Summary\n\nMy own words about the run.")
-    assert day.journal.endswith("### 22:30 · Quick Note\n\nLater you added a quick note.")
-    assert day.meta.mood == "proud"
-    assert day.meta.people == ["Maya", "Leo"]
+    assert day.journal.endswith(
+        "## Later\n\n**22:30 · Quick Note**\n\nLater you added a quick note."
+    )
+    assert day.facts.mood == "proud"
+    assert day.facts.people == ["Maya", "Leo"]
     assert day.notes == "Private thought."
     assert day.is_user_edited()
-    assert day.meta.prompt_version == "extract_facts-v1+journal_addendum-v1"
+    assert day.meta.prompt_version == "extract_facts-v2+journal_addendum-v1"
     assert day.meta.models_used["journal_addendum"] == "test/journal"
     assert day.meta.models_used["stt"] == "fake"
     addendum_call = next(c for c in fake_llm.calls if c[0] == "journal_addendum")
@@ -111,7 +113,7 @@ def test_fallback_model_is_used_and_recorded(
     day = parse(api_storage.read_text(day_file_path(OCT10)))
     assert day.meta.models_used["extract_facts"] == "test/fallback"
     assert day.meta.models_used["write_journal"] == "test/fallback"
-    assert day.meta.people == ["Maya"]
+    assert day.facts.people == ["Maya"]
     record = json.loads(api_storage.read_text("_system/activity/2026/10.jsonl").splitlines()[-1])
     steps = {s["name"]: s for s in record["steps"]}
     attempts = steps["extract_facts"]["detail"]["attempts"]

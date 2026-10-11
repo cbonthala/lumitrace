@@ -36,8 +36,8 @@ def _edit(storage: LocalStorage, day_date: dt.date, change) -> DayFile:
 
 def _owner_edits(day: DayFile) -> None:
     day.journal = day.journal.replace("Soup.", "Lentil soup, very good.")
-    day.meta.mood = "tired but happy"
-    day.meta.people.append("Sam")
+    day.facts.mood = "tired but happy"
+    day.facts.people.append("Sam")
     day.title = "Heron day"
     day.notes = "Slept 8 hours."
     day.captures[0].text = day.captures[0].text.replace("Robin", "Robyn")

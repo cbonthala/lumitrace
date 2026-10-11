@@ -15,7 +15,7 @@ Tests construct `Settings(_env_file=None, ...)` directly; the `settings` fixture
 
 | Group | Fields |
 |---|---|
-| General | `log_level`, `timezone` (`"America/Chicago"`), `day_rollover_hour` (4), `prompts_dir`, property `tz -> ZoneInfo` |
+| General | `log_level`, `timezone` (`"America/Chicago"`), `day_rollover_hour` (4), `prompts_dir`, property `tz -> ZoneInfo`, `family` (comma-separated names, `""`), property `family_members -> list[str]` (trimmed, duplicates dropped ignoring case) |
 | API (Prism) | `api_token: SecretStr`, `api_host`, `api_port` (8000), `api_max_upload_mb`, `audio_bitrate_kbps` (32), `photo_max_dimension` (2048), `photo_jpeg_quality` (85) |
 | Storage | `storage_backend: "local" \| "gdrive"`, `local_root` (`data/Lumen`), `gdrive_client_secrets_file`, `gdrive_token_file`, `gdrive_root_folder` (`"Lumen"`) |
 | Speech | `stt_provider: "litellm" \| "aws_transcribe" \| "fake"`, `stt_model`, `stt_language`, `aws_region`, `aws_transcribe_bucket` |
@@ -67,7 +67,10 @@ Paths: `day_dir(d)`, `day_file_path(d)`, `audio_file_name(d, local_time)`,
 `next_photo_names(existing, count)`, `unique_file_name(name, existing)`, `system_path(*parts)`,
 `generated_snapshot_path(d)`, `parse_day_file_path(path) -> date | None`,
 `date_of_path(path) -> date | None`, `classify_path(path) -> "day"|"audio"|"photo"|"system"|"other"`.
-Constants: `SYSTEM_DIR = "_system"`, `FORMAT_VERSION = 1`, `MARKER_PREFIXES = ("lumen",
+Constants: `SYSTEM_DIR = "_system"`, `FORMAT_VERSION = 2`, `FACTS_HEADING = "## At a glance"`,
+`FACT_SECTIONS`, `FAMILY_FIELDS`, `MEAL_TYPES` (breakfast, lunch, dinner, snacks, drinks),
+`NONE_TEXT = "none"`, `JOURNAL_SECTIONS` (Summary, Morning, Afternoon, Evening, Thoughts,
+Later), `MARKER_PREFIXES = ("lumen",
 "bookshelf", "lifelog")` (`parse` accepts all; `render` writes `lumen:`), `FORMAT_KEY =
 "lumen_format"`, `LEGACY_FORMAT_KEYS = ("bookshelf_format", "lifelog_format")`.
 
@@ -76,26 +79,37 @@ Dates: `entry_date(captured_at, tz="America/Chicago", rollover_hour=4) -> date`,
 
 Models (pydantic):
 
-* `Meal(type: str, items: list[str])`, `Activity(kind: str, minutes: int | None)`
-* `DayFacts`: `mood`, `mood_score` (1–5), `city`, `weather`, `people`, `meals`, `activities`,
-  `family_events`, `highlights`. Also the output schema of fact extraction. `FACT_FIELDS`.
-* `FrontMatter(DayFacts)`: + `date`, `audio`, `photos`, `prompt_version`, `models_used`
-  (task → model), `generated_at`, `generated_hash`, `lumen_format` (read from
-  `bookshelf_format` or `lifelog_format` in files written under the earlier names); unknown keys preserved.
-  `.facts() -> DayFacts`.
+* `Meal(type: str, items: list[str])` (`type` is one of `MEAL_TYPES`),
+  `Activity(kind: str, minutes: int | None)`
+* `FamilyMember`: `name`, `mood`, `food`, `places`, `activities: list[Activity]`, `moments`,
+  `health`, `school`; `.has_facts()`.
+* `DayFacts`: `mood`, `mood_score` (1–5), `city`, `weather`, `people`, `places`, `meals`,
+  `activities`, `family: list[FamilyMember]`, `highlights`; `.is_empty()`. Also the output
+  schema of fact extraction. Values are normalised (one line, no separators inside items) so
+  render and parse agree. `FACT_FIELDS`.
+* `FrontMatter`: `date`, `audio`, `photos`, `prompt_version`, `models_used` (task → model),
+  `generated_at`, `generated_hash`, `lumen_format` (read from `bookshelf_format` or
+  `lifelog_format` in files written under the earlier names); unknown keys preserved. Facts are
+  not in the front matter since format 2.
 * `Capture`: `id`, `kind: "recording" | "note"`, `captured_at` (aware), `text`, `audio`,
   `photos`, `location`; `Capture.make_id(kind, captured_at)`.
-* `DayFile`: `meta: FrontMatter`, `title`, `journal`, `notes`, `captures`; `.date`,
+* `DayFile`: `meta: FrontMatter`, `facts: DayFacts`, `title`, `journal`, `notes`, `captures`; `.date`,
   `DayFile.new(d)`, `.compute_generated_hash()`, `.is_user_edited()`, `.capture_ids()`.
 
 Functions:
 
 * `parse(markdown, *, fallback_date=None) -> DayFile` (raises `DayFileParseError`)
 * `render(day) -> str` (`parse(render(d)) == d`)
+* `render_facts_section(facts, *, include_empty=True) -> str` (every line, `none` when empty;
+  `include_empty=False` is the index's view without them),
+  `parse_facts_section(markdown) -> (DayFacts, stray)` (the "At a glance" region; Spectrum makes
+  its facts passages from the `include_empty=False` text)
 * `merge_capture(day | None, capture, day_date) -> DayFile` (idempotent by `capture.id`)
 * `apply_generation(day, *, facts, journal, title=None, prompt_version=None, models_used=None,
   generated_at=None, force=False) -> DayFile` (raises `UserEditsDetected`)
-* `merge_generation_additive(day, *, facts, journal_addendum=None, addendum_heading=None,
+* `normalize_journal(markdown) -> str` (fixed `JOURNAL_SECTIONS` headings; used by
+  `apply_generation`)
+* `merge_generation_additive(day, *, facts, journal_addendum=None, addendum_label=None,
   prompt_version=None, models_used=None, generated_at=None) -> DayFile`
 
 ## Index: `lumen.index.schema`

@@ -28,8 +28,9 @@ logger = logging.getLogger(__name__)
 
 INSTRUCTIONS = """\
 Lumen is the owner's personal voice journal: one entry per day with a written journal, \
-structured facts (meals, activities, people, family events, mood, highlights), the owner's own \
-notes and the raw transcripts of their recordings.
+structured facts (meals, places, activities, people, mood, highlights, and per family member \
+what they ate, where they went, what they did, moments, health, mood and school/work), the \
+owner's own notes and the raw transcripts of their recordings.
 
 How to answer:
 - Answer ONLY from what these tools return. Never fill gaps with guesses or general knowledge \
@@ -39,7 +40,8 @@ about the owner's life.
 not invent an answer.
 - Resolve relative dates ("last Tuesday", "in September") yourself and pass explicit \
 YYYY-MM-DD dates. Days roll over at 4 a.m. in the owner's timezone.
-- Use query_facts for counting and lists ("how often did I run in May?", "what did I eat?"), \
+- Use query_facts for counting and lists ("how often did I run in May?", "what did I eat?", \
+"where did I go last week?", "what did Leo eat this week?" with kind family and person Leo), \
 search for open questions, get_day for the full story of one day (it also returns private \
 links to the audio recording and photos, which only the owner can open), and on_this_day for \
 memories from the same date in earlier years.
@@ -75,7 +77,8 @@ def register_tools(server: MCPServer, tools: LensTools) -> None:
             "and meaning. Returns the best-matching passages, each with its date (YYYY-MM-DD), "
             "section (title|journal|notes|transcript|facts), a snippet and the file path. "
             f"Optional date filters are inclusive and take {DATE_HELP}. Use query_facts instead "
-            "for counting or listing meals, activities, people, family events, mood or highlights."
+            "for counting or listing meals, places, activities, people, family facts, mood or "
+            "highlights."
         ),
     )
     def search(
@@ -112,11 +115,15 @@ def register_tools(server: MCPServer, tools: LensTools) -> None:
         description=(
             "List and count structured facts extracted from the journal. kind is one of: "
             "meals (meal_type + item, e.g. breakfast: oatmeal), activities (kind + minutes), "
-            "people (names), family_events, mood (mood word + 1-5 score per day), highlights. "
+            "people (names), places (places visited), family (per family member: person + "
+            "category + text + minutes, where category is mood, food, places, activities, "
+            "moments, health or school), mood (mood word + 1-5 score per day), highlights. "
             "Returns matching rows (newest first, each with its date) plus counts (rows, days, "
             "first and last date) and aggregates over ALL matches (top items, minutes per "
-            "activity, days per person, average mood). contains is a case-insensitive substring "
-            f"filter. Date filters are inclusive and take {DATE_HELP}."
+            "activity, days per person or place, counts per family member and category, average "
+            "mood). contains is a case-insensitive substring filter (for family it matches the "
+            "text or the category); person limits family facts to one family member. "
+            f"Date filters are inclusive and take {DATE_HELP}."
         ),
     )
     def query_facts(
@@ -132,8 +139,12 @@ def register_tools(server: MCPServer, tools: LensTools) -> None:
             str | None, Field(description=f"Latest date to include: {DATE_HELP}.")
         ] = None,
         limit: Annotated[int, Field(description="Maximum rows (1-500).", ge=1, le=500)] = 50,
+        person: Annotated[
+            str | None,
+            Field(description="Only with kind 'family': one family member's name, e.g. 'Leo'."),
+        ] = None,
     ) -> dict[str, Any]:
-        return _run(tools.query_facts, kind, contains, from_date, to_date, limit)
+        return _run(tools.query_facts, kind, contains, from_date, to_date, limit, person)
 
     @server.tool(
         title="On this day",
@@ -141,8 +152,9 @@ def register_tools(server: MCPServer, tools: LensTools) -> None:
         description=(
             'Entries from the same calendar date in earlier years ("what happened on this day '
             'in past years?"), newest first, each with date, years_ago, title, mood, people, '
-            f"highlights and a short summary. date: {DATE_HELP} or {MONTH_DAY_HELP}; defaults "
-            "to today. Only years before the reference year are included."
+            "places, highlights, family facts and a short summary. "
+            f"date: {DATE_HELP} or {MONTH_DAY_HELP}; defaults to today. Only years before the "
+            "reference year are included."
         ),
     )
     def on_this_day(
