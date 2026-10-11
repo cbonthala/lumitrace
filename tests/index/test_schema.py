@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from bookshelf.index import schema as S
+from lumen.index import schema as S
 
 
 def _add_file(conn: sqlite3.Connection, path: str = "2026/10/2026-10-10/2026-10-10.md") -> None:

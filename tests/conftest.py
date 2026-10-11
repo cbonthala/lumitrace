@@ -7,17 +7,17 @@ from pathlib import Path
 
 import pytest
 
-from bookshelf.books.storage.local import LocalStorage
-from bookshelf.config import Settings
+from lumen.config import Settings
+from lumen.frames.storage.local import LocalStorage
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Skip `@pytest.mark.network` tests unless BOOKSHELF_RUN_NETWORK_TESTS=1."""
-    if os.environ.get("BOOKSHELF_RUN_NETWORK_TESTS") == "1":
+    """Skip `@pytest.mark.network` tests unless LUMEN_RUN_NETWORK_TESTS=1."""
+    if os.environ.get("LUMEN_RUN_NETWORK_TESTS") == "1":
         return
-    skip = pytest.mark.skip(reason="needs network/credentials; set BOOKSHELF_RUN_NETWORK_TESTS=1")
+    skip = pytest.mark.skip(reason="needs network/credentials; set LUMEN_RUN_NETWORK_TESTS=1")
     for item in items:
         if "network" in item.keywords:
             item.add_marker(skip)
@@ -30,8 +30,8 @@ def settings(tmp_path: Path) -> Settings:
         _env_file=None,
         api_token="test-token",
         storage_backend="local",
-        local_root=tmp_path / "Bookshelf",
-        index_path=tmp_path / "index" / "bookshelf.sqlite",
+        local_root=tmp_path / "Lumen",
+        index_path=tmp_path / "index" / "lumen.sqlite",
         embedding_model="fake",
         embedding_dimension=64,
         stt_provider="fake",

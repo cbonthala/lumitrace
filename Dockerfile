@@ -1,4 +1,4 @@
-# One Bookshelf image for all three programs (Typewriter, Bookmarks, Reading Lamp);
+# One Lumen image for all three programs (Prism, Spectrum, Lens);
 # docker-compose.yml picks the command per service.
 FROM python:3.12-slim
 
@@ -19,22 +19,22 @@ WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-COPY bookshelf ./bookshelf
+COPY lumen ./lumen
 COPY prompts ./prompts
 RUN uv sync --frozen --no-dev
 
 ENV PATH="/app/.venv/bin:${PATH}" \
-    BOOKSHELF_LOCAL_ROOT=/data/Bookshelf \
-    BOOKSHELF_INDEX_PATH=/data/index/bookshelf.sqlite \
-    BOOKSHELF_PROMPTS_DIR=/app/prompts \
-    BOOKSHELF_GDRIVE_CLIENT_SECRETS_FILE=/secrets/gdrive_client_secret.json \
-    BOOKSHELF_GDRIVE_TOKEN_FILE=/secrets/gdrive_token.json
+    LUMEN_LOCAL_ROOT=/data/Lumen \
+    LUMEN_INDEX_PATH=/data/index/lumen.sqlite \
+    LUMEN_PROMPTS_DIR=/app/prompts \
+    LUMEN_GDRIVE_CLIENT_SECRETS_FILE=/secrets/gdrive_client_secret.json \
+    LUMEN_GDRIVE_TOKEN_FILE=/secrets/gdrive_token.json
 
-RUN useradd --create-home --uid 10001 bookshelf \
+RUN useradd --create-home --uid 10001 lumen \
     && mkdir -p /data /secrets \
-    && chown bookshelf:bookshelf /data /secrets
-USER bookshelf
+    && chown lumen:lumen /data /secrets
+USER lumen
 VOLUME ["/data"]
 
 EXPOSE 8000 8001 8002
-CMD ["bookshelf-typewriter"]
+CMD ["lumen-prism"]

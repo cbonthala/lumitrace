@@ -1,36 +1,36 @@
-# Bookshelf: three programs, one image, one shared data volume (local storage root + SQLite
+# Lumen: three programs, one image, one shared data volume (local storage root + SQLite
 # index). Copy .env.example to .env first. Put Google OAuth files in ./secrets (git-ignored).
-x-bookshelf: &bookshelf
+x-lumen: &lumen
   build: .
-  image: bookshelf:latest
+  image: lumen:latest
   env_file: .env
   environment:
-    BOOKSHELF_INDEXER_NUDGE_URL: http://bookmarks:8001/nudge
+    LUMEN_INDEXER_NUDGE_URL: http://spectrum:8001/nudge
   volumes:
-    - bookshelf-data:/data
+    - lumen-data:/data
     - ./secrets:/secrets
   restart: unless-stopped
 
 services:
-  typewriter:
-    <<: *bookshelf
-    command: ["bookshelf-typewriter"]
+  prism:
+    <<: *lumen
+    command: ["lumen-prism"]
     ports:
       - "8000:8000"
 
-  bookmarks:
-    <<: *bookshelf
-    command: ["bookshelf-bookmarks", "run"]
-    # Internal only: POST /nudge has no auth. Never add `ports:` here; the typewriter service
-    # reaches it as http://bookmarks:8001 on the Compose network.
+  spectrum:
+    <<: *lumen
+    command: ["lumen-spectrum", "run"]
+    # Internal only: POST /nudge has no auth. Never add `ports:` here; the prism service
+    # reaches it as http://spectrum:8001 on the Compose network.
     expose:
       - "8001"
 
-  reading-lamp:
-    <<: *bookshelf
-    command: ["bookshelf-reading-lamp"]
+  lens:
+    <<: *lumen
+    command: ["lumen-lens"]
     ports:
       - "8002:8002"
 
 volumes:
-  bookshelf-data:
+  lumen-data:
