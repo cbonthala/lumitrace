@@ -5,7 +5,6 @@ from lumen.spectrum.passages import (
     MAX_CHARS,
     build_passages,
     chunk_text,
-    facts_lines,
     split_by_headings,
 )
 
@@ -28,10 +27,25 @@ def test_sample_day_passages(sample_day_markdown: str) -> None:
     assert transcript[0].heading == "13:05 · Quick Note"
     assert [p.ordinal for p in transcript] == list(range(len(transcript)))
 
-    facts = next(p for p in passages if p.section == "facts").text
-    assert "People: Maya, Leo" in facts
-    assert "Breakfast: oatmeal, blueberries" in facts
-    assert "Activities: run (40 min), reading" in facts
+    facts = {p.heading: p.text for p in passages if p.section == "facts"}
+    assert list(facts) == [
+        None,
+        "Food",
+        "Places",
+        "People",
+        "Activities",
+        "Leo",
+        "Maya",
+        "Highlights",
+    ]
+    assert [p.ordinal for p in passages if p.section == "facts"] == list(range(8))
+    assert (
+        facts["Leo"] == "- **Mood:** proud\n- **Ate:** pasta\n- **Moments:** lost his first tooth"
+    )
+    assert "- **Mood:** happy (4/5)" in facts[None]
+    assert "- **Breakfast:** oatmeal, blueberries" in facts["Food"]
+    assert facts["Places"] == "- the river trail\n- the taco truck\n- home"
+    assert facts["Activities"] == "- run (40 min)\n- reading"
     assert all(len(p.text) <= MAX_CHARS for p in passages)
 
 
@@ -79,4 +93,3 @@ def test_empty_day_has_title_only() -> None:
     day = DayFile.new(dt.date(2026, 1, 2))
     passages = build_passages(day)
     assert [p.section for p in passages] == ["title"]
-    assert facts_lines(day) == []

@@ -324,7 +324,7 @@ class CaptureProcessor:
             journal_result = self._llm_step(
                 record,
                 "write_journal",
-                lambda: gen.write_journal(day.date, day.captures, facts or day.meta.facts()),
+                lambda: gen.write_journal(day.date, day.captures, facts or day.facts),
             )
             if facts_result is None and journal_result is None:
                 return None
@@ -336,7 +336,7 @@ class CaptureProcessor:
                 headline = journal_result[0].value.headline
             return _Generated(
                 mode=mode,
-                facts=facts or day.meta.facts(),
+                facts=facts or day.facts,
                 journal=journal,
                 headline=headline,
                 models=models,
@@ -415,7 +415,7 @@ class CaptureProcessor:
             day,
             facts=generated.facts,
             journal_addendum=generated.addendum,
-            addendum_heading=f"{local:%H:%M} · {label}",
+            addendum_label=f"{local:%H:%M} · {label}",
             prompt_version=prompt_version,
             models_used=models_used,
         )

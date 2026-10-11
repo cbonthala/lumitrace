@@ -8,6 +8,14 @@ Full specification with an example: ``docs/frames-format.md``. Summary of the la
 
     # <title>
 
+    ## At a glance
+
+    <!-- lumen:facts:start ... -->           the day's facts (DayFile.facts): mood, city,
+    - **Mood:** happy (4/5)                   weather, then ### Food, Places, People,
+    ### Food                                  Activities, Family, Highlights
+    - **Breakfast:** oatmeal, blueberries
+    <!-- lumen:facts:end -->
+
     <!-- lumen:journal:start ... -->         generated journal (DayFile.journal)
     <!-- lumen:journal:end -->
 
@@ -25,6 +33,9 @@ Full specification with an example: ``docs/frames-format.md``. Summary of the la
 
     transcript text
     <!-- lumen:transcript:end -->
+
+The facts live only in the "At a glance" region, never in the front matter. Format 1 files kept
+them in the front matter; :func:`parse` reads those and :func:`render` writes format 2.
 
 Edit protection: ``FrontMatter.generated_hash`` is a hash of the facts, title and journal as the
 system last wrote them. If the current content no longer matches, the owner edited it
@@ -61,11 +72,13 @@ from pydantic import (
     model_validator,
 )
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 SYSTEM_DIR = "_system"
 AUDIO_EXT = ".m4a"
 PHOTO_EXT = ".jpg"
 
+FACTS_START = "<!-- lumen:facts:start (found by Lumen; if you edit them, your edits are kept) -->"
+FACTS_END = "<!-- lumen:facts:end -->"
 JOURNAL_START = (
     "<!-- lumen:journal:start (written by Lumen; if you edit it, your edits are kept) -->"
 )
@@ -80,6 +93,7 @@ MARKER_PREFIXES: tuple[str, ...] = ("lumen", "bookshelf", "lifelog")
 FORMAT_KEY = "lumen_format"
 LEGACY_FORMAT_KEYS: tuple[str, ...] = ("bookshelf_format", "lifelog_format")
 """Older names of :data:`FORMAT_KEY`; :func:`parse` reads them, newest first."""
+FACTS_HEADING = "## At a glance"
 NOTES_HEADING = "## My notes"
 TRANSCRIPT_HEADING = "## Transcript"
 
@@ -258,44 +272,202 @@ def _strip(value: Any) -> Any:
 StrippedStr = Annotated[str, BeforeValidator(_strip)]
 
 
+NONE_TEXT = "none"
+"""Written in place of an empty fact, so every day file has the same lines; read back as empty."""
+
+
+def _is_none_text(value: Any) -> bool:
+    return isinstance(value, str) and value.casefold() == NONE_TEXT
+
+
+def _one_line(value: Any) -> Any:
+    """Collapse whitespace so a fact fits on one Markdown bullet line."""
+    return " ".join(value.split()) if isinstance(value, str) else value
+
+
+def _one_line_or_none(value: Any) -> Any:
+    value = _one_line(value)
+    if _is_none_text(value):
+        return None
+    return value or None if isinstance(value, str) else value
+
+
+def _clean_list(value: Any, split: re.Pattern[str] | None = None) -> Any:
+    """One-line strings, empty ones dropped; with ``split``, strings are also split into items."""
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        return value
+    out: list[Any] = []
+    for item in value:
+        item = _one_line(item)
+        if isinstance(item, str):
+            parts = split.split(item) if split else [item]
+            out.extend(p for p in parts if p and not _is_none_text(p))
+        else:
+            out.append(item)
+    return out
+
+
+_COMMA_RE = re.compile(r"\s*,\s*")
+_SEMICOLON_RE = re.compile(r"\s*;\s*")
+
+
+def _comma_items(value: Any) -> Any:
+    return _clean_list(value, _COMMA_RE)
+
+
+def _semicolon_items(value: Any) -> Any:
+    return _clean_list(value, _SEMICOLON_RE)
+
+
+FactLine = Annotated[str, BeforeValidator(_one_line)]
+OptionalFactLine = Annotated[str | None, BeforeValidator(_one_line_or_none)]
+FactList = Annotated[list[str], BeforeValidator(_clean_list)]
+CommaItems = Annotated[list[str], BeforeValidator(_comma_items)]
+"""Rendered comma-separated on one line, so the items never contain commas."""
+SemicolonItems = Annotated[list[str], BeforeValidator(_semicolon_items)]
+"""Rendered semicolon-separated on one line, so the items never contain semicolons."""
+
+
+MEAL_TYPES: tuple[str, ...] = ("breakfast", "lunch", "dinner", "snacks", "drinks")
+"""The only meal types, in render order. Every day file has one Food line per type."""
+
+_MEAL_TYPE_ALIASES: dict[str, str] = {
+    "snack": "snacks",
+    "drink": "drinks",
+    "beverage": "drinks",
+    "beverages": "drinks",
+    "supper": "dinner",
+    "brunch": "lunch",
+}
+
+
 class Meal(BaseModel):
     model_config = ConfigDict(extra="ignore")
     type: str
-    """breakfast | lunch | dinner | snack | drink (free text is accepted)."""
-    items: list[str] = Field(default_factory=list)
+    """One of :data:`MEAL_TYPES`. A few synonyms are mapped ("drink", "supper", "brunch");
+    anything else becomes "snacks"."""
+    items: CommaItems = Field(default_factory=list)
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def _clean_type(cls, value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        key = " ".join(value.replace(":", " ").split()).lower()
+        key = _MEAL_TYPE_ALIASES.get(key, key)
+        return key if key in MEAL_TYPES else "snacks"
 
 
 class Activity(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    kind: str
+    kind: FactLine
+    """Never contains ";" (a family member's activities share one line, separated by "; ")."""
     minutes: int | None = None
 
+    @field_validator("kind", mode="before")
+    @classmethod
+    def _no_semicolons(cls, value: Any) -> Any:
+        if _is_none_text(_one_line(value)):
+            return ""
+        return value.replace(";", ",") if isinstance(value, str) else value
 
-class DayFacts(BaseModel):
-    """Structured facts about a day. This is also the shape the fact-extraction step returns."""
+
+class FamilyMember(BaseModel):
+    """One family member's day: a ``#### name`` block under ``### Family`` in "At a glance".
+    The Prism writes a block for every configured member (``LUMEN_FAMILY``), with nothing in it
+    when the day says nothing about them; the owner may add others by hand."""
 
     model_config = ConfigDict(extra="ignore")
-    mood: str | None = None
-    mood_score: int | None = Field(default=None, ge=1, le=5)
-    city: str | None = None
-    weather: str | None = None
-    people: list[str] = Field(default_factory=list)
-    meals: list[Meal] = Field(default_factory=list)
+    name: FactLine
+    mood: OptionalFactLine = None
+    food: CommaItems = Field(default_factory=list)
+    """What they ate or drank."""
+    places: CommaItems = Field(default_factory=list)
+    """Where they went."""
     activities: list[Activity] = Field(default_factory=list)
-    family_events: list[str] = Field(default_factory=list)
-    highlights: list[str] = Field(default_factory=list)
+    moments: SemicolonItems = Field(default_factory=list)
+    """Notable moments and milestones, e.g. "lost his first tooth"."""
+    health: SemicolonItems = Field(default_factory=list)
+    """Sickness, doctor visits, medicine."""
+    school: SemicolonItems = Field(default_factory=list)
+    """School or work."""
 
-    @field_validator("people", "family_events", "highlights", "meals", "activities", mode="before")
+    @field_validator("activities", mode="before")
     @classmethod
     def _none_is_empty(cls, value: Any) -> Any:
         return [] if value is None else value
 
+    @model_validator(mode="after")
+    def _drop_empty_activities(self) -> FamilyMember:
+        self.activities = [a for a in self.activities if a.kind]
+        return self
+
+    def has_facts(self) -> bool:
+        return self.model_copy(update={"name": ""}) != FamilyMember(name="")
+
+
+class DayFacts(BaseModel):
+    """Structured facts about a day: the "At a glance" region of the day file. This is also the
+    shape the fact-extraction step returns. Values are normalised (one line each, no empty or
+    ``none`` items, one meal per type of :data:`MEAL_TYPES` in that order, family members kept
+    even when empty) so that rendering and parsing them back gives the same facts."""
+
+    model_config = ConfigDict(extra="ignore")
+    mood: OptionalFactLine = None
+    mood_score: int | None = Field(default=None, ge=1, le=5)
+    city: OptionalFactLine = None
+    weather: OptionalFactLine = None
+    people: FactList = Field(default_factory=list)
+    places: FactList = Field(default_factory=list)
+    """Places the owner visited, e.g. "the river trail", "taco truck on 5th"."""
+    meals: list[Meal] = Field(default_factory=list)
+    activities: list[Activity] = Field(default_factory=list)
+    family: list[FamilyMember] = Field(default_factory=list)
+    """Per family member: what they ate, where they went, what they did, moments, health..."""
+    highlights: FactList = Field(default_factory=list)
+
+    @field_validator("meals", "activities", "family", mode="before")
+    @classmethod
+    def _none_is_empty(cls, value: Any) -> Any:
+        return [] if value is None else value
+
+    @model_validator(mode="after")
+    def _normalise_entries(self) -> DayFacts:
+        meals: dict[str, Meal] = {}
+        for meal in self.meals:
+            if meal.type in meals:
+                _add_unique(meals[meal.type].items, meal.items)
+            elif meal.items:
+                meals[meal.type] = meal.model_copy(deep=True)
+        self.meals = [meals[t] for t in MEAL_TYPES if t in meals]
+        self.activities = [a for a in self.activities if a.kind]
+        self.family = [f for f in self.family if f.name]
+        return self
+
+    def is_empty(self) -> bool:
+        return self == DayFacts()
+
 
 FACT_FIELDS: tuple[str, ...] = tuple(DayFacts.model_fields)
+FORMAT_1_FACT_KEYS: tuple[str, ...] = (
+    "mood",
+    "mood_score",
+    "city",
+    "weather",
+    "people",
+    "meals",
+    "activities",
+    "family_events",
+    "highlights",
+)
+"""Front-matter keys that held the facts in format 1 (``family_events`` became highlights)."""
 
 
-class FrontMatter(DayFacts):
-    """YAML front matter. Unknown keys (for example Obsidian ``tags``) are preserved."""
+class FrontMatter(BaseModel):
+    """YAML front matter: the date, media and provenance. The facts are not here (they are in
+    the "At a glance" region). Unknown keys (for example Obsidian ``tags``) are preserved."""
 
     model_config = ConfigDict(extra="allow")
     date: dt.date
@@ -320,13 +492,9 @@ class FrontMatter(DayFacts):
     def _none_is_empty_dict(cls, value: Any) -> Any:
         return {} if value is None else value
 
-    def facts(self) -> DayFacts:
-        return DayFacts.model_validate(self.model_dump(include=set(FACT_FIELDS)))
-
 
 FRONT_MATTER_ORDER: tuple[str, ...] = (
     "date",
-    *FACT_FIELDS,
     "audio",
     "photos",
     "prompt_version",
@@ -363,9 +531,38 @@ class Capture(BaseModel):
         return f"{captured_at:%Y%m%dT%H%M%S}-{kind}"
 
 
+def _hash_generated(facts: dict[str, Any], title: str, journal: str) -> str:
+    payload = {"facts": facts, "title": title, "journal": journal}
+    raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def _format_1_facts(raw: dict[str, Any]) -> dict[str, Any]:
+    """The facts exactly as format 1 hashed them (raw front-matter values, format 1 fields)."""
+
+    def dicts(key: str) -> list[dict[str, Any]]:
+        return [v for v in raw.get(key) or [] if isinstance(v, dict)]
+
+    return {
+        "mood": raw.get("mood"),
+        "mood_score": raw.get("mood_score"),
+        "city": raw.get("city"),
+        "weather": raw.get("weather"),
+        "people": raw.get("people") or [],
+        "meals": [{"type": m.get("type"), "items": m.get("items") or []} for m in dicts("meals")],
+        "activities": [
+            {"kind": a.get("kind"), "minutes": a.get("minutes")} for a in dicts("activities")
+        ],
+        "family_events": raw.get("family_events") or [],
+        "highlights": raw.get("highlights") or [],
+    }
+
+
 class DayFile(BaseModel):
     meta: FrontMatter
     title: StrippedStr = ""
+    facts: DayFacts = Field(default_factory=DayFacts)
+    """The "At a glance" region (mood, food, places, people, ...)."""
     journal: StrippedStr = ""
     """Generated journal Markdown (``##`` sections), between the journal markers."""
     notes: StrippedStr = ""
@@ -387,13 +584,7 @@ class DayFile(BaseModel):
         return cls(meta=FrontMatter(date=day))
 
     def compute_generated_hash(self) -> str:
-        payload = {
-            "facts": self.meta.facts().model_dump(mode="json"),
-            "title": self.title,
-            "journal": self.journal,
-        }
-        raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-        return hashlib.sha256(raw.encode()).hexdigest()[:16]
+        return _hash_generated(self.facts.model_dump(mode="json"), self.title, self.journal)
 
     def is_user_edited(self) -> bool:
         """True if facts, title or journal differ from what the system last generated."""
@@ -449,6 +640,175 @@ def _region(start: str, content: str, end: str) -> str:
     return f"{start}\n{content}\n{end}\n" if content else f"{start}\n{end}\n"
 
 
+FACT_SECTIONS: tuple[tuple[str, str], ...] = (
+    ("Food", "meals"),
+    ("Places", "places"),
+    ("People", "people"),
+    ("Activities", "activities"),
+    ("Family", "family"),
+    ("Highlights", "highlights"),
+)
+"""``(heading, DayFacts field)`` of the ``###`` sections in "At a glance", in render order."""
+
+_SECTION_ALIASES: dict[str, str] = {
+    **{heading.casefold(): name for heading, name in FACT_SECTIONS},
+    "meals": "meals",
+    "places visited": "places",
+    "family events": "family",
+}
+
+FAMILY_FIELDS: tuple[tuple[str, str, str], ...] = (
+    ("Mood", "mood", ""),
+    ("Ate", "food", ", "),
+    ("Went to", "places", ", "),
+    ("Did", "activities", "; "),
+    ("Moments", "moments", "; "),
+    ("Health", "health", "; "),
+    ("School/work", "school", "; "),
+)
+"""``(label, FamilyMember field, item separator)`` of the lines in a family member's block."""
+
+_FAMILY_ALIASES: dict[str, str] = {
+    **{label.casefold(): name for label, name, _ in FAMILY_FIELDS},
+    "food": "food",
+    "meals": "food",
+    "places": "places",
+    "activities": "activities",
+    "moment": "moments",
+    "milestones": "moments",
+    "school": "school",
+    "work": "school",
+    "school / work": "school",
+}
+
+
+def _mood_text(facts: DayFacts) -> str | None:
+    if facts.mood and facts.mood_score:
+        return f"{facts.mood} ({facts.mood_score}/5)"
+    if facts.mood_score:
+        return f"{facts.mood_score}/5"
+    return facts.mood
+
+
+def _activity_text(activity: Activity) -> str:
+    return f"{activity.kind} ({activity.minutes} min)" if activity.minutes else activity.kind
+
+
+def _family_member_block(member: FamilyMember, include_empty: bool) -> str:
+    lines = [f"#### {member.name}", ""]
+    for label, name, sep in FAMILY_FIELDS:
+        value = getattr(member, name)
+        if name == "activities":
+            value = [_activity_text(a) for a in value]
+        text = sep.join(value) if isinstance(value, list) else value
+        if text or include_empty:
+            lines.append(f"- **{label}:** {text or NONE_TEXT}")
+    return "\n".join(lines)
+
+
+def render_facts_section(facts: DayFacts, *, include_empty: bool = True) -> str:
+    """The Markdown inside the facts markers.
+
+    Every day file has the same lines in the same order: Mood, City and Weather; then each
+    ``### heading`` of :data:`FACT_SECTIONS`, with one Food line per :data:`MEAL_TYPES` and a
+    ``#### name`` block per family member holding every line of :data:`FAMILY_FIELDS`. Empty
+    facts are written as ``none``. With ``include_empty=False`` (the index's view) empty lines,
+    sections and family members are left out, and no facts at all give an empty string."""
+    blocks: list[str] = []
+    scalars = [
+        f"- **{label}:** {value or NONE_TEXT}"
+        for label, value in (
+            ("Mood", _mood_text(facts)),
+            ("City", facts.city),
+            ("Weather", facts.weather),
+        )
+        if value or include_empty
+    ]
+    if scalars:
+        blocks.append("\n".join(scalars))
+    for heading, name in FACT_SECTIONS:
+        if name == "meals":
+            items = {m.type: ", ".join(m.items) for m in facts.meals}
+            lines = [
+                f"- **{t.capitalize()}:** {items.get(t) or NONE_TEXT}"
+                for t in MEAL_TYPES
+                if t in items or include_empty
+            ]
+        elif name == "activities":
+            lines = [f"- {_activity_text(a)}" for a in facts.activities]
+        elif name == "family":
+            members = [m for m in facts.family if include_empty or m.has_facts()]
+            lines = (
+                ["\n\n".join(_family_member_block(m, include_empty) for m in members)]
+                if members
+                else []
+            )
+        else:
+            lines = [f"- {item}" for item in getattr(facts, name)]
+        if not lines and include_empty:
+            lines = [f"- {NONE_TEXT}"]
+        if lines:
+            blocks.append(f"### {heading}\n\n" + "\n".join(lines))
+    return "\n\n".join(blocks)
+
+
+JOURNAL_SECTIONS: tuple[str, ...] = (
+    "Summary",
+    "Morning",
+    "Afternoon",
+    "Evening",
+    "Thoughts",
+    "Later",
+)
+"""The only ``##`` headings of a system-written journal, in order. ``Later`` holds additions
+made after the owner edited the day."""
+
+_JOURNAL_ALIASES: dict[str, str] = {
+    **{name.casefold(): name for name in JOURNAL_SECTIONS},
+    "overview": "Summary",
+    "night": "Evening",
+    "tonight": "Evening",
+    "reflection": "Thoughts",
+    "reflections": "Thoughts",
+    "plans": "Thoughts",
+    "thoughts and plans": "Thoughts",
+}
+
+
+_JOURNAL_HEADING_RE = re.compile(r"^##[ \t]+(.+?)[ \t]*#*[ \t]*$", re.MULTILINE)
+
+
+def normalize_journal(markdown: str) -> str:
+    """Give a generated journal the fixed ``##`` headings of :data:`JOURNAL_SECTIONS`.
+
+    Known headings (any level, a few aliases such as "Night") become their section; sections
+    come out in the fixed order, repeated ones merged, empty ones left out. Text before the
+    first heading belongs to Summary. Any other heading is kept as a bold line inside the
+    section it appears in, so no words are lost. Idempotent."""
+    sections: dict[str, list[str]] = {}
+    current = JOURNAL_SECTIONS[0]
+    in_fence = False
+    for line in markdown.strip().split("\n"):
+        stripped = line.strip()
+        if stripped.startswith(("```", "~~~")):
+            in_fence = not in_fence
+        heading = None if in_fence else _FACT_HEADING_RE.match(stripped)
+        if heading:
+            title = heading.group(1).strip().rstrip(":").strip()
+            known = _JOURNAL_ALIASES.get(title.casefold())
+            if known:
+                current = known
+                continue
+            line = f"**{title}**"
+        sections.setdefault(current, []).append(line)
+    blocks = []
+    for name in JOURNAL_SECTIONS:
+        text = re.sub(r"\n{3,}", "\n\n", "\n".join(sections.get(name, [])).strip())
+        if text:
+            blocks.append(f"## {name}\n\n{text}")
+    return "\n\n".join(blocks)
+
+
 def render(day: DayFile) -> str:
     """Render a :class:`DayFile` to Markdown. ``parse(render(d)) == d`` always holds."""
     front = yaml.safe_dump(
@@ -465,6 +825,9 @@ def render(day: DayFile) -> str:
             front,
             "---\n\n",
             f"# {day.title}\n\n",
+            f"{FACTS_HEADING}\n\n",
+            _region(FACTS_START, render_facts_section(day.facts), FACTS_END),
+            "\n",
             _region(JOURNAL_START, day.journal, JOURNAL_END),
             "\n",
             f"{NOTES_HEADING}\n\n",
@@ -544,6 +907,101 @@ def _parse_captures(region: str) -> tuple[list[Capture], str]:
     return captures, stray.strip()
 
 
+_FACT_HEADING_RE = re.compile(r"^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$")
+_BULLET_RE = re.compile(r"^(?:[-*+][ \t]+)?(.*)$")
+_LABEL_RE = re.compile(r"^(?:\*\*)?[ \t]*([^:*]+?)[ \t]*(?:\*\*)?[ \t]*:[ \t]*(?:\*\*)?[ \t]*(.*)$")
+_MOOD_RE = re.compile(r"^(.*?)[ \t]*\(?[ \t]*([1-5])[ \t]*/[ \t]*5[ \t]*\)?$")
+_MINUTES_RE = re.compile(r"^(.*?)[ \t]*\([ \t]*(\d+)[ \t]*min(?:ute)?s?[ \t]*\)$", re.IGNORECASE)
+
+
+def parse_facts_section(markdown: str) -> tuple[DayFacts, str]:
+    """Parse the Markdown inside the facts markers. Returns ``(facts, stray)``.
+
+    Tolerates hand edits: bullets are optional, labels may or may not be bold, headings may use
+    any level and the aliases in :data:`_SECTION_ALIASES` and :data:`_FAMILY_ALIASES`. Under
+    Family, any heading that is not a section name starts a family member's block. Lines that
+    fit nowhere (an unknown label or heading, and everything under an unknown heading) are
+    returned as ``stray`` text, which :func:`parse` moves into the notes so nothing is lost.
+    """
+    data: dict[str, Any] = {n: [] for n in ("people", "places", "highlights")}
+    meals: list[dict[str, Any]] = []
+    activities: list[dict[str, Any]] = []
+    family: list[dict[str, Any]] = []
+    stray: list[str] = []
+    section: str | None = None
+    unknown_section = False
+    for raw in markdown.split("\n"):
+        line = raw.strip()
+        if not line:
+            continue
+        heading = _FACT_HEADING_RE.match(line)
+        if heading:
+            title = heading.group(1).strip()
+            known = _SECTION_ALIASES.get(title.casefold())
+            if known is None and section == "family" and not unknown_section:
+                family.append({"name": title, "activities": []})
+                continue
+            section, unknown_section = known, known is None
+            if unknown_section:
+                stray.append(line)
+            continue
+        if unknown_section:
+            stray.append(line)
+            continue
+        text = _BULLET_RE.match(line).group(1).strip()  # type: ignore[union-attr]
+        if _is_none_text(text):
+            continue
+        if section == "family":
+            label = _LABEL_RE.match(text)
+            field = _FAMILY_ALIASES.get(label.group(1).casefold()) if label else None
+            if not family or label is None or field is None:
+                stray.append(line)
+            elif field == "mood":
+                family[-1]["mood"] = label.group(2)
+            elif field == "activities":
+                family[-1]["activities"].extend(
+                    _parse_activity(a) for a in _SEMICOLON_RE.split(label.group(2)) if a
+                )
+            else:
+                family[-1].setdefault(field, []).append(label.group(2))
+        elif section is None:
+            label = _LABEL_RE.match(text)
+            key = label.group(1).casefold() if label else None
+            if label and key == "mood":
+                mood = _MOOD_RE.match(label.group(2))
+                if mood:
+                    data["mood"] = mood.group(1) or None
+                    data["mood_score"] = int(mood.group(2))
+                else:
+                    data["mood"] = label.group(2)
+            elif label and key in ("city", "weather"):
+                data[key] = label.group(2)
+            else:
+                stray.append(line)
+        elif section == "meals":
+            label = _LABEL_RE.match(text)
+            meal_type, items = (label.group(1), label.group(2)) if label else ("snacks", text)
+            meals.append({"type": meal_type, "items": [items]})
+        elif section == "activities":
+            activities.append(_parse_activity(text))
+        else:
+            data[section].append(text)
+    try:
+        facts = DayFacts.model_validate(
+            {**data, "meals": meals, "activities": activities, "family": family}
+        )
+    except ValidationError as exc:
+        raise DayFileParseError(f"invalid facts: {exc}") from exc
+    return facts, "\n".join(stray)
+
+
+def _parse_activity(text: str) -> dict[str, Any]:
+    minutes = _MINUTES_RE.match(text)
+    if minutes:
+        return {"kind": minutes.group(1), "minutes": int(minutes.group(2))}
+    return {"kind": text}
+
+
 def parse(markdown: str, *, fallback_date: dt.date | None = None) -> DayFile:
     """Parse a day file. Tolerates edits: text outside the known regions becomes notes.
 
@@ -560,23 +1018,42 @@ def parse(markdown: str, *, fallback_date: dt.date | None = None) -> DayFile:
         raise DayFileParseError(f"invalid YAML front matter: {exc}") from exc
     if not isinstance(data, dict):
         raise DayFileParseError("front matter must be a mapping")
+    fm_data = dict(data)
     if data.get("date") is None and fallback_date is not None:
         data["date"] = fallback_date
     for legacy_key in LEGACY_FORMAT_KEYS:
         if legacy_key in data:
             data.setdefault(FORMAT_KEY, data.pop(legacy_key))
+
+    body = text[fm.end() :]
+    facts_region, body = _take_region(body, "facts")
+    journal, body = _take_region(body, "journal")
+    notes, body = _take_region(body, "notes")
+    transcript, body = _take_region(body, "transcript")
+
+    stray_parts: list[str] = []
+    legacy_facts: dict[str, Any] | None = None
+    if facts_region is None:
+        # Format 1 kept the facts in the front matter. With a facts region, any fact-named keys
+        # the owner adds to the front matter are left alone as ordinary extra keys.
+        legacy_facts = {k: data.pop(k) for k in FORMAT_1_FACT_KEYS if k in data}
+        family_events = legacy_facts.pop("family_events", None) or []
+        try:
+            facts = DayFacts.model_validate(legacy_facts)
+        except ValidationError as exc:
+            raise DayFileParseError(f"invalid facts in front matter: {exc}") from exc
+        _add_unique(facts.highlights, _clean_list(family_events))
+    else:
+        facts, facts_stray = parse_facts_section(facts_region)
+        if facts_stray:
+            stray_parts.append(facts_stray)
+    data[FORMAT_KEY] = FORMAT_VERSION
     try:
         meta = FrontMatter.model_validate(data)
     except ValidationError as exc:
         raise DayFileParseError(f"invalid front matter: {exc}") from exc
 
-    body = text[fm.end() :]
-    journal, body = _take_region(body, "journal")
-    notes, body = _take_region(body, "notes")
-    transcript, body = _take_region(body, "transcript")
-
     captures: list[Capture] = []
-    stray_parts: list[str] = []
     if transcript is not None:
         captures, transcript_stray = _parse_captures(transcript)
         if transcript_stray:
@@ -587,19 +1064,28 @@ def parse(markdown: str, *, fallback_date: dt.date | None = None) -> DayFile:
     if title_match:
         title = title_match.group(1)
         body = body[: title_match.start()] + body[title_match.end() :]
+    body = _remove_line(body, FACTS_HEADING)
     body = _remove_line(body, NOTES_HEADING)
     body = _remove_line(body, TRANSCRIPT_HEADING)
     if body.strip():
         stray_parts.insert(0, body.strip())
 
     notes_text = "\n\n".join(p for p in [notes or "", *stray_parts] if p)
-    return DayFile(
+    day = DayFile(
         meta=meta,
         title=title,
+        facts=facts,
         journal=journal or "",
         notes=notes_text,
         captures=captures,
     )
+    if legacy_facts is not None and meta.generated_hash == _hash_generated(
+        _format_1_facts(fm_data), day.title, day.journal
+    ):
+        # An unedited format 1 day stays unedited under the format 2 hash; an edited one keeps
+        # its old hash and therefore stays marked as edited.
+        day.meta.generated_hash = day.compute_generated_hash()
+    return day
 
 
 # --- Merging --------------------------------------------------------------------------------
@@ -655,15 +1141,15 @@ def apply_generation(
 ) -> DayFile:
     """Replace facts, title and journal with freshly generated content.
 
-    Raises :class:`UserEditsDetected` if the owner edited generated content, unless ``force``.
-    Never touches notes or captures. Updates provenance and ``generated_hash``.
+    The journal gets the fixed headings (:func:`normalize_journal`). Raises
+    :class:`UserEditsDetected` if the owner edited generated content, unless ``force``. Never
+    touches notes or captures. Updates provenance and ``generated_hash``.
     """
     if day.is_user_edited() and not force:
         raise UserEditsDetected(day.date)
     result = day.model_copy(deep=True)
-    for name in FACT_FIELDS:
-        setattr(result.meta, name, getattr(facts, name))
-    result.journal = journal.strip()
+    result.facts = facts.model_copy(deep=True)
+    result.journal = normalize_journal(journal)
     result.title = (title or "").strip() or result.title
     _set_provenance(result, prompt_version, models_used, generated_at)
     result.meta.generated_hash = result.compute_generated_hash()
@@ -678,12 +1164,20 @@ def _add_unique(target: list[str], items: Iterable[str]) -> None:
             seen.add(item.casefold())
 
 
+def _add_activities(target: list[Activity], new: Iterable[Activity]) -> None:
+    kinds = {a.kind.casefold() for a in target}
+    for activity in new:
+        if activity.kind.casefold() not in kinds:
+            target.append(activity.model_copy(deep=True))
+            kinds.add(activity.kind.casefold())
+
+
 def merge_generation_additive(
     day: DayFile,
     *,
     facts: DayFacts,
     journal_addendum: str | None = None,
-    addendum_heading: str | None = None,
+    addendum_label: str | None = None,
     prompt_version: str | None = None,
     models_used: dict[str, str] | None = None,
     generated_at: dt.datetime | None = None,
@@ -691,37 +1185,54 @@ def merge_generation_additive(
     """Add new information without changing anything that is already there.
 
     Safe on user-edited days: empty scalar facts are filled, list facts gain new items, meals
-    with the same ``type`` gain new items, activities with a new ``kind`` are added, and
-    ``journal_addendum`` is appended (under ``### addendum_heading`` if given). If the day was
-    not user-edited, ``generated_hash`` is refreshed; otherwise it is left alone so the day stays
+    with the same ``type`` gain new items, activities with a new ``kind`` are added, family
+    members are matched by name (new ones are added, known ones gain new items the same way),
+    and ``journal_addendum`` is appended under ``## Later`` (opened unless the journal already
+    ends with it), starting with ``**addendum_label**`` if given. If the day was not
+    user-edited, ``generated_hash`` is refreshed; otherwise it is left alone so the day stays
     marked as edited.
     """
     was_edited = day.is_user_edited()
     result = day.model_copy(deep=True)
-    meta = result.meta
+    current = result.facts
     for name in ("mood", "mood_score", "city", "weather"):
-        if getattr(meta, name) is None and getattr(facts, name) is not None:
-            setattr(meta, name, getattr(facts, name))
-    _add_unique(meta.people, facts.people)
-    _add_unique(meta.family_events, facts.family_events)
-    _add_unique(meta.highlights, facts.highlights)
+        if getattr(current, name) is None and getattr(facts, name) is not None:
+            setattr(current, name, getattr(facts, name))
+    _add_unique(current.people, facts.people)
+    _add_unique(current.places, facts.places)
+    _add_unique(current.highlights, facts.highlights)
+    for member in facts.family:
+        existing_member = next(
+            (f for f in current.family if f.name.casefold() == member.name.casefold()), None
+        )
+        if existing_member is None:
+            current.family.append(member.model_copy(deep=True))
+            continue
+        if existing_member.mood is None:
+            existing_member.mood = member.mood
+        for name in ("food", "places", "moments", "health", "school"):
+            _add_unique(getattr(existing_member, name), getattr(member, name))
+        _add_activities(existing_member.activities, member.activities)
     for meal in facts.meals:
-        existing = next((m for m in meta.meals if m.type.casefold() == meal.type.casefold()), None)
+        existing = next(
+            (m for m in current.meals if m.type.casefold() == meal.type.casefold()), None
+        )
         if existing is None:
-            meta.meals.append(meal.model_copy(deep=True))
+            current.meals.append(meal.model_copy(deep=True))
         else:
             _add_unique(existing.items, meal.items)
-    kinds = {a.kind.casefold() for a in meta.activities}
-    for activity in facts.activities:
-        if activity.kind.casefold() not in kinds:
-            meta.activities.append(activity.model_copy(deep=True))
-            kinds.add(activity.kind.casefold())
+    _add_activities(current.activities, facts.activities)
+    result.facts = DayFacts.model_validate(current.model_dump())
     if journal_addendum and journal_addendum.strip():
         block = journal_addendum.strip()
-        if addendum_heading:
-            block = f"### {addendum_heading.strip()}\n\n{block}"
-        result.journal = f"{result.journal}\n\n{block}".strip()
+        if addendum_label:
+            block = f"**{addendum_label.strip()}**\n\n{block}"
+        journal = result.journal
+        headings = _JOURNAL_HEADING_RE.findall(journal)
+        if not headings or headings[-1].casefold() != "later":
+            journal = f"{journal}\n\n## Later"
+        result.journal = f"{journal}\n\n{block}".strip()
     _set_provenance(result, prompt_version, models_used, generated_at)
     if not was_edited:
-        meta.generated_hash = result.compute_generated_hash()
+        result.meta.generated_hash = result.compute_generated_hash()
     return result

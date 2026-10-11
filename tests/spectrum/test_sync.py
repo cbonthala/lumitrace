@@ -48,6 +48,25 @@ def test_first_sync_indexes_day_files(
     ).fetchall()
     assert [tuple(m) for m in meals][:2] == [("breakfast", "oatmeal"), ("breakfast", "blueberries")]
     assert _count(conn, "SELECT count(*) FROM people WHERE name = 'maya' COLLATE NOCASE") == 1
+    places = conn.execute("SELECT date, name FROM places ORDER BY date, position").fetchall()
+    assert [tuple(p) for p in places] == [
+        ("2026-10-10", "the river trail"),
+        ("2026-10-10", "the taco truck"),
+        ("2026-10-10", "home"),
+        ("2026-10-11", "the park"),
+    ]
+    assert _fts_dates(conn, "river trail") == {"2026-10-10"}
+    family = conn.execute(
+        "SELECT person, category, text FROM family_facts WHERE date = '2026-10-10'"
+        " ORDER BY position"
+    ).fetchall()
+    assert [tuple(f) for f in family] == [
+        ("Leo", "mood", "proud"),
+        ("Leo", "food", "pasta"),
+        ("Leo", "moments", "lost his first tooth"),
+        ("Maya", "food", "fish tacos"),
+        ("Maya", "places", "the taco truck"),
+    ]
     assert _count(conn, "SELECT count(*) FROM activities WHERE date = '2026-10-11'") == 1
     assert _count(conn, "SELECT count(*) FROM highlights") == 3
 

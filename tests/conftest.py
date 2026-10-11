@@ -49,3 +49,9 @@ def storage(settings: Settings) -> LocalStorage:
 def sample_day_markdown() -> str:
     """A fictional, fully populated day file (tests/fixtures/sample-day.md)."""
     return (FIXTURES / "sample-day.md").read_text(encoding="utf-8")
+
+
+@pytest.fixture
+def sample_day_v1_markdown() -> str:
+    """The same day in format 1, facts in the front matter (tests/fixtures/sample-day-v1.md)."""
+    return (FIXTURES / "sample-day-v1.md").read_text(encoding="utf-8")

@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     timezone: str = "America/Chicago"
     day_rollover_hour: int = Field(default=4, ge=0, le=23)
     prompts_dir: Path = Path("prompts")
+    family: str = ""
+    """Comma-separated names of the family members who get their own "Family" sub-section in
+    each day file, e.g. ``Maya, Leo``. Use :attr:`family_members`."""
 
     # --- Recording API -------------------------------------------------------------------
     api_token: SecretStr = SecretStr("")
@@ -94,6 +97,16 @@ class Settings(BaseSettings):
     @property
     def tz(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)
+
+    @property
+    def family_members(self) -> list[str]:
+        """:attr:`family` as a list: trimmed, empty names dropped, duplicates (any case) removed."""
+        names: dict[str, str] = {}
+        for raw in self.family.split(","):
+            name = " ".join(raw.split())
+            if name:
+                names.setdefault(name.casefold(), name)
+        return list(names.values())
 
 
 @lru_cache(maxsize=1)

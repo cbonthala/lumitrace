@@ -3,12 +3,15 @@ from __future__ import annotations
 import datetime as dt
 
 from lumen.config import Settings
+from lumen.frames.dayfile import day_file_path
 from lumen.frames.storage.local import LocalStorage
 from lumen.index.schema import (
     META_EMBEDDING_DIMENSION,
     META_EMBEDDING_MODEL,
     META_LAST_REBUILD_AT,
+    META_SCHEMA_VERSION,
     META_SYNC_TOKEN,
+    SCHEMA_VERSION,
     connect,
     get_meta,
     serialize_embedding,
@@ -93,6 +96,32 @@ def test_model_change_triggers_rebuild(settings: Settings, storage: LocalStorage
     assert result.kind == "rebuild"
     assert get_meta(second.conn, META_EMBEDDING_MODEL) == "fake"
     second.close()
+
+
+def test_older_schema_version_triggers_rebuild(
+    settings: Settings, storage: LocalStorage, sample_day_v1_markdown: str
+) -> None:
+    storage.write_text(day_file_path(D1), sample_day_v1_markdown)
+    first = Indexer(settings, storage)
+    first.sync()
+    with first.conn:
+        set_meta(first.conn, META_SCHEMA_VERSION, "1")
+        first.conn.execute("DELETE FROM people")  # stands in for rows an old version left out
+        first.conn.execute("INSERT INTO feedback(created_at, rating) VALUES ('now', 'good')")
+    first.close()
+
+    second = Indexer(settings, storage)
+    assert second.rebuild_reason and "schema version 1" in second.rebuild_reason
+    result = second.sync()
+
+    assert result.kind == "rebuild" and result.indexed == 1
+    assert get_meta(second.conn, META_SCHEMA_VERSION) == str(SCHEMA_VERSION)
+    assert _count(second, "people") == 2
+    assert _count(second, "feedback") == 1
+    second.close()
+    third = Indexer(settings, storage)
+    assert third.rebuild_reason is None
+    third.close()
 
 
 def test_rebuild_on_empty_storage(indexer: Indexer) -> None:

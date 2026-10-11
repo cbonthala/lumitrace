@@ -57,8 +57,8 @@ def _json(value: Any) -> str:
 
 def compare_day(live: DayFile, snapshot: DayFile) -> list[FieldComparison]:
     out: list[FieldComparison] = []
-    live_facts = live.meta.facts().model_dump(mode="json")
-    snap_facts = snapshot.meta.facts().model_dump(mode="json")
+    live_facts = live.facts.model_dump(mode="json")
+    snap_facts = snapshot.facts.model_dump(mode="json")
     for name in FACT_FIELDS:
         out.append(FieldComparison("facts", name, _json(snap_facts[name]), _json(live_facts[name])))
     out.append(FieldComparison("title", None, snapshot.title, live.title))

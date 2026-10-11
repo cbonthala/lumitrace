@@ -71,6 +71,7 @@ def make_day(
         mood="calm",
         mood_score=4,
         people=list(people),
+        places=["the park"],
         meals=[Meal(type="Dinner", items=["soup", "bread"])],
         activities=[Activity(kind="walk", minutes=45)],
         highlights=["Saw a heron"],

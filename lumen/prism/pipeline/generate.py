@@ -15,7 +15,7 @@ from typing import Any
 
 from pydantic import BaseModel, field_validator
 
-from lumen.frames.dayfile import CAPTURE_LABELS, Capture, DayFacts
+from lumen.frames.dayfile import CAPTURE_LABELS, Capture, DayFacts, FamilyMember
 from lumen.prism.pipeline.llm import LLMClient, LLMResult
 from lumen.prism.pipeline.prompts import Prompt, load_prompt
 
@@ -60,6 +60,20 @@ def parse_facts(raw: Any) -> DayFacts:
     return DayFacts.model_validate(data)
 
 
+def keep_family(facts: DayFacts, members: Sequence[str]) -> DayFacts:
+    """One block per configured family member, in config order and spelled as configured: the
+    first entry the model gave for that name (any case), or an empty block. Nobody else gets a
+    family section."""
+    by_key = {name.casefold(): name for name in members}
+    found: dict[str, FamilyMember] = {}
+    for member in facts.family:
+        name = by_key.get(member.name.casefold())
+        if name is not None and name not in found:
+            found[name] = member.model_copy(update={"name": name})
+    ordered = [found.get(name) or FamilyMember(name=name) for name in members]
+    return facts.model_copy(update={"family": ordered})
+
+
 def format_capture(capture: Capture) -> str:
     label = CAPTURE_LABELS.get(capture.kind, capture.kind)
     head = f"### {capture.captured_at:%H:%M} · {label}"
@@ -90,8 +104,10 @@ class Generator:
     ) -> tuple[LLMResult[DayFacts], Prompt]:
         prompt = self.prompt("extract_facts")
         locations = list(dict.fromkeys(c.location for c in captures if c.location))
+        family = self.settings.family_members
         messages = prompt.render(
             date=_date_label(day),
+            family=", ".join(family),
             location="; ".join(locations),
             captures=format_captures(captures),
         )
@@ -99,7 +115,7 @@ class Generator:
             task="extract_facts",
             model=self.settings.llm_extract_facts_model,
             messages=messages,
-            parse=parse_facts,
+            parse=lambda raw: keep_family(parse_facts(raw), family),
             fake=lambda: {},
         )
         return result, prompt

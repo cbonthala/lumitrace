@@ -182,19 +182,25 @@ activity record.
    steps fail (ADR 0011).
 6. **AI steps** (`pipeline/generate.py`, `pipeline/llm.py`), only if the day has any words:
    * Day **not** edited by the owner → **full**: `extract_facts` over all of the day's captures
-     (JSON validated against `DayFacts`), then `write_journal` (JSON `{headline, journal}`), then
-     `apply_generation` with the title `"<Weekday, Month D, YYYY> · <headline>"`.
+     (JSON validated against `DayFacts`; `keep_family` gives every `LUMEN_FAMILY` member a block,
+     empty if the day says nothing about them, spelled as configured, and drops anyone else;
+     meal types are mapped to the five fixed ones), then `write_journal` (JSON
+     `{headline, journal}`), then `apply_generation` with the title
+     `"<Weekday, Month D, YYYY> · <headline>"`, which gives the journal the fixed headings
+     (`normalize_journal`, `docs/frames-format.md` → The journal).
    * Day **edited** (`DayFile.is_user_edited()`) → **additive**: `extract_facts` over the new
      capture only, `journal_addendum` (a short paragraph about the new entry, given the edited
-     journal as context), then `merge_generation_additive` with the heading `HH:MM · Quick Note`.
-     Existing facts, title and journal are never changed.
+     journal as context), then `merge_generation_additive`, which appends the paragraph under
+     `## Later` with the label `**HH:MM · Quick Note**`.
+     Existing facts, title and journal are never changed; new places, people, highlights and
+     family items are appended.
    * Before writing, the day file is read **again**. If the owner edited it while the AI was
      working, a full result is thrown away and the additive path runs instead, so a concurrent
      edit is never overwritten.
    * If one step fails on every model, the other step's result is still applied (facts without a
      new journal, or a journal with the old facts). If both fail, the day keeps the transcript
      and `generation` is `failed`.
-   * Front matter: `prompt_version` (e.g. `extract_facts-v1+write_journal-v1`) and `models_used`
+   * Front matter: `prompt_version` (e.g. `extract_facts-v2+write_journal-v1`) and `models_used`
      (`stt`, `extract_facts`, `write_journal` or `journal_addendum`: the models that actually
      answered), merged with what was there.
 7. **Write** the day file and its snapshot again.
@@ -220,11 +226,13 @@ models set to `fake`, the whole API runs offline.
 
 ### Prompts
 
-Versioned files in `prompts/<task>/<version>.md` (`prompts/README.md`): `extract_facts/v1.md`,
+Versioned files in `prompts/<task>/<version>.md` (`prompts/README.md`): `extract_facts/v2.md`
+(v2 adds `places` and the per-member `family` blocks; v1 is kept for reference),
 `write_journal/v1.md`, `journal_addendum/v1.md`. The current versions are in
 `lumen.prism.pipeline.prompts.PROMPT_VERSIONS`. Each file has a system part and a user part separated
 by `<!-- lumen-prompt: system -->` / `<!-- lumen-prompt: user -->`, with `{{name}}`
-placeholders (`date`, `location`, `captures`, `facts`, `journal`, `capture`). A missing value
+placeholders (`date`, `location`, `captures`, `facts`, `journal`, `capture`, `family` = the
+`LUMEN_FAMILY` names). A missing value
 raises an error. Prompts tell the model to use only what the entries say and never invent.
 
 ## Activity records (`_system/activity/YYYY/MM.jsonl`)
@@ -235,7 +243,7 @@ One JSON line per processing attempt, appended to the file for the month the att
 ```json
 {"capture_id": "phone-001", "kind": "recording", "attempt": 1, "status": "done",
  "entry_date": "2026-10-10", "received_at": "...", "started_at": "...", "finished_at": "...",
- "generation": "full", "prompt_versions": {"extract_facts": "v1", "write_journal": "v1"},
+ "generation": "full", "prompt_versions": {"extract_facts": "v2", "write_journal": "v1"},
  "models": {"stt": "openai/gpt-4o-transcribe", "extract_facts": "openai/gpt-4o-mini",
             "write_journal": "openai/gpt-4o"},
  "steps": [
@@ -290,6 +298,7 @@ One JSON line per processing attempt, appended to the file for the month the att
 | `LUMEN_TIMEZONE`, `LUMEN_DAY_ROLLOVER_HOUR` | entry dates and capture times |
 | `LUMEN_STT_PROVIDER`, `LUMEN_STT_MODEL`, `LUMEN_STT_LANGUAGE`, `LUMEN_AWS_REGION`, `LUMEN_AWS_TRANSCRIBE_BUCKET` | speech to text |
 | `LUMEN_LLM_EXTRACT_FACTS_MODEL`, `LUMEN_LLM_WRITE_JOURNAL_MODEL`, `LUMEN_LLM_FALLBACK_MODEL`, `LUMEN_LLM_TIMEOUT_SECONDS`, `LUMEN_LLM_MAX_RETRIES` | AI steps (`fake` = offline) |
+| `LUMEN_FAMILY` | comma-separated family members (`Maya, Leo`) who get their own block under Family; empty = no family blocks |
 | `LUMEN_PROMPTS_DIR` | prompt files; a relative path that does not exist falls back to the repository's `prompts/` |
 | `LUMEN_INDEXER_NUDGE_URL` | nudge after each capture (empty = off) |
 | storage settings | where everything is written (`get_storage`) |

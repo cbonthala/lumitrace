@@ -110,9 +110,12 @@ def test_sample_fixture_roundtrips(sample_day_markdown: str) -> None:
     day = D.parse(sample_day_markdown)
     assert day.date == DAY
     assert day.title == "Saturday, October 10, 2026 · First tooth"
-    assert day.meta.people == ["Maya", "Leo"]
-    assert day.meta.meals[0] == D.Meal(type="breakfast", items=["oatmeal", "blueberries"])
-    assert day.meta.activities[1] == D.Activity(kind="reading", minutes=None)
+    assert (day.facts.mood, day.facts.mood_score, day.facts.city) == ("happy", 4, "Austin")
+    assert day.facts.people == ["Maya", "Leo"]
+    assert day.facts.places == ["the river trail", "the taco truck", "home"]
+    assert day.facts.meals[0] == D.Meal(type="breakfast", items=["oatmeal", "blueberries"])
+    assert day.facts.activities[1] == D.Activity(kind="reading", minutes=None)
+    assert day.meta.model_extra == {}
     assert day.meta.audio == ["2026-10-10-2130.m4a"]
     assert day.meta.photos == ["photo-01.jpg", "photo-02.jpg"]
     assert day.meta.models_used["write_journal"] == "openai/gpt-4o"
@@ -145,16 +148,224 @@ def test_parses_files_written_before_the_rename(sample_day_markdown: str, old_na
     assert D.render(day) == sample_day_markdown
 
 
+def test_reads_format_1_files_and_writes_format_2(
+    sample_day_v1_markdown: str, sample_day_markdown: str
+) -> None:
+    old = D.parse(sample_day_v1_markdown)
+    new = D.parse(sample_day_markdown)
+    assert old.facts == new.facts.model_copy(update={"places": [], "family": []})
+    assert old.facts.highlights == ["Leo lost his first tooth", "Finished a book"]
+    assert old.meta.model_extra == {}
+    assert old.meta.lumen_format == D.FORMAT_VERSION
+    assert not old.is_user_edited()  # matched the format 1 hash, so it was re-stamped
+    rendered = D.render(old)
+    front = rendered.split("\n---\n", 1)[0]
+    assert "mood" not in front and "meals" not in front
+    assert "lumen_format: 2" in front
+    assert "- **Mood:** happy (4/5)" in rendered
+    assert D.parse(rendered) == old
+
+
+def test_facts_section_tolerates_hand_edits() -> None:
+    md = (
+        "---\ndate: 2026-10-10\n---\n\n# Title\n\n## At a glance\n\n"
+        "<!-- lumen:facts:start -->\n"
+        "Mood: great\n"
+        "* **City**: Austin\n"
+        "- Sleep: 8 hours\n\n"
+        "## Meals\n- Breakfast: eggs,toast\n- a muffin\n\n"
+        "#### places visited\nthe library\n\n"
+        "### Activities\n- swim (25 minutes)\n- yoga (1 hour)\n\n"
+        "### Dreams\n- flying over the lake\n"
+        "<!-- lumen:facts:end -->\n"
+    )
+    day = D.parse(md)
+    facts = day.facts
+    assert (facts.mood, facts.mood_score, facts.city) == ("great", None, "Austin")
+    assert facts.meals == [
+        D.Meal(type="breakfast", items=["eggs", "toast"]),
+        D.Meal(type="snacks", items=["a muffin"]),
+    ]
+    assert facts.places == ["the library"]
+    assert facts.activities == [
+        D.Activity(kind="swim", minutes=25),
+        D.Activity(kind="yoga (1 hour)"),
+    ]
+    for stray in ["- Sleep: 8 hours", "### Dreams", "- flying over the lake"]:
+        assert stray in day.notes
+    assert D.parse(D.render(day)) == day
+
+
+def test_family_blocks_tolerate_hand_edits() -> None:
+    md = (
+        "---\ndate: 2026-10-10\n---\n\n# Title\n\n## At a glance\n\n"
+        "<!-- lumen:facts:start -->\n"
+        "### Family events\n"
+        "- typed before any name\n\n"
+        "#### Leo\n"
+        "- Food: pizza, apple juice\n"
+        "* **Went to**: school\n"
+        "- Did: soccer (60 minutes); drawing\n"
+        "- Milestones: lost a tooth; first goal\n"
+        "- Health: a cold\n"
+        "- Work: spelling test\n"
+        "- Shoe size: 12\n\n"
+        "### Sam\n"
+        "Mood: grumpy\n\n"
+        "#### Nobody\n\n"
+        "### Highlights\n- a good day\n"
+        "<!-- lumen:facts:end -->\n"
+    )
+    day = D.parse(md)
+    leo, sam, nobody = day.facts.family
+    assert leo == D.FamilyMember(
+        name="Leo",
+        food=["pizza", "apple juice"],
+        places=["school"],
+        activities=[D.Activity(kind="soccer", minutes=60), D.Activity(kind="drawing")],
+        moments=["lost a tooth", "first goal"],
+        health=["a cold"],
+        school=["spelling test"],
+    )
+    assert sam == D.FamilyMember(name="Sam", mood="grumpy")
+    assert nobody == D.FamilyMember(name="Nobody")
+    assert day.facts.highlights == ["a good day"]
+    assert "- typed before any name" in day.notes and "- Shoe size: 12" in day.notes
+    rendered = D.render(day)
+    assert "#### Leo\n\n- **Mood:** none\n- **Ate:** pizza, apple juice\n" in rendered
+    assert "- **Did:** soccer (60 min); drawing\n- **Moments:** lost a tooth; first goal\n" in (
+        rendered
+    )
+    assert "#### Nobody\n\n- **Mood:** none\n- **Ate:** none\n" in rendered
+    assert D.parse(rendered) == day
+
+
+def test_family_items_never_contain_their_separator() -> None:
+    member = D.FamilyMember(
+        name=" Leo ",
+        food=["pizza, juice"],
+        moments=["tooth; goal"],
+        activities=[D.Activity(kind="swim; dive")],
+    )
+    assert member.name == "Leo"
+    assert member.food == ["pizza", "juice"]
+    assert member.moments == ["tooth", "goal"]
+    assert member.activities[0].kind == "swim, dive"
+    facts = D.DayFacts(
+        family=[member, D.FamilyMember(name="Empty"), D.FamilyMember(name="", food=["x"])]
+    )
+    assert [m.name for m in facts.family] == ["Leo", "Empty"]
+    assert D.parse_facts_section(D.render_facts_section(facts)) == (facts, "")
+
+
+def test_edited_format_1_file_stays_edited(sample_day_v1_markdown: str) -> None:
+    day = D.parse(sample_day_v1_markdown.replace("mood: happy", "mood: great"))
+    assert day.facts.mood == "great"
+    assert day.is_user_edited()
+    assert day.meta.generated_hash == "f95b9b427b956b91"
+
+
+def test_fact_values_are_normalised_so_render_and_parse_agree() -> None:
+    facts = D.DayFacts(
+        mood="  tired\nbut fine ",
+        city="",
+        people=["Maya ", "", "  "],
+        meals=[
+            D.Meal(type="Supper", items=["soup"]),
+            D.Meal(type="Breakfast:", items=["eggs, toast", " ", "None"]),
+            D.Meal(type="lunch", items=[]),
+            D.Meal(type="dessert", items=["cake"]),
+            D.Meal(type="drink", items=["tea"]),
+            D.Meal(type="breakfast", items=["Toast", "coffee"]),
+        ],
+        activities=[D.Activity(kind="  "), D.Activity(kind="none"), D.Activity(kind="long\nwalk")],
+        highlights=["two\n\nlines", "none"],
+        weather="None",
+    )
+    assert facts.mood == "tired but fine"
+    assert (facts.city, facts.weather) == (None, None)
+    assert facts.people == ["Maya"]
+    assert facts.meals == [
+        D.Meal(type="breakfast", items=["eggs", "toast", "coffee"]),
+        D.Meal(type="dinner", items=["soup"]),
+        D.Meal(type="snacks", items=["cake"]),
+        D.Meal(type="drinks", items=["tea"]),
+    ]
+    assert facts.activities == [D.Activity(kind="long walk")]
+    assert facts.highlights == ["two lines"]
+    section = D.render_facts_section(facts)
+    assert D.parse_facts_section(section) == (facts, "")
+
+
+def test_every_day_file_has_the_same_fact_lines() -> None:
+    assert D.render_facts_section(D.DayFacts(family=[D.FamilyMember(name="Leo")])) == (
+        "- **Mood:** none\n- **City:** none\n- **Weather:** none\n\n"
+        "### Food\n\n"
+        "- **Breakfast:** none\n- **Lunch:** none\n- **Dinner:** none\n"
+        "- **Snacks:** none\n- **Drinks:** none\n\n"
+        "### Places\n\n- none\n\n"
+        "### People\n\n- none\n\n"
+        "### Activities\n\n- none\n\n"
+        "### Family\n\n#### Leo\n\n"
+        "- **Mood:** none\n- **Ate:** none\n- **Went to:** none\n- **Did:** none\n"
+        "- **Moments:** none\n- **Health:** none\n- **School/work:** none\n\n"
+        "### Highlights\n\n- none"
+    )
+    assert D.render_facts_section(D.DayFacts()).count("- none") == 5
+    assert D.parse_facts_section(D.render_facts_section(D.DayFacts())) == (D.DayFacts(), "")
+    assert D.render_facts_section(D.DayFacts(), include_empty=False) == ""
+    compact = D.render_facts_section(
+        D.DayFacts(mood="ok", family=[D.FamilyMember(name="Leo")]), include_empty=False
+    )
+    assert compact == "- **Mood:** ok"
+
+
+def test_generated_journal_gets_the_fixed_headings() -> None:
+    raw = (
+        "A quiet day.\n\n"
+        "## Evening\n\nPasta at home.\n\n"
+        "## Morning:\n\nA run.\n\n"
+        "### Dinner with friends\n\nTacos.\n\n"
+        "```\n## not a heading\n```\n\n"
+        "## Night\n\nStars.\n\n"
+        "## Reflections\n\nNeed more sleep."
+    )
+    journal = D.normalize_journal(raw)
+    assert journal == (
+        "## Summary\n\nA quiet day.\n\n"
+        "## Morning\n\nA run.\n\n**Dinner with friends**\n\nTacos.\n\n"
+        "```\n## not a heading\n```\n\n"
+        "## Evening\n\nPasta at home.\n\nStars.\n\n"
+        "## Thoughts\n\nNeed more sleep."
+    )
+    assert D.normalize_journal(journal) == journal
+    day = D.apply_generation(D.DayFile.new(DAY), facts=D.DayFacts(), journal=raw)
+    assert day.journal == journal
+
+
+def test_fact_keys_in_the_front_matter_of_a_format_2_file_are_kept(
+    sample_day_markdown: str,
+) -> None:
+    md = sample_day_markdown.replace("lumen_format: 2", "lumen_format: 2\nmood: sleepy")
+    day = D.parse(md)
+    assert day.facts.mood == "happy"
+    assert day.meta.model_extra == {"mood": "sleepy"}
+    assert "mood: sleepy" in D.render(day)
+
+
 def test_roundtrip_model_equality_with_tricky_content() -> None:
     day = D.DayFile(
         meta=D.FrontMatter(
             date=DAY,
-            mood="yes",
-            people=["O'Brien", "Zoë"],
-            highlights=["null", "a: b", "- dash"],
             models_used={"stt": "fake"},
             generated_at=at(22),
             tags=["journal", "family"],
+        ),
+        facts=D.DayFacts(
+            mood="yes",
+            people=["O'Brien", "Zoë"],
+            places=["Café **Nord**", "# not a heading"],
+            highlights=["null", "a: b", "- dash"],
         ),
         title="Title with # hash and --> arrow",
         journal="## Section\n\nLine with <!-- comment --> and ![[photo-01.jpg]]",
@@ -193,6 +404,15 @@ def test_render_layout_markers_in_order(sample_day_markdown: str) -> None:
     order = [
         md.index("---\n"),
         md.index("\n# "),
+        md.index(D.FACTS_HEADING),
+        md.index(D.FACTS_START),
+        md.index("### Food"),
+        md.index("### Places"),
+        md.index("### People"),
+        md.index("### Activities"),
+        md.index("### Family"),
+        md.index("### Highlights"),
+        md.index(D.FACTS_END),
         md.index(D.JOURNAL_START),
         md.index(D.JOURNAL_END),
         md.index(D.NOTES_HEADING),
@@ -270,8 +490,9 @@ def test_user_edited_transcript_text_is_preserved(sample_day_markdown: str) -> N
 @pytest.mark.parametrize(
     ("old", "new"),
     [
-        ("mood: happy", "mood: tired"),
-        ("  - pasta", "  - pasta\n  - salad"),
+        ("- **Mood:** happy (4/5)", "- **Mood:** tired (4/5)"),
+        ("- **Dinner:** pasta", "- **Dinner:** pasta, salad"),
+        ("- the taco truck\n", ""),
         ("# Saturday, October 10, 2026 · First tooth", "# My own title"),
         ("then oatmeal with blueberries.", "then oatmeal with strawberries."),
     ],
@@ -335,7 +556,7 @@ def test_merge_capture_never_touches_generated_or_notes(sample_day_markdown: str
         DAY,
     )
     assert (new.title, new.journal, new.notes) == (day.title, day.journal, day.notes)
-    assert new.meta.facts() == day.meta.facts()
+    assert new.facts == day.facts
     assert new.meta.generated_hash == day.meta.generated_hash
     assert not new.is_user_edited()
     assert new.meta.audio == ["2026-10-10-2130.m4a", "2026-10-10-2300.m4a"]
@@ -369,18 +590,18 @@ def test_apply_generation_sets_content_and_hash() -> None:
         generated_at=at(9, 5),
     )
     assert gen.title == "Eggs day"
-    assert gen.meta.meals[0].items == ["eggs"]
+    assert gen.facts.meals[0].items == ["eggs"]
     assert gen.meta.prompt_version == "v1"
     assert gen.meta.generated_hash == gen.compute_generated_hash()
     assert not gen.is_user_edited()
     regen = D.apply_generation(gen, facts=_facts(mood="ok"), journal="New.")
     assert regen.title == "Eggs day"
-    assert regen.meta.meals == []
+    assert regen.facts.meals == []
     assert regen.meta.prompt_version == "v1"
 
 
 def test_apply_generation_refuses_user_edits(sample_day_markdown: str) -> None:
-    day = D.parse(sample_day_markdown.replace("mood: happy", "mood: great"))
+    day = D.parse(sample_day_markdown.replace("**Mood:** happy", "**Mood:** great"))
     with pytest.raises(D.UserEditsDetected):
         D.apply_generation(day, facts=_facts(), journal="x")
     forced = D.apply_generation(day, facts=_facts(), journal="x", force=True)
@@ -389,13 +610,18 @@ def test_apply_generation_refuses_user_edits(sample_day_markdown: str) -> None:
 
 
 def test_additive_merge_on_edited_day_keeps_edits(sample_day_markdown: str) -> None:
-    day = D.parse(sample_day_markdown.replace("mood: happy", "mood: great"))
+    day = D.parse(sample_day_markdown.replace("**Mood:** happy", "**Mood:** great"))
     assert day.is_user_edited()
     merged = D.merge_generation_additive(
         day,
         facts=_facts(
             mood="sad",
             people=["maya", "Sam"],
+            places=["Home", "the night market"],
+            family=[
+                D.FamilyMember(name="leo", mood="sleepy", food=["Pasta", "ice cream"]),
+                D.FamilyMember(name="Maya", health=["headache"]),
+            ],
             meals=[
                 D.Meal(type="Dinner", items=["pasta", "salad"]),
                 D.Meal(type="snack", items=["apple"]),
@@ -404,27 +630,38 @@ def test_additive_merge_on_edited_day_keeps_edits(sample_day_markdown: str) -> N
             highlights=["Night walk"],
         ),
         journal_addendum="A late walk.",
-        addendum_heading="Added at 23:00",
+        addendum_label="23:00 · Quick Note",
         prompt_version="v2",
         generated_at=at(23),
     )
-    assert merged.meta.mood == "great"
-    assert merged.meta.people == ["Maya", "Leo", "Sam"]
-    dinner = next(m for m in merged.meta.meals if m.type == "dinner")
+    assert merged.facts.mood == "great"
+    assert merged.facts.people == ["Maya", "Leo", "Sam"]
+    assert merged.facts.places == ["the river trail", "the taco truck", "home", "the night market"]
+    leo, maya = merged.facts.family
+    assert (leo.name, leo.mood, leo.food) == ("Leo", "proud", ["pasta", "ice cream"])
+    assert leo.moments == ["lost his first tooth"]
+    assert (maya.food, maya.health) == (["fish tacos"], ["headache"])
+    dinner = next(m for m in merged.facts.meals if m.type == "dinner")
     assert dinner.items == ["pasta", "salad"]
-    assert merged.meta.meals[-1] == D.Meal(type="snack", items=["apple"])
-    assert [a.kind for a in merged.meta.activities] == ["run", "reading", "yoga"]
-    assert merged.meta.activities[0].minutes == 40
+    assert [m.type for m in merged.facts.meals] == list(D.MEAL_TYPES)
+    assert merged.facts.meals[3] == D.Meal(type="snacks", items=["apple"])
+    assert [a.kind for a in merged.facts.activities] == ["run", "reading", "yoga"]
+    assert merged.facts.activities[0].minutes == 40
     assert merged.journal.startswith(day.journal)
-    assert merged.journal.endswith("### Added at 23:00\n\nA late walk.")
+    assert merged.journal.endswith("## Later\n\n**23:00 · Quick Note**\n\nA late walk.")
     assert merged.notes == day.notes
     assert merged.meta.prompt_version == "v2"
     assert merged.meta.generated_hash == day.meta.generated_hash
     assert merged.is_user_edited()
+    again = D.merge_generation_additive(
+        merged, facts=D.DayFacts(), journal_addendum="Stars.", addendum_label="23:30 · Quick Note"
+    )
+    assert again.journal.count("## Later") == 1
+    assert again.journal.endswith("A late walk.\n\n**23:30 · Quick Note**\n\nStars.")
 
 
 def test_additive_merge_on_clean_day_refreshes_hash(sample_day_markdown: str) -> None:
     day = D.parse(sample_day_markdown)
     merged = D.merge_generation_additive(day, facts=_facts(people=["Sam"]))
-    assert merged.meta.people[-1] == "Sam"
+    assert merged.facts.people[-1] == "Sam"
     assert not merged.is_user_edited()

@@ -40,7 +40,8 @@ def test_tools_are_listed_with_documented_dates(settings: Settings) -> None:
                 "meals",
                 "activities",
                 "people",
-                "family_events",
+                "places",
+                "family",
                 "mood",
                 "highlights",
             }

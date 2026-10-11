@@ -11,7 +11,9 @@ One file per task and version:
 
 ```
 prompts/
-  extract_facts/v1.md      facts for the day (validated against lumen.frames.dayfile.DayFacts)
+  extract_facts/v2.md      facts for the day, incl. places and per family member facts
+                           (validated against lumen.frames.dayfile.DayFacts); v1.md is the
+                           previous version
   write_journal/v1.md      {headline, journal} for the whole day
   journal_addendum/v1.md   {text}: a paragraph about a new entry, for days the owner edited
 ```
@@ -44,7 +46,7 @@ prompt and the code cannot silently drift apart. Available values:
 
 | Task | Placeholders |
 |---|---|
-| `extract_facts` | `date` (`2026-10-10 (Saturday)`), `location`, `captures` |
+| `extract_facts` | `date` (`2026-10-10 (Saturday)`), `family` (`LUMEN_FAMILY`, comma-separated; v2), `location`, `captures` |
 | `write_journal` | `date`, `facts` (JSON), `captures` |
 | `journal_addendum` | `date`, `journal` (the edited page), `capture` (the new entry) |
 

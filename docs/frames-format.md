@@ -1,4 +1,4 @@
-# Frames: day file format (format version 1)
+# Frames: day file format (format version 2)
 
 The Frames are the day files: one Markdown file per day, the source of truth. Code:
 `lumen/frames/dayfile.py` (format) and `lumen/frames/storage/` (where they live). Always use
@@ -30,8 +30,21 @@ All paths are relative to the `Lumen` root folder.
 
 # Title                      DayFile.title (default: "Saturday, October 10, 2026")
 
+## At a glance
+
+<!-- lumen:facts:start (...) -->      DayFile.facts: always the same lines: mood, city,
+- **Mood:** happy (4/5)                   weather, then "###" sections Food (five meal
+### Food                                  lines), Places, People, Activities, Family
+- **Breakfast:** oatmeal, blueberries     (a "####" block of seven lines per family
+- **Snacks:** none                        member), Highlights; "none" when empty
+### Family
+#### Leo
+- **Ate:** pasta
+<!-- lumen:facts:end -->
+
 <!-- lumen:journal:start (...) -->    DayFile.journal: generated Markdown, "##" sections
-...
+## Summary                                Summary, Morning, Afternoon, Evening, Thoughts,
+...                                       Later (fixed names and order)
 <!-- lumen:journal:end -->
 
 ## My notes
@@ -60,23 +73,95 @@ and the next `render` writes the `lumen:` names (decisions 0008 and 0009).
 
 ### Front matter fields
 
+The front matter holds only the date, the media and provenance. The facts are in "At a glance".
+
 | Field | Type | Notes |
 |---|---|---|
 | `date` | date | the entry date |
-| `mood` | string or null | free text, e.g. "happy" |
-| `mood_score` | 1–5 or null | for mood colours later |
-| `city`, `weather` | string or null | |
-| `people` | list of strings | |
-| `meals` | list of `{type, items}` | type: breakfast, lunch, dinner, snack, drink (free text accepted) |
-| `activities` | list of `{kind, minutes}` | minutes may be null |
-| `family_events`, `highlights` | list of strings | |
 | `audio`, `photos` | list of file names | in the day folder, in capture order |
 | `prompt_version` | string or null | prompts used for the last generation |
 | `models_used` | map task → model | e.g. `stt`, `extract_facts`, `write_journal` |
 | `generated_at` | ISO-8601 datetime or null | last generation |
 | `generated_hash` | string or null | edit detection, see below |
-| `lumen_format` | int | `1` (read from `bookshelf_format` or `lifelog_format` in files written under the earlier names) |
+| `lumen_format` | int | `2` (read from `bookshelf_format` or `lifelog_format` in files written under the earlier names) |
 | *anything else* | | preserved as is (e.g. Obsidian `tags`) |
+
+### "At a glance": the facts (`DayFacts`)
+
+The Prism extracts these from the recordings; Spectrum indexes them exactly as they are written
+here (one row per item in the fact tables, see `docs/index-schema.md`).
+
+**Every day file has exactly the same lines, in the same order**, whatever the day held: the
+Mood, City and Weather lines, all six `###` sections, all five Food lines and, for each family
+member, all seven labelled lines. Anything empty is written as `none` (`- **Snacks:** none`,
+`- none` under an empty section) and read back as empty. Search and the index never see the
+`none` lines (`render_facts_section(facts, include_empty=False)`).
+
+| Line or section | Field | Rendered as |
+|---|---|---|
+| `- **Mood:** ...` | `mood` (string), `mood_score` (1–5) | `happy (4/5)`, `happy`, `4/5` or `none` |
+| `- **City:** ...`, `- **Weather:** ...` | `city`, `weather` | the text or `none` |
+| `### Food` | `meals`: list of `{type, items}` | always five lines in this order: `- **Breakfast:**`, `**Lunch:**`, `**Dinner:**`, `**Snacks:**`, `**Drinks:**`, each with comma-separated items or `none`. `MEAL_TYPES` are the only types: `snack`→snacks, `drink`/`beverage`→drinks, `supper`→dinner, `brunch`→lunch, anything else → snacks |
+| `### Places` | `places`: list of strings | one bullet per place visited |
+| `### People` | `people`: list of strings | one bullet per person |
+| `### Activities` | `activities`: list of `{kind, minutes}` | `- run (40 min)` or `- reading` |
+| `### Family` | `family`: list of `FamilyMember`, see below | one `#### name` block per member |
+| `### Highlights` | `highlights`: list of strings | one bullet each |
+
+**Family.** Every family member named in `LUMEN_FAMILY` gets a `#### name` block under
+`### Family` on every generated day, in the configured order and spelling, even if the day says
+nothing about them (the Prism drops anyone else; the owner may add other names by hand). With
+no family configured, Family holds `- none`. A block always has these seven lines:
+
+| Line | `FamilyMember` field | Items separated by |
+|---|---|---|
+| `- **Mood:** proud` | `mood` (string) | |
+| `- **Ate:** pasta, apple juice` | `food` | `, ` |
+| `- **Went to:** school, the dentist` | `places` | `, ` |
+| `- **Did:** soccer (60 min); drawing` | `activities` (`{kind, minutes}`) | `; ` |
+| `- **Moments:** lost his first tooth` | `moments` | `; ` |
+| `- **Health:** a cold; saw the dentist` | `health` | `; ` |
+| `- **School/work:** spelling test` | `school` | `; ` |
+
+Values are normalised so that rendering and parsing give back the same facts: each value is one
+line (whitespace collapsed); empty and `none` items and meals without items are dropped; meals
+of the same type are merged and kept in `MEAL_TYPES` order; family members without a name are
+dropped (members without facts are kept); items never contain their separator (`"eggs, toast"`
+becomes two items, and a `;` inside an activity becomes `,`).
+
+Hand edits are tolerated: bullets (`-`, `*`, `+`) are optional, labels may be bold or not
+(`Mood: great`), headings may use any level, and `Meals`, `Places visited` and `Family events`
+are accepted as section names. Under Family, any heading that is not a section name starts a
+member's block, and `Food`/`Meals`, `Places`, `Activities`, `Moment`/`Milestones` and
+`School`/`Work` are accepted as labels. A food line without a label counts as Snacks; an
+activity ending in `(N min)` or `(N minutes)` gets its minutes. Lines that fit nowhere (an
+unknown label such as `- Sleep: 8 hours`, a line under Family before any name, an unknown
+heading outside Family and everything under it) are moved into `My notes` on the next system
+write, so nothing is lost. Hand edits are rewritten to the standard names and lines on the
+next system write.
+
+### The journal
+
+A journal written by the Prism only uses these `##` headings, in this order, each only when it
+has text: `Summary`, `Morning`, `Afternoon`, `Evening`, `Thoughts`, `Later` (`JOURNAL_SECTIONS`).
+`apply_generation` enforces it with `normalize_journal`: text before the first heading goes to
+Summary, repeated sections are merged, `Night`/`Tonight` count as Evening and
+`Reflections`/`Plans` as Thoughts, and any other heading becomes a bold line in the section it
+appears in. `Later` holds what is added after the owner edited the day
+(`merge_generation_additive`): each addition starts with a bold label such as
+`**22:15 · Quick Note**`, and a `## Later` heading is only opened when the journal does not
+already end with one. A journal the owner edited is never re-normalised.
+
+### Format 1 files
+
+Format 1 (0.1.0) kept the facts in the front matter (`mood`, `mood_score`, `city`, `weather`,
+`people`, `meals`, `activities`, `family_events`, `highlights`) and had no facts region. `parse`
+reads those keys as the facts when the facts region is missing (`family_events`, which had no
+person, are added to `highlights`), and the next `render` writes format 2. If the file's
+`generated_hash` matches its format 1 content, `parse` re-stamps it with the format 2 hash, so an
+unedited day stays unedited; an edited day keeps its old hash and stays marked as edited. In a
+format 2 file, fact-named keys the owner adds to the front matter are ordinary extra keys: kept,
+but not read as facts.
 
 ### Capture metadata
 
@@ -89,7 +174,8 @@ embed lines are regenerated from it; the text below them is the transcript and m
 
 * **Notes** (`My notes`) are never modified by the system.
 * **Transcript** blocks are append-only; edits to their text are kept.
-* **Generated content** (facts, title, journal) carries `generated_hash`, a hash of exactly what
+* **Generated content** (facts in "At a glance", title, journal) carries `generated_hash`, a
+  hash of exactly what
   the system wrote. `DayFile.is_user_edited()` compares it with the current content.
   * `apply_generation(...)` replaces facts/title/journal, and raises `UserEditsDetected` if the
     owner edited them (unless `force=True`, reserved for an explicit owner request).
@@ -106,42 +192,12 @@ it writes a day file; Spectrum diffs the live file against that snapshot to reco
 
 ## Example
 
-Fictional data (also `tests/fixtures/sample-day.md`, which is the canonical rendering):
+Fictional data (also `tests/fixtures/sample-day.md`, which is the canonical rendering; the same
+day in format 1 is `tests/fixtures/sample-day-v1.md`):
 
 ```markdown
 ---
 date: 2026-10-10
-mood: happy
-mood_score: 4
-city: Austin
-weather: sunny, 24°C
-people:
-- Maya
-- Leo
-meals:
-- type: breakfast
-  items:
-  - oatmeal
-  - blueberries
-- type: lunch
-  items:
-  - fish tacos
-- type: drink
-  items:
-  - horchata
-- type: dinner
-  items:
-  - pasta
-activities:
-- kind: run
-  minutes: 40
-- kind: reading
-  minutes: null
-family_events:
-- Leo lost his first tooth
-highlights:
-- Leo lost his first tooth
-- Finished a book
 audio:
 - 2026-10-10-2130.m4a
 photos:
@@ -153,11 +209,70 @@ models_used:
   extract_facts: openai/gpt-4o-mini
   write_journal: openai/gpt-4o
 generated_at: '2026-10-11T00:41:00-05:00'
-generated_hash: f95b9b427b956b91
-lumen_format: 1
+generated_hash: 2c4980bf67ca8a30
+lumen_format: 2
 ---
 
 # Saturday, October 10, 2026 · First tooth
+
+## At a glance
+
+<!-- lumen:facts:start (found by Lumen; if you edit them, your edits are kept) -->
+- **Mood:** happy (4/5)
+- **City:** Austin
+- **Weather:** sunny, 24°C
+
+### Food
+
+- **Breakfast:** oatmeal, blueberries
+- **Lunch:** fish tacos
+- **Dinner:** pasta
+- **Snacks:** none
+- **Drinks:** horchata
+
+### Places
+
+- the river trail
+- the taco truck
+- home
+
+### People
+
+- Maya
+- Leo
+
+### Activities
+
+- run (40 min)
+- reading
+
+### Family
+
+#### Leo
+
+- **Mood:** proud
+- **Ate:** pasta
+- **Went to:** none
+- **Did:** none
+- **Moments:** lost his first tooth
+- **Health:** none
+- **School/work:** none
+
+#### Maya
+
+- **Mood:** none
+- **Ate:** fish tacos
+- **Went to:** the taco truck
+- **Did:** none
+- **Moments:** none
+- **Health:** none
+- **School/work:** none
+
+### Highlights
+
+- Leo lost his first tooth
+- Finished a book
+<!-- lumen:facts:end -->
 
 <!-- lumen:journal:start (written by Lumen; if you edit it, your edits are kept) -->
 ## Summary

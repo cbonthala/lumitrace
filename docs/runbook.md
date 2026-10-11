@@ -22,6 +22,8 @@ and never paste real tokens or personal content here.
    (check the organisation's data controls); for Amazon Transcribe / Bedrock enable the AWS
    Organizations **AI services opt-out policy**; for other providers check their API data terms.
    To try everything first without any provider, use `fake` for all of them.
+   Set `LUMEN_FAMILY` to the family members who should get their own block under Family in each
+   day file (`Maya, Leo`); others only appear under People.
 5. **Deploy:** `docker compose up -d --build`. Check `curl localhost:8000/health` and
    `curl localhost:8002/health`; Spectrum has no published port (`docker compose logs
    spectrum`). Put HTTPS in front of the Prism (Tailscale or a reverse proxy,
@@ -78,6 +80,11 @@ and never paste real tokens or personal content here.
   Obsidian (the log names it) and run `lumen-spectrum sync`. Exit status 1 means some files
   failed transiently; run `sync` again. `curl http://localhost:8001/health` inside the Docker
   network shows the last result of the running Spectrum service.
+
+* After upgrading Lumen to a version with a new index schema (for example day file format 2,
+  which added places and family facts), no manual step is needed: Spectrum sees the old
+  `schema_version` on start, logs "rebuilding the index" and rebuilds. Existing format 1 day
+  files are read as they are and rewritten in format 2 the next time the Prism writes that day.
 
 ### Recovering from a lost or corrupt index
 

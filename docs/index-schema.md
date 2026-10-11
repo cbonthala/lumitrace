@@ -1,4 +1,4 @@
-# Index schema (schema version 1)
+# Index schema (schema version 2)
 
 One SQLite file (`LUMEN_INDEX_PATH`, default `data/index/lumen.sqlite`) with FTS5 keyword
 search and sqlite-vec vector search. Code: `lumen/index/schema.py` (shared: Spectrum writes,
@@ -20,7 +20,7 @@ the Markdown files with `reset_derived(conn)` followed by a full sync.
 
 | key | value |
 |---|---|
-| `schema_version` | `"1"` |
+| `schema_version` | `"2"`; Spectrum rebuilds the index when it differs from `SCHEMA_VERSION` |
 | `embedding_model` | model the vectors were made with |
 | `embedding_dimension` | vector size; `connect` raises `EmbeddingDimensionMismatch` if settings differ |
 | `sync_token` | last `Storage.list_changes` token (cleared by `reset_derived`) |
@@ -46,11 +46,17 @@ are not downloaded.
 
 | Table | Columns (plus `id`, `date`, `position`) |
 |---|---|
-| `meals` | `meal_type`, `item` (one row per item) |
+| `meals` | `meal_type` (`breakfast`, `lunch`, `dinner`, `snacks` or `drinks`), `item` (one row per item) |
 | `activities` | `kind`, `minutes` |
 | `people` | `name` (index with `COLLATE NOCASE`) |
-| `family_events` | `text` |
+| `places` | `name` (index with `COLLATE NOCASE`) |
+| `family_facts` | `person`, `category`, `text`, `minutes` (index on `person COLLATE NOCASE, category`) |
 | `highlights` | `text` |
+
+`family_facts` has one row per item of a family member's block: `category` is `mood`, `food`,
+`places`, `activities` (`text` is the kind, `minutes` may be set), `moments`, `health` or
+`school`. Schema version 1 had a `family_events(text)` table instead of `places` and
+`family_facts`.
 
 Re-indexing a day = `DELETE FROM days WHERE date = ?` (cascades) then insert again.
 
@@ -90,6 +96,6 @@ sha256 of date|section|field|before|after; insert with `INSERT OR IGNORE`).
 
 ## Changing the schema
 
-Bump `SCHEMA_VERSION`. Because the index is disposable, the simplest migration is a rebuild;
-if `feedback` or `edit_signals` change, write a real migration that keeps their rows. Update this
+Bump `SCHEMA_VERSION`. Because the index is disposable, the simplest migration is a rebuild,
+and Spectrum does it on its own when the stored `schema_version` differs (`open_index`); if `feedback` or `edit_signals` change, write a real migration that keeps their rows. Update this
 page, `docs/contracts.md` and `CHANGELOG.md`.

@@ -69,28 +69,32 @@ private Google Drive link that opens only for the owner, or `file://` locally; `
 with an `error` if the file is missing), and `user_edited`. A missing day returns
 `found: false` and a `note`.
 
-### `query_facts(kind, contains?, from_date?, to_date?, limit=50)`
+### `query_facts(kind, contains?, from_date?, to_date?, limit=50, person?)`
 
-`kind`: `meals` | `activities` | `people` | `family_events` | `mood` | `highlights`.
+`kind`: `meals` | `activities` | `people` | `places` | `family` | `mood` | `highlights`.
 `contains` is a case-insensitive substring (LIKE wildcards are escaped); for meals it matches the
-item or the meal type ("breakfast"). Returns:
+item or the meal type ("breakfast"), for family the text or the category ("food"). `person`
+(case-insensitive exact name) only applies to `family`; with any other kind it is an input
+error. Returns:
 
 * `rows`: newest first, each with `date` (meals: `meal_type`, `item`; activities: `kind`,
-  `minutes`; people: `name`; family_events / highlights: `text`; mood: `mood`, `mood_score`),
-  at most `limit` (1–500); `truncated` says if there were more.
+  `minutes`; people / places: `name`; family: `person`, `category` (`mood`, `food`, `places`,
+  `activities`, `moments`, `health`, `school`), `text`, `minutes`; highlights: `text`; mood:
+  `mood`, `mood_score`), at most `limit` (1–500); `truncated` says if there were more.
 * `counts`: `rows`, `days`, `first_date`, `last_date` over **all** matches.
 * `aggregates` over all matches: meals `top_items` and `by_meal_type`; activities
-  `total_minutes` and `by_kind` (times, days, total and average minutes); people `by_person`
-  (days, first and last date); mood `average_score`, `min_score`, `max_score`,
-  `days_with_score`, `by_mood`.
+  `total_minutes` and `by_kind` (times, days, total and average minutes); people `by_person` and
+  places `by_place` (days, first and last date); family `by_person_and_category` (times, days,
+  total minutes) and `top_items` (per person and category); mood `average_score`, `min_score`,
+  `max_score`, `days_with_score`, `by_mood`.
 
 ### `on_this_day(date?, years_back=10)`
 
 `date` is `YYYY-MM-DD`, `today`/`yesterday`, or `MM-DD` (reference year = this year); default
 today. Returns entries with the same month and day in the `years_back` (1–100) years before the
 reference year, newest first: `date`, `years_ago`, `title`, `mood`, `mood_score`, `city`,
-`weather`, `people`, `highlights`, `family_events`, `summary` (start of the first journal
-passage) and `path`. February 29 only matches February 29.
+`weather`, `people`, `places`, `highlights`, `family` (rows of `person`, `category`, `text`,
+`minutes`), `summary` (start of the first journal passage) and `path`. February 29 only matches February 29.
 
 ### `feedback(question, answer, comment, rating="wrong", dates?, tool?)`
 

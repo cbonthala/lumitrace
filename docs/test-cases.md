@@ -47,8 +47,10 @@ add or update its line in the right section.
 
 * **Capture**: one thing sent from the phone: a *Log My Day* recording or a *Quick Note*.
 * **Day file**: the Markdown journal file for one day, e.g. `2026/10/2026-10-10/2026-10-10.md`.
-  It has **front matter** (facts such as mood, people, meals at the top), a title, the journal,
-  your own **My notes** section, and the raw **transcript** of each capture.
+  It has **front matter** (the date, audio, photos and which AI made it), a title, an **At a
+  glance** section with the facts (mood, food, places, people, activities, one block per family
+  member, highlights), the journal, your own **My notes** section, and the raw **transcript**
+  of each capture.
 * **Entry date**: the day a capture belongs to. Anything before 4 a.m. counts as the day before.
 * **Snapshot**: an exact copy of the day file as Lumen last wrote it, kept in
   `_system/generated/`. Comparing it with the live file shows what you edited.
@@ -93,7 +95,8 @@ File: `tests/e2e/test_full_flow.py`
 All three programs run inside the test, sharing one temporary storage folder. Speech-to-text
 is the fake one (the uploaded bytes are the "spoken" words), fact extraction is a scripted
 stand-in, the journal is written by the built-in `fake` model, and audio compression behaves as
-on a computer without audio tools (the original file is kept). The story:
+on a computer without audio tools (the original file is kept). Only Leo is listed as family
+(`LUMEN_FAMILY`). The story:
 
 1. **Capture.** At 9:30 p.m. on Saturday, October 10, 2026, a *Log My Day* recording about a
    morning run with Maya arrives with a photo and a location (Austin). Then a quick note about
@@ -102,7 +105,9 @@ on a computer without audio tools (the original file is kept). The story:
    "audio kept uncompressed" warning, the photo is saved as `photo-01.jpg`, and every nudge to
    the indexer is accepted.
 2. **The day file.** The snapshot is identical to the day file. The entries are in time order,
-   the mood comes from the extracted facts, the journal mentions the tacos, the audio is stored
+   the mood comes from the extracted facts, the lake is listed under Places, empty facts say
+   "none" (Snacks), Maya gets no family block (she is not listed as family) while Leo gets an
+   empty one, the journal mentions the tacos, the audio is stored
    in the day's folder, and the upload inbox is empty again. The activity record names the
    capture but contains none of the journal's words.
 3. **Index.** Without any polling, the nudges alone bring both days into the index, and the day
@@ -112,7 +117,7 @@ on a computer without audio tools (the original file is kept). The story:
      patch" finds October 10, 2025;
    * `get_day` returns the people, both transcripts in time order, the location as
      "Austin (30.26720, -97.74310)", and links to the audio and the photo;
-   * `query_facts` finds the fish-taco lunch and the 40-minute run;
+   * `query_facts` finds the fish-taco lunch, the 40-minute run and the lake;
    * `on_this_day` finds last year's pumpkin-patch day, "1 year ago", with its highlight;
    * `feedback` is saved in the index and in storage, with the date picked out of the answer.
 5. **You edit the day in Obsidian.** The mood changes from "content" to "great" and a sentence
@@ -120,10 +125,11 @@ on a computer without audio tools (the original file is kept). The story:
    two edit signals (mood before and after, and the journal change) and marks the day as edited.
 6. **A late capture.** A note at 10:15 p.m. about a walk with Leo is added *on top of* the
    edited day: the mood is still "great", your sentence is still there, the new note appears
-   under "22:15 · Quick Note", Leo is added to the people, the day has three entries, and the
-   snapshot is updated to match.
-7. **Ask again.** Searching "stars" on that day finds it, `query_facts` finds Leo, and the
-   earlier edit signals are still there.
+   under "## Later" labelled "22:15 · Quick Note", Leo is added to the people and his family
+   block gains the walk and "saw the stars", the day has three entries, and the snapshot is updated to match.
+7. **Ask again.** Searching "stars" on that day finds it, `query_facts` finds Leo among the
+   people and lists his walk and moment under family, and the earlier edit signals are still
+   there.
 
 - Checks that the story above works from start to finish across all three programs. <sub>`test_full_flow`</sub>
 
@@ -201,7 +207,7 @@ File: `tests/prism/test_capture_api.py`
 
 File: `tests/prism/test_pipeline.py`
 
-- Checks that after you edit a day (your own journal words, mood and notes), a later note does not rewrite it: your text, mood and notes stay, a short AI addition is appended under the note's time, new people are added, the AI is shown your edited journal, and fact extraction only looks at the new entry. <sub>`test_edited_day_gets_additive_update`</sub>
+- Checks that after you edit a day (your own journal words, mood and notes), a later note does not rewrite it: your text, mood and notes stay, a short AI addition is appended under "## Later", labelled with the note's time, new people are added, the AI is shown your edited journal, and fact extraction only looks at the new entry. <sub>`test_edited_day_gets_additive_update`</sub>
 - Checks that if you edit the day while the AI is still writing, the AI's version is not saved over yours; the new entry is added on top instead. <sub>`test_edit_during_generation_is_not_overwritten`</sub>
 
 ### When speech or AI services fail
@@ -274,6 +280,8 @@ File: `tests/prism/test_prompts_llm.py`
 - Checks that a badly laid out prompt file, a missing value for a blank, or a missing prompt file give clear errors. <sub>`test_prompt_errors`</sub>
 - Checks that the prompts folder is found in the project even when the program is started from another folder. <sub>`test_relative_prompts_dir_falls_back_to_repository`</sub>
 - Checks that prompt versions are combined into one label (such as `extract_facts-v1+write_journal-v2`) for the day file. <sub>`test_combined_version`</sub>
+- Checks that only the family members listed in the settings keep a family block: anyone else is dropped, names are spelled as in the settings ("leo" becomes "Leo"), they come in the settings' order, a name given twice keeps its first block, an empty list drops everyone, and every listed member the AI said nothing about gets an empty block. <sub>`test_keep_family_drops_unknown_names_and_uses_configured_spelling`</sub>
+- Checks that the fact-extraction prompt tells the AI who counts as family ("Family members (may be empty): Maya, Leo"). <sub>`test_extract_facts_sends_the_family_list`</sub>
 - Checks that the AI's structured (JSON) reply is understood even when wrapped in code fences or surrounded by chatty text, and refused when there is no data at all. <sub>`test_extract_json_tolerates_fences_and_chatter`</sub>
 - Checks that extracted facts are held to the day-file format: a reply wrapped in a "facts" object is unwrapped, an out-of-range mood score and empty values are dropped, and badly shaped replies (not an object, a meal without a type) are refused. <sub>`test_parse_facts_validates_against_dayfacts`</sub>
 - Checks that the AI client passes the timeout, retry and "reply in JSON" settings to the provider, switches to the backup model when the main one fails, records each attempt, tries a model only once when it is also the backup, and gives a clear error naming both models when all fail. <sub>`test_llm_client_passes_config_and_falls_back`</sub>
@@ -290,7 +298,7 @@ Google Drive change feed, real embedding providers and long-running polling.
 
 File: `tests/spectrum/test_sync.py`
 
-- Checks that the first sync reads every day file and fills the index: day details (mood, city, audio, number of entries, not edited, prompt version), meals, people, activities, highlights, searchable passages with their embeddings, and a record of each file with its fingerprint. <sub>`test_first_sync_indexes_day_files`</sub>
+- Checks that the first sync reads every day file and fills the index: day details (mood, city, audio, number of entries, not edited, prompt version), meals, people, places (searchable, "river trail"), activities, highlights, one row per family item (Leo's mood, food and moment, Maya's food and place), searchable passages with their embeddings, and a record of each file with its fingerprint. <sub>`test_first_sync_indexes_day_files`</sub>
 - Checks that audio, photos, other Markdown notes, system files and stray files are not indexed or sent for embedding. <sub>`test_non_day_files_are_ignored`</sub>
 - Checks that an unchanged file is skipped, and a file saved again with identical content is recognised by its fingerprint and not processed again. <sub>`test_unchanged_files_are_skipped`</sub>
 - Checks that after a note is added to a day, only that new passage is sent for embedding, and it becomes searchable. <sub>`test_incremental_sync_reembeds_only_changed_passages`</sub>
@@ -307,7 +315,7 @@ File: `tests/spectrum/test_sync.py`
 
 File: `tests/spectrum/test_passages.py`
 
-- Checks that the sample day is split, in order, into passages for the title, the facts, each journal section, your notes and each transcript entry; headings are taken out of the text; the facts read naturally ("People: Maya, Leo", "Activities: run (40 min), reading"); and no passage is over the size limit. <sub>`test_sample_day_passages`</sub>
+- Checks that the sample day is split, in order, into passages for the title, the facts (the mood lines, then Food, Places, People, Activities, one per family member, Highlights), each journal section, your notes and each transcript entry; headings are taken out of the text; the facts read as in the day file ("**Ate:** pasta" under Leo); and no passage is over the size limit. <sub>`test_sample_day_passages`</sub>
 - Checks that the same text under different headings counts as different passages, and that the heading is part of what gets embedded. <sub>`test_text_hash_covers_heading`</sub>
 - Checks that short paragraphs are kept together and long ones are split into pieces under the limit without losing any words. <sub>`test_chunk_text_packs_paragraphs_and_splits_long_ones`</sub>
 - Checks that one enormous word is cut into fixed-size pieces, and blank text produces nothing. <sub>`test_chunk_text_hard_splits_giant_words`</sub>
@@ -335,6 +343,7 @@ File: `tests/spectrum/test_rebuild.py`
 - Checks that a rebuild repairs a damaged index (missing passages) by indexing every day again, while keeping feedback and edit records and noting when the rebuild happened. <sub>`test_rebuild_reindexes_everything_and_keeps_signals`</sub>
 - Checks that changing the embedding size triggers an automatic rebuild on the next sync, after which search by meaning works at the new size, feedback is kept, and the MCP server can open the index with the new setting. <sub>`test_dimension_change_triggers_rebuild`</sub>
 - Checks that switching to a different embedding model triggers an automatic rebuild and records the new model. <sub>`test_model_change_triggers_rebuild`</sub>
+- Checks that an index made by an older Lumen (schema version 1) is rebuilt automatically on the next sync, fills in what the old version left out, records the new schema version, keeps feedback, and is not rebuilt again after that. <sub>`test_older_schema_version_triggers_rebuild`</sub>
 - Checks that a rebuild with no day files works and records the embedding model. <sub>`test_rebuild_on_empty_storage`</sub>
 
 ### Backups
@@ -445,7 +454,9 @@ File: `tests/lens/test_tools.py`
 - Checks that date limits apply to facts too (a total for 2026 only, a single-day range). <sub>`test_query_facts_date_filter`</sub>
 - Checks that people are summarised by how many days you saw them and the first and last date, and that part of a name ("rose") is enough to search. <sub>`test_query_facts_people`</sub>
 - Checks that mood results list each day's mood and summarise the average, lowest and highest score and how often each mood came up. <sub>`test_query_facts_mood`</sub>
-- Checks that family events and highlights can be listed and searched. <sub>`test_query_facts_family_events_and_highlights`</sub>
+- Checks that places are listed newest first in the order of the day file, summarised by how many days you went there and when first, and searchable by part of the name ("farm"). <sub>`test_query_facts_places`</sub>
+- Checks that family facts can be narrowed to one person (any case) and a category ("food" lists everything Leo ate, newest first), are summarised per person and category (Maya's 90 minutes of activities, Leo's moments on two days) and by most common item, can be searched by text ("runny" finds Leo's runny nose under health), and that asking for a person with any other fact kind is refused. <sub>`test_query_facts_family`</sub>
+- Checks that highlights can be listed and searched. <sub>`test_query_facts_highlights`</sub>
 - Checks that a row limit is applied and the reply says the list was cut off, while the counts still cover everything. <sub>`test_query_facts_limit_and_truncation`</sub>
 - Checks that "%" and "_" are searched as plain characters (not wildcards that match everything), and that no matches gives "No matching facts found." <sub>`test_query_facts_like_wildcards_are_literal`</sub>
 - Checks that an unknown fact kind ("drinks") is refused. <sub>`test_query_facts_bad_kind`</sub>
@@ -455,7 +466,7 @@ File: `tests/lens/test_tools.py`
 
 File: `tests/lens/test_tools.py`
 
-- Checks that `on_this_day` for 2026-10-10 returns the same date in earlier years, newest first, with how many years ago, the title, people, highlights, family events and the journal summary. <sub>`test_on_this_day_with_full_date`</sub>
+- Checks that `on_this_day` for 2026-10-10 returns the same date in earlier years, newest first, with how many years ago, the title, people, places, highlights, each family member's facts (Leo's pumpkin pie) and the journal summary. <sub>`test_on_this_day_with_full_date`</sub>
 - Checks that a month-day like "10-10" counts back from the current year. <sub>`test_on_this_day_month_day_uses_current_year`</sub>
 - Checks that with no date given it uses today. <sub>`test_on_this_day_defaults_to_today`</sub>
 - Checks that "years back" limits how far back it looks. <sub>`test_on_this_day_years_back`</sub>
@@ -538,7 +549,16 @@ File: `tests/frames/test_dayfile.py`
 - Checks that a day file written under an earlier project name (LifeLog's `lifelog:` markers and `lifelog_format` key, or Bookshelf's `bookshelf:` markers and `bookshelf_format` key; run once for each) is read exactly like a new one, and is written back with the new Lumen names. <sub>`test_parses_files_written_before_the_rename`</sub>
 - Checks that tricky content survives reading and writing unchanged: apostrophes and accents, values that look special ("null", "a: b"), comment arrows (`-->`), headings in notes, picture embeds, empty entries, and extra fields of your own such as tags. <sub>`test_roundtrip_model_equality_with_tricky_content`</sub>
 - Checks that the example in `docs/frames-format.md` is identical to the sample file the tests use. <sub>`test_docs_example_matches_fixture`</sub>
-- Checks that a day file's parts are written in the documented order: facts, title, journal, My notes, Transcript. <sub>`test_render_layout_markers_in_order`</sub>
+- Checks that a day file's parts are written in the documented order: front matter, title, "At a glance" facts (Food, Places, People, Activities, Family, Highlights), journal, My notes, Transcript. <sub>`test_render_layout_markers_in_order`</sub>
+- Checks that a day file in the old layout (facts in the front matter) is read with the same facts, its old "family events" moved into highlights, still counts as unedited, and is written back in the new layout. <sub>`test_reads_format_1_files_and_writes_format_2`</sub>
+- Checks that an old-layout file you had edited still counts as edited after the upgrade. <sub>`test_edited_format_1_file_stays_edited`</sub>
+- Checks that a fact you type into the front matter of a new-layout file is kept there as your own field and doesn't replace the "At a glance" fact. <sub>`test_fact_keys_in_the_front_matter_of_a_format_2_file_are_kept`</sub>
+- Checks that hand-typed facts are understood: labels without bold or bullets, other heading levels, "Meals" and "places visited" as section names, a food line without a meal type (counted as Snacks), minutes on an activity; lines that fit nowhere (like "Sleep: 8 hours" or an unknown "Dreams" section) move into your notes. <sub>`test_facts_section_tolerates_hand_edits`</sub>
+- Checks that hand-typed family blocks are understood: any heading under Family starts a person, "Food", "Milestones" and "Work" work as labels, minutes are read from activities, a person with nothing under them is kept and written back with every line saying "none", and a line before any name or with an unknown label ("Shoe size") moves into your notes. <sub>`test_family_blocks_tolerate_hand_edits`</sub>
+- Checks that a family member's items are split at their separator (commas for food, semicolons for moments), a semicolon inside an activity becomes a comma, family members without a name are dropped and those without any facts are kept, so writing and reading give the same facts. <sub>`test_family_items_never_contain_their_separator`</sub>
+- Checks that fact values are tidied so writing and reading agree: whitespace and line breaks collapse to one line, empty and "none" items are dropped, items with commas are split, and meals end up as one per fixed type in the fixed order ("Breakfast:" becomes breakfast, "Supper" dinner, "drink" drinks, "dessert" snacks, two breakfasts are merged). <sub>`test_fact_values_are_normalised_so_render_and_parse_agree`</sub>
+- Checks that every day file has exactly the same "At a glance" lines: Mood, City and Weather, all five meal types, every section heading and all seven lines of each family member, with "none" where there is nothing; that "none" reads back as empty; and that the index's view leaves the "none" lines out. <sub>`test_every_day_file_has_the_same_fact_lines`</sub>
+- Checks that a generated journal gets the fixed headings in the fixed order (Summary, Morning, Afternoon, Evening, Thoughts): text before any heading goes to Summary, "Night" counts as Evening and "Reflections" as Thoughts, an unknown heading becomes a bold line in its section, a `#` line in a code block is left alone, doing it twice changes nothing, and a full generation applies it. <sub>`test_generated_journal_gets_the_fixed_headings`</sub>
 - Checks that files without front matter, with broken front matter, without a date, or with an out-of-range mood score are reported as unreadable. <sub>`test_parse_errors`</sub>
 - Checks that an almost empty file can be read using the date from its folder, with any loose text treated as your notes. <sub>`test_parse_minimal_and_fallback_date`</sub>
 - Checks that Windows line endings and an invisible byte-order mark at the start don't change how a file is read. <sub>`test_parse_tolerates_windows_newlines_and_bom`</sub>
@@ -550,7 +570,7 @@ File: `tests/frames/test_dayfile.py`
 
 File: `tests/frames/test_dayfile.py`
 
-- Checks (4 cases) that changing the mood, adding a meal item, changing the title, or rewording the journal marks the day as edited by you. <sub>`test_edits_to_facts_title_or_journal_are_detected`</sub>
+- Checks (5 cases) that changing the mood, adding a meal item, deleting a place, changing the title, or rewording the journal marks the day as edited by you. <sub>`test_edits_to_facts_title_or_journal_are_detected`</sub>
 - Checks that changing your own notes, or the record of which prompt was used, does not count as editing what Lumen wrote. <sub>`test_edits_to_notes_or_provenance_are_not_user_edits`</sub>
 
 ### Adding an entry to a day
@@ -568,7 +588,7 @@ File: `tests/frames/test_dayfile.py`
 
 - Checks that AI output sets the title, facts, journal and versions and stores a fingerprint so later edits can be spotted; generating again replaces the facts but keeps the title and versions when none are given. <sub>`test_apply_generation_sets_content_and_hash`</sub>
 - Checks that a full rewrite is refused once you have edited the day, unless explicitly forced (which still keeps your notes). <sub>`test_apply_generation_refuses_user_edits`</sub>
-- Checks that adding AI output to an edited day keeps your mood, adds new people without duplicates (ignoring upper/lower case), adds new meal items and activities without changing yours, appends the journal addition under its own heading, keeps your notes, and leaves the day marked as edited. <sub>`test_additive_merge_on_edited_day_keeps_edits`</sub>
+- Checks that adding AI output to an edited day keeps your mood, adds new people and places without duplicates (ignoring upper/lower case), merges family blocks by name (Leo keeps his mood and gains "ice cream", Maya gains "headache"), adds new meal items (a "snack" goes to Snacks, meals stay in the fixed order) and activities without changing yours, appends the journal addition under "## Later" with its time label (a second addition joins the same Later section), keeps your notes, and leaves the day marked as edited. <sub>`test_additive_merge_on_edited_day_keeps_edits`</sub>
 - Checks that adding AI output to an unedited day keeps it counted as unedited. <sub>`test_additive_merge_on_clean_day_refreshes_hash`</sub>
 
 ---
@@ -653,6 +673,7 @@ File: `tests/test_config.py`
 - Checks that `LUMEN_*` environment variables override the defaults and that the API token is hidden when settings are printed. <sub>`test_env_overrides`</sub>
 - Checks that an unknown timezone, a switch-over hour of 24, or an unsupported storage type are refused. <sub>`test_validation`</sub>
 - Checks that `.env.example` lists every setting, and nothing that doesn't exist. <sub>`test_env_example_documents_every_setting`</sub>
+- Checks that `LUMEN_FAMILY` is read as a list of names: spaces trimmed, empty entries and repeats (ignoring case) dropped, and an empty setting means no family. <sub>`test_family_members_from_a_comma_separated_list`</sub>
 
 ### Embeddings and nudges
 
