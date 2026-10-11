@@ -24,12 +24,16 @@ the Markdown files with `reset_derived(conn)` followed by a full sync.
 | `embedding_dimension` | vector size; `connect` raises `EmbeddingDimensionMismatch` if settings differ |
 | `sync_token` | last `Storage.list_changes` token (cleared by `reset_derived`) |
 | `last_sync_at`, `last_rebuild_at` | ISO-8601 UTC |
+| `indexer_retry_paths` | JSON list of paths that failed transiently; retried next sync (indexer) |
+| `last_full_scan_at`, `last_backup_at` | ISO-8601 UTC (indexer; see `docs/indexer.md`) |
 
 ### `files`: every storage file seen (incremental updates)
 
 `path` (PK, storage path), `kind` (`classify_path`: day/audio/photo/system/other), `date`
 (YYYY-MM-DD or NULL), `content_hash` (sha256 hex of the bytes; skip re-indexing when unchanged),
-`size`, `modified_at`, `indexed_at`.
+`size`, `modified_at`, `indexed_at`. The indexer currently records day files only (including
+malformed ones, so they aren't re-read until they change); audio, photos and `_system/` files
+are not downloaded.
 
 ### `days`: one row per day file
 
@@ -53,8 +57,8 @@ Re-indexing a day = `DELETE FROM days WHERE date = ?` (cascades) then insert aga
 
 `id` (PK; also the rowid in `passages_fts` and `passages_vec`), `path` (FK → `files.path`,
 cascade), `date`, `section` (`title` | `journal` | `notes` | `transcript` | `facts`), `heading`,
-`capture_id` (for transcript passages), `ordinal`, `text`, `text_hash` (reuse an existing
-embedding when the text is unchanged).
+`capture_id` (for transcript passages), `ordinal`, `text`, `text_hash` (sha256 of the embedded
+input, `heading + "\n" + text` or just `text`; reuse an existing embedding when unchanged).
 
 ### `passages_fts`: FTS5, external content
 
@@ -73,7 +77,7 @@ ORDER BY distance`.
 ### `edit_signals`: the owner's edits (preserved on rebuild)
 
 `id`, `date`, `path`, `detected_at`, `section` (facts/title/journal/notes/transcript), `field`
-(fact name for facts), `before` (system version; JSON for facts), `after` (owner's version),
+(fact name for facts, capture id for transcript, NULL otherwise), `before` (system version; JSON for facts), `after` (owner's version),
 `diff` (unified diff for text), `prompt_version`, `models_used_json`, `signal_hash` (UNIQUE;
 sha256 of date|section|field|before|after; insert with `INSERT OR IGNORE`).
 
