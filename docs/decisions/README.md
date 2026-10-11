@@ -7,10 +7,10 @@ Numbering (so parallel work streams don't collide):
 
 | Range | Area |
 |---|---|
-| 0001–0009 | foundation |
-| 0010–0019 | recording API |
-| 0020–0029 | indexer |
-| 0030–0039 | MCP server |
+| 0001–0009 | foundation (incl. Books) |
+| 0010–0019 | Typewriter (recording API) |
+| 0020–0029 | Bookmarks (indexer) |
+| 0030–0039 | Reading Lamp (MCP server) |
 | 0040+ | later work (take the next free number) |
 
 Template:
@@ -35,6 +35,7 @@ Template:
 | [0005](0005-config-driven-providers-litellm.md) | Config-driven providers via LiteLLM |
 | [0006](0006-proton-drive-e2e-later.md) | Proton Drive / end-to-end encryption later |
 | [0007](0007-plain-english-test-catalog.md) | Plain-English test catalog, kept complete by a test |
+| [0008](0008-project-and-module-names.md) | Project and module names: Bookshelf, Notepad, Typewriter, Books, Bookmarks, Reading Lamp |
 | [0010](0010-durable-inbox-and-background-worker.md) | Recording API: durable inbox in storage, one worker, client capture ids |
 | [0011](0011-save-transcript-first-then-generate.md) | Recording API: save transcript first, full vs additive generation, re-check edits |
 | [0012](0012-activity-records-monthly-jsonl.md) | Recording API: activity records as monthly JSONL without content |

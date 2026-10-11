@@ -30,19 +30,19 @@ from fastapi.testclient import TestClient
 from mcp import Client
 from PIL import Image
 
-from lifelog.api.app import create_app as create_api_app
-from lifelog.config import Settings
-from lifelog.dayfile import day_file_path, generated_snapshot_path, parse
-from lifelog.index.schema import connect
-from lifelog.indexer.core import Indexer
-from lifelog.indexer.service import IndexerService
-from lifelog.indexer.service import create_app as create_indexer_app
-from lifelog.mcp_server.server import build_server
-from lifelog.nudge import nudge_indexer
-from lifelog.pipeline.audio import AudioResult, compress_audio
-from lifelog.pipeline.llm import LLMClient
-from lifelog.pipeline.processor import CaptureProcessor
-from lifelog.storage.local import LocalStorage
+from bookshelf.bookmarks.core import Indexer
+from bookshelf.bookmarks.service import IndexerService
+from bookshelf.bookmarks.service import create_app as create_indexer_app
+from bookshelf.books.dayfile import day_file_path, generated_snapshot_path, parse
+from bookshelf.books.storage.local import LocalStorage
+from bookshelf.config import Settings
+from bookshelf.index.schema import connect
+from bookshelf.nudge import nudge_indexer
+from bookshelf.reading_lamp.server import build_server
+from bookshelf.typewriter.app import create_app as create_api_app
+from bookshelf.typewriter.pipeline.audio import AudioResult, compress_audio
+from bookshelf.typewriter.pipeline.llm import LLMClient
+from bookshelf.typewriter.pipeline.processor import CaptureProcessor
 
 ROOT = Path(__file__).resolve().parents[2]
 TOKEN = "e2e-token-0123456789abcdef"

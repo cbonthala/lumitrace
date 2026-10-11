@@ -20,8 +20,8 @@ dist/
 secrets/
 
 # Personal data: vault, index, audio, photos (never commit).
-# The local storage root defaults to data/LifeLog. Don't add a "LifeLog/" pattern: git on
-# case-insensitive filesystems would also ignore the lifelog/ package.
+# The local storage root defaults to data/Bookshelf. Don't add a "Bookshelf/" pattern: git on
+# case-insensitive filesystems would also ignore the bookshelf/ package.
 data/
 vault/
 *.sqlite

@@ -1,29 +1,32 @@
 # Shared contracts
 
-The interfaces the recording API, indexer and MCP server build on. They are implemented and
+The interfaces the Typewriter (recording API), Bookmarks (indexer) and the Reading Lamp (MCP
+server) build on. They are implemented and
 tested (`tests/`); this page is the quick reference. Changing any of them is a cross-cutting
 change: update every caller, the tests, this page and `CHANGELOG.md` in one commit.
 
-## Config: `lifelog.config`
+## Config: `bookshelf.config`
 
-`Settings` (pydantic-settings, env prefix `LIFELOG_`, reads `.env`), `get_settings()` (cached).
+`Settings` (pydantic-settings, env prefix `BOOKSHELF_`, reads `.env`), `get_settings()` (cached).
+Field names keep their technical prefixes (`api_*` = Typewriter, `indexer_*` = Bookmarks,
+`mcp_*` = Reading Lamp), so `BOOKSHELF_API_TOKEN` is the Typewriter's token.
 Tests construct `Settings(_env_file=None, ...)` directly; the `settings` fixture in
 `tests/conftest.py` gives an offline configuration.
 
 | Group | Fields |
 |---|---|
 | General | `log_level`, `timezone` (`"America/Chicago"`), `day_rollover_hour` (4), `prompts_dir`, property `tz -> ZoneInfo` |
-| API | `api_token: SecretStr`, `api_host`, `api_port` (8000), `api_max_upload_mb`, `audio_bitrate_kbps` (32), `photo_max_dimension` (2048), `photo_jpeg_quality` (85) |
-| Storage | `storage_backend: "local" \| "gdrive"`, `local_root` (`data/LifeLog`), `gdrive_client_secrets_file`, `gdrive_token_file`, `gdrive_root_folder` (`"LifeLog"`) |
+| API (Typewriter) | `api_token: SecretStr`, `api_host`, `api_port` (8000), `api_max_upload_mb`, `audio_bitrate_kbps` (32), `photo_max_dimension` (2048), `photo_jpeg_quality` (85) |
+| Storage | `storage_backend: "local" \| "gdrive"`, `local_root` (`data/Bookshelf`), `gdrive_client_secrets_file`, `gdrive_token_file`, `gdrive_root_folder` (`"Bookshelf"`) |
 | Speech | `stt_provider: "litellm" \| "aws_transcribe" \| "fake"`, `stt_model`, `stt_language`, `aws_region`, `aws_transcribe_bucket` |
 | LLM | `llm_extract_facts_model`, `llm_write_journal_model`, `llm_fallback_model` (LiteLLM strings), `llm_timeout_seconds`, `llm_max_retries` |
 | Embeddings | `embedding_model` (`"fake"` = offline), `embedding_dimension` |
-| Index | `index_path`, `indexer_host`, `indexer_port` (8001), `indexer_poll_interval_seconds` (300), `indexer_nudge_url`, `indexer_backup_interval_hours` (24) |
-| MCP | `mcp_transport: "stdio" \| "streamable-http"`, `mcp_host`, `mcp_port` (8002), `mcp_path` (`/mcp`), `mcp_public_url`, `mcp_auth_mode: "none" \| "token" \| "oauth"`, `mcp_auth_token: SecretStr`, `mcp_owner_password: SecretStr` |
+| Index (Bookmarks) | `index_path` (`data/index/bookshelf.sqlite`), `indexer_host`, `indexer_port` (8001), `indexer_poll_interval_seconds` (300), `indexer_nudge_url`, `indexer_backup_interval_hours` (24) |
+| MCP (Reading Lamp) | `mcp_transport: "stdio" \| "streamable-http"`, `mcp_host`, `mcp_port` (8002), `mcp_path` (`/mcp`), `mcp_public_url`, `mcp_auth_mode: "none" \| "token" \| "oauth"`, `mcp_auth_token: SecretStr`, `mcp_owner_password: SecretStr` |
 
-## Storage: `lifelog.storage`
+## Books, storage: `bookshelf.books.storage`
 
-`get_storage(settings=None) -> Storage`. Paths are relative to the LifeLog root, POSIX style;
+`get_storage(settings=None) -> Storage`. Paths are relative to the Bookshelf root, POSIX style;
 `normalize_path()` validates them (`InvalidPathError`, a `ValueError`). Hidden entries (any
 component starting with `.`) are never listed. Missing files raise `FileNotFoundError`; backend
 failures raise `StorageError`.
@@ -53,18 +56,19 @@ changes since the token (latest state per path, renames = deleted + upserted). T
 
 Backends: `LocalStorage(root)` (atomic writes; mtime-snapshot tokens) and
 `GDriveStorage(root_folder_name, *, credentials=None, service=None)` (`drive.file` scope, Drive
-changes API, `GDriveStorage.from_settings(settings)`, `login_main()` = `lifelog-gdrive-login`).
+changes API, `GDriveStorage.from_settings(settings)`, `login_main()` = `bookshelf-drive-login`).
 
-## Day files: `lifelog.dayfile`
+## Books, day files: `bookshelf.books.dayfile`
 
-Format details and an example: `docs/day-file-format.md`.
+Format details and an example: `docs/books-format.md`.
 
 Paths: `day_dir(d)`, `day_file_path(d)`, `audio_file_name(d, local_time)`,
 `audio_file_path(d, local_time)`, `photo_file_name(n)`, `photo_file_path(d, n)`,
 `next_photo_names(existing, count)`, `unique_file_name(name, existing)`, `system_path(*parts)`,
 `generated_snapshot_path(d)`, `parse_day_file_path(path) -> date | None`,
 `date_of_path(path) -> date | None`, `classify_path(path) -> "day"|"audio"|"photo"|"system"|"other"`.
-Constants: `SYSTEM_DIR = "_system"`, `FORMAT_VERSION = 1`.
+Constants: `SYSTEM_DIR = "_system"`, `FORMAT_VERSION = 1`, `MARKER_PREFIXES = ("bookshelf",
+"lifelog")` (`parse` accepts both; `render` writes `bookshelf:`), `LEGACY_FORMAT_KEY`.
 
 Dates: `entry_date(captured_at, tz="America/Chicago", rollover_hour=4) -> date`,
 `default_title(d)`.
@@ -75,7 +79,8 @@ Models (pydantic):
 * `DayFacts`: `mood`, `mood_score` (1–5), `city`, `weather`, `people`, `meals`, `activities`,
   `family_events`, `highlights`. Also the output schema of fact extraction. `FACT_FIELDS`.
 * `FrontMatter(DayFacts)`: + `date`, `audio`, `photos`, `prompt_version`, `models_used`
-  (task → model), `generated_at`, `generated_hash`, `lifelog_format`; unknown keys preserved.
+  (task → model), `generated_at`, `generated_hash`, `bookshelf_format` (read from
+  `lifelog_format` in files written before the rename); unknown keys preserved.
   `.facts() -> DayFacts`.
 * `Capture`: `id`, `kind: "recording" | "note"`, `captured_at` (aware), `text`, `audio`,
   `photos`, `location`; `Capture.make_id(kind, captured_at)`.
@@ -92,9 +97,10 @@ Functions:
 * `merge_generation_additive(day, *, facts, journal_addendum=None, addendum_heading=None,
   prompt_version=None, models_used=None, generated_at=None) -> DayFile`
 
-## Index: `lifelog.index.schema`
+## Index: `bookshelf.index.schema`
 
-Details: `docs/index-schema.md`.
+Details: `docs/index-schema.md`. Shared rather than inside `bookshelf/bookmarks/`: Bookmarks
+writes the index, the Reading Lamp reads it.
 
 * `connect(path, embedding_dimension, *, embedding_model=None, read_only=False) -> sqlite3.Connection`
   (loads sqlite-vec, creates schema, WAL, foreign keys, `sqlite3.Row`)
@@ -104,38 +110,38 @@ Details: `docs/index-schema.md`.
 * `SCHEMA_VERSION`, `META_*` keys, `DERIVED_TABLES`, `PRESERVED_TABLES`,
   `EmbeddingDimensionMismatch`
 
-## Embeddings: `lifelog.embeddings`
+## Embeddings: `bookshelf.embeddings`
 
 `embed_texts(texts, settings, batch_size=64) -> list[list[float]]` (LiteLLM, or deterministic
-`fake_embedding` when `embedding_model == "fake"`). The indexer embeds passages and the MCP
-server embeds queries with this same function.
+`fake_embedding` when `embedding_model == "fake"`). Bookmarks embeds passages and the Reading
+Lamp embeds queries with this same function.
 
-## Indexer nudge: `lifelog.nudge`
+## Bookmarks nudge: `bookshelf.nudge`
 
 `nudge_indexer(settings, paths=(), *, timeout=2.0, client=None) -> bool` (never raises).
-Wire contract: `POST {LIFELOG_INDEXER_NUDGE_URL}` with JSON `{"paths": [...]}`; the indexer
+Wire contract: `POST {BOOKSHELF_INDEXER_NUDGE_URL}` with JSON `{"paths": [...]}`; Bookmarks
 answers `202 Accepted` and syncs soon.
 
 ## Entry points
 
-| Script | Target | Status |
+| Script | Target | Docker service |
 |---|---|---|
-| `lifelog-api` | `lifelog.api.__main__:main` (uvicorn on `lifelog.api.app:app`; `create_app(settings)`; `docs/recording-api.md`) | done |
-| `lifelog-indexer` | `lifelog.indexer.__main__:main` (`run` \| `sync` \| `rebuild` \| `backup`; `docs/indexer.md`) | done |
-| `lifelog-mcp` | `lifelog.mcp_server.__main__:main` (`--transport stdio`, `reset-oauth`; `docs/mcp-server.md`) | done |
-| `lifelog-gdrive-login` | `lifelog.storage.gdrive:login_main` | done |
+| `bookshelf-typewriter` | `bookshelf.typewriter.__main__:main` (uvicorn on `bookshelf.typewriter.app:app`; `create_app(settings)`; `docs/typewriter.md`) | `typewriter` |
+| `bookshelf-bookmarks` | `bookshelf.bookmarks.__main__:main` (`run` \| `sync` \| `rebuild` \| `backup`; `docs/bookmarks.md`) | `bookmarks` |
+| `bookshelf-reading-lamp` | `bookshelf.reading_lamp.__main__:main` (`--transport stdio`, `reset-oauth`; `docs/reading-lamp.md`) | `reading-lamp` |
+| `bookshelf-drive-login` | `bookshelf.books.storage.gdrive:login_main` (one-time Google Drive sign-in) | run by hand |
 
 ## Files under `_system/`
 
 Everything here lives in the owner's storage, never in the repository. `classify_path` returns
-`"system"` for all of it; the indexer reads only `generated/`.
+`"system"` for all of it; Bookmarks reads only `generated/`.
 
 | Path | Writer | Content |
 |---|---|---|
-| `_system/inbox/<capture id>/` | recording API | raw uploads (`audio.<ext>`, `photo-NN.<ext>`, `manifest.json` last) waiting to be processed; deleted when the capture is `done` |
-| `_system/captures/<capture id>.json` | recording API | capture status (`queued` / `processing` / `done` / `failed`), no journal content; kept for `GET /captures/{id}` |
-| `_system/generated/YYYY/MM/YYYY-MM-DD.md` | recording API | exact day file as last written by the system (`generated_snapshot_path`); written right after every day-file write, same text and `generated_at` |
-| `_system/activity/YYYY/MM.jsonl` | recording API | activity records, one JSON line per processing attempt: models, prompt versions, per-step time/cost, errors; no journal content |
-| `_system/feedback/YYYY/MM/<UTC timestamp>-<id>.json` | MCP server | copy of each `feedback` call (also a row in the index) |
-| `_system/index-backup/lifelog.sqlite` | indexer | daily index backup (includes `feedback` and `edit_signals`) |
+| `_system/inbox/<capture id>/` | Typewriter | raw uploads (`audio.<ext>`, `photo-NN.<ext>`, `manifest.json` last) waiting to be processed; deleted when the capture is `done` |
+| `_system/captures/<capture id>.json` | Typewriter | capture status (`queued` / `processing` / `done` / `failed`), no journal content; kept for `GET /captures/{id}` |
+| `_system/generated/YYYY/MM/YYYY-MM-DD.md` | Typewriter | exact day file as last written by the system (`generated_snapshot_path`); written right after every day-file write, same text and `generated_at` |
+| `_system/activity/YYYY/MM.jsonl` | Typewriter | activity records, one JSON line per processing attempt: models, prompt versions, per-step time/cost, errors; no journal content |
+| `_system/feedback/YYYY/MM/<UTC timestamp>-<id>.json` | Reading Lamp | copy of each `feedback` call (also a row in the index) |
+| `_system/index-backup/bookshelf.sqlite` | Bookmarks | daily index backup (includes `feedback` and `edit_signals`) |
 | `_system/reports/` | weekly report job (later) | self-improvement reports |

@@ -6,28 +6,28 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from lifelog.config import Settings
+from bookshelf.config import Settings
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_defaults_without_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for key in list(__import__("os").environ):
-        if key.startswith("LIFELOG_"):
+        if key.startswith("BOOKSHELF_"):
             monkeypatch.delenv(key)
     s = Settings(_env_file=None)
     assert s.timezone == "America/Chicago"
     assert s.day_rollover_hour == 4
     assert s.storage_backend == "local"
-    assert s.gdrive_root_folder == "LifeLog"
+    assert s.gdrive_root_folder == "Bookshelf"
     assert s.embedding_dimension == 1536
     assert s.tz.key == "America/Chicago"
 
 
 def test_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LIFELOG_STORAGE_BACKEND", "gdrive")
-    monkeypatch.setenv("LIFELOG_DAY_ROLLOVER_HOUR", "5")
-    monkeypatch.setenv("LIFELOG_API_TOKEN", "tok-4f9a2c")
+    monkeypatch.setenv("BOOKSHELF_STORAGE_BACKEND", "gdrive")
+    monkeypatch.setenv("BOOKSHELF_DAY_ROLLOVER_HOUR", "5")
+    monkeypatch.setenv("BOOKSHELF_API_TOKEN", "tok-4f9a2c")
     s = Settings(_env_file=None)
     assert s.storage_backend == "gdrive"
     assert s.day_rollover_hour == 5
@@ -46,7 +46,7 @@ def test_validation() -> None:
 
 def test_env_example_documents_every_setting() -> None:
     text = (ROOT / ".env.example").read_text()
-    documented = set(re.findall(r"^#?\s*(LIFELOG_[A-Z0-9_]+)=", text, re.MULTILINE))
-    expected = {f"LIFELOG_{name.upper()}" for name in Settings.model_fields}
+    documented = set(re.findall(r"^#?\s*(BOOKSHELF_[A-Z0-9_]+)=", text, re.MULTILINE))
+    expected = {f"BOOKSHELF_{name.upper()}" for name in Settings.model_fields}
     assert expected - documented == set(), "add these to .env.example"
     assert documented - expected == set(), "remove these from .env.example"
