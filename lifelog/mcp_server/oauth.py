@@ -1,0 +1,426 @@
+"""Minimal single-owner OAuth 2.1 authorization server for phone AI apps (Claude, ChatGPT).
+
+Built on the MCP SDK's auth support, which serves the endpoints (``/.well-known/...``,
+``/register``, ``/authorize``, ``/token``, ``/revoke``) and checks PKCE, redirect URIs and client
+secrets. This module is the storage and the one human step: ``/authorize`` redirects to a
+password page (:data:`LOGIN_PATH`); the owner types ``LIFELOG_MCP_OWNER_PASSWORD`` and is sent
+back to the AI app with an authorization code.
+
+Registered clients and tokens are kept in a small JSON file next to the index
+(:func:`oauth_state_path`), with tokens stored only as SHA-256 hashes. Authorization codes and
+pending sign-ins live in memory (they last minutes).
+See ``docs/decisions/0032-single-owner-oauth.md``.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import html
+import json
+import logging
+import os
+import secrets
+import threading
+import time
+from collections import deque
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import anyio
+from mcp.server.auth.provider import (
+    AccessToken,
+    AuthorizationCode,
+    AuthorizationParams,
+    AuthorizeError,
+    RefreshToken,
+    TokenError,
+    construct_redirect_uri,
+)
+from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+from pydantic import AnyUrl
+from starlette.requests import Request
+from starlette.responses import HTMLResponse, RedirectResponse, Response
+
+from lifelog.config import Settings
+
+logger = logging.getLogger(__name__)
+
+LOGIN_PATH = "/oauth/login"
+STATE_FILE_NAME = "mcp-oauth-state.json"
+
+ACCESS_TOKEN_TTL = 60 * 60  # 1 hour
+REFRESH_TOKEN_TTL = 90 * 24 * 60 * 60  # 90 days; refreshing rotates it
+AUTH_CODE_TTL = 5 * 60
+LOGIN_TTL = 10 * 60
+MAX_CLIENTS = 50
+MAX_PENDING = 100
+MAX_FAILURES = 5
+FAILURE_WINDOW = 15 * 60
+FAILURE_DELAY = 0.5
+
+
+def oauth_state_path(settings: Settings) -> Path:
+    """OAuth clients/tokens file: next to the index, on the server's disk (not in storage)."""
+    return Path(settings.index_path).parent / STATE_FILE_NAME
+
+
+def _hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _norm_url(url: str) -> str:
+    return url.rstrip("/").lower()
+
+
+@dataclass
+class _PendingLogin:
+    client_id: str
+    client_name: str | None
+    params: AuthorizationParams
+    expires_at: float
+
+
+class OwnerOAuthProvider:
+    """``OAuthAuthorizationServerProvider`` for one owner who signs in with a password."""
+
+    def __init__(
+        self,
+        *,
+        issuer_url: str,
+        resource_url: str,
+        owner_password: str,
+        state_path: Path,
+        static_token: str | None = None,
+        scope: str = "lifelog",
+    ) -> None:
+        self.issuer_url = issuer_url.rstrip("/")
+        self.resource_url = resource_url
+        self.scope = scope
+        self._password = owner_password.encode()
+        self._static_token = (static_token or "").encode()
+        self._state_path = Path(state_path)
+        self._lock = threading.Lock()
+        self._clients: dict[str, dict[str, Any]] = {}
+        self._access: dict[str, dict[str, Any]] = {}
+        self._refresh: dict[str, dict[str, Any]] = {}
+        self._pending: dict[str, _PendingLogin] = {}
+        self._codes: dict[str, AuthorizationCode] = {}
+        self._failures: deque[float] = deque()
+        self._load()
+
+    @property
+    def login_url(self) -> str:
+        return self.issuer_url + LOGIN_PATH
+
+    # --- persistence ------------------------------------------------------------------------
+
+    def _load(self) -> None:
+        if not self._state_path.is_file():
+            return
+        try:
+            data = json.loads(self._state_path.read_text(encoding="utf-8"))
+            self._clients = dict(data.get("clients", {}))
+            self._access = dict(data.get("access_tokens", {}))
+            self._refresh = dict(data.get("refresh_tokens", {}))
+        except (OSError, ValueError, AttributeError):
+            logger.warning(
+                "OAuth state file %s is unreadable; starting empty (AI apps must reconnect)",
+                self._state_path,
+                exc_info=True,
+            )
+
+    def _save(self) -> None:
+        now = time.time()
+        self._access = {k: v for k, v in self._access.items() if v["expires_at"] > now}
+        self._refresh = {k: v for k, v in self._refresh.items() if v["expires_at"] > now}
+        data = {
+            "version": 1,
+            "clients": self._clients,
+            "access_tokens": self._access,
+            "refresh_tokens": self._refresh,
+        }
+        with self._lock:
+            self._state_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self._state_path.with_suffix(".tmp")
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=1, sort_keys=True)
+            os.replace(tmp, self._state_path)
+
+    # --- clients ----------------------------------------------------------------------------
+
+    async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
+        raw = self._clients.get(client_id)
+        return None if raw is None else OAuthClientInformationFull.model_validate(raw)
+
+    async def register_client(self, client_info: OAuthClientInformationFull) -> None:
+        scopes = (client_info.scope or "").split()
+        if self.scope not in scopes:
+            client_info.scope = " ".join([*scopes, self.scope])
+        self._clients[client_info.client_id] = client_info.model_dump(mode="json")
+        if len(self._clients) > MAX_CLIENTS:
+            oldest = sorted(
+                self._clients, key=lambda c: self._clients[c].get("client_id_issued_at") or 0
+            )
+            for client_id in oldest[: len(self._clients) - MAX_CLIENTS]:
+                self._forget_client(client_id)
+        logger.info("OAuth client registered: %s", client_info.client_name or "(unnamed)")
+        self._save()
+
+    def _forget_client(self, client_id: str) -> None:
+        self._clients.pop(client_id, None)
+        self._access = {k: v for k, v in self._access.items() if v["client_id"] != client_id}
+        self._refresh = {k: v for k, v in self._refresh.items() if v["client_id"] != client_id}
+
+    # --- authorization ----------------------------------------------------------------------
+
+    async def authorize(
+        self, client: OAuthClientInformationFull, params: AuthorizationParams
+    ) -> str:
+        if params.resource and _norm_url(params.resource) not in {
+            _norm_url(self.resource_url),
+            _norm_url(self.issuer_url),
+        }:
+            raise AuthorizeError("invalid_target", "unknown resource for this server")
+        now = time.time()
+        self._pending = {k: v for k, v in self._pending.items() if v.expires_at > now}
+        if len(self._pending) >= MAX_PENDING:
+            raise AuthorizeError("temporarily_unavailable", "too many pending sign-ins")
+        request_id = secrets.token_urlsafe(32)
+        self._pending[request_id] = _PendingLogin(
+            client_id=client.client_id,
+            client_name=client.client_name,
+            params=params,
+            expires_at=now + LOGIN_TTL,
+        )
+        return f"{self.login_url}?request={request_id}"
+
+    async def handle_login(self, request: Request) -> Response:
+        """``GET`` shows the password page; ``POST`` checks it and redirects to the AI app."""
+        if request.method == "GET":
+            request_id = request.query_params.get("request", "")
+            pending = self._pending_login(request_id)
+            if pending is None:
+                return _expired_page()
+            return _login_page(request_id, pending)
+
+        form = await request.form()
+        request_id = str(form.get("request", ""))
+        pending = self._pending_login(request_id)
+        if pending is None:
+            return _expired_page()
+        redirect_uri = str(pending.params.redirect_uri)
+        state = pending.params.state
+
+        if form.get("action") == "deny":
+            self._pending.pop(request_id, None)
+            return _redirect(
+                construct_redirect_uri(
+                    redirect_uri,
+                    error="access_denied",
+                    error_description="The owner declined",
+                    state=state,
+                )
+            )
+
+        now = time.time()
+        while self._failures and self._failures[0] < now - FAILURE_WINDOW:
+            self._failures.popleft()
+        if len(self._failures) >= MAX_FAILURES:
+            logger.warning("OAuth sign-in locked after %d failed attempts", MAX_FAILURES)
+            return _login_page(
+                request_id,
+                pending,
+                error="Too many wrong passwords. Wait 15 minutes and try again.",
+                status_code=429,
+            )
+        password = str(form.get("password", "")).encode()
+        if not hmac.compare_digest(password, self._password):
+            self._failures.append(now)
+            logger.warning("OAuth sign-in: wrong owner password")
+            await anyio.sleep(FAILURE_DELAY)
+            return _login_page(request_id, pending, error="Wrong password.", status_code=401)
+
+        self._pending.pop(request_id, None)
+        code = secrets.token_urlsafe(32)
+        self._codes = {k: v for k, v in self._codes.items() if v.expires_at > now}
+        self._codes[code] = AuthorizationCode(
+            code=code,
+            scopes=[self.scope],
+            expires_at=now + AUTH_CODE_TTL,
+            client_id=pending.client_id,
+            code_challenge=pending.params.code_challenge,
+            redirect_uri=pending.params.redirect_uri,
+            redirect_uri_provided_explicitly=pending.params.redirect_uri_provided_explicitly,
+            resource=self.resource_url,
+            subject="owner",
+        )
+        logger.info("OAuth sign-in approved for %s", pending.client_name or "(unnamed client)")
+        return _redirect(construct_redirect_uri(redirect_uri, code=code, state=state))
+
+    def _pending_login(self, request_id: str) -> _PendingLogin | None:
+        pending = self._pending.get(request_id) if request_id else None
+        if pending is None or pending.expires_at < time.time():
+            return None
+        return pending
+
+    async def load_authorization_code(
+        self, client: OAuthClientInformationFull, authorization_code: str
+    ) -> AuthorizationCode | None:
+        code = self._codes.get(authorization_code)
+        if code is None or code.client_id != client.client_id:
+            return None
+        return code
+
+    async def exchange_authorization_code(
+        self, client: OAuthClientInformationFull, authorization_code: AuthorizationCode
+    ) -> OAuthToken:
+        if self._codes.pop(authorization_code.code, None) is None:
+            raise TokenError("invalid_grant", "authorization code already used")
+        return self._issue(client.client_id, authorization_code.scopes)
+
+    # --- tokens -----------------------------------------------------------------------------
+
+    def _issue(self, client_id: str, scopes: list[str]) -> OAuthToken:
+        now = int(time.time())
+        access, refresh = secrets.token_urlsafe(32), secrets.token_urlsafe(48)
+        access_hash, refresh_hash = _hash(access), _hash(refresh)
+        common = {"client_id": client_id, "scopes": scopes, "resource": self.resource_url}
+        self._access[access_hash] = {
+            **common,
+            "expires_at": now + ACCESS_TOKEN_TTL,
+            "refresh": refresh_hash,
+        }
+        self._refresh[refresh_hash] = {
+            **common,
+            "expires_at": now + REFRESH_TOKEN_TTL,
+            "access": access_hash,
+        }
+        self._save()
+        return OAuthToken(
+            access_token=access,
+            expires_in=ACCESS_TOKEN_TTL,
+            scope=" ".join(scopes),
+            refresh_token=refresh,
+        )
+
+    async def load_access_token(self, token: str) -> AccessToken | None:
+        if self._static_token and hmac.compare_digest(self._static_token, token.encode()):
+            return AccessToken(
+                token=token,
+                client_id="static-token",
+                scopes=[self.scope],
+                subject="owner",
+                resource=self.resource_url,
+            )
+        info = self._access.get(_hash(token))
+        if info is None or info["expires_at"] < time.time():
+            return None
+        return AccessToken(
+            token=token,
+            client_id=info["client_id"],
+            scopes=info["scopes"],
+            expires_at=info["expires_at"],
+            resource=info["resource"],
+            subject="owner",
+        )
+
+    async def load_refresh_token(
+        self, client: OAuthClientInformationFull, refresh_token: str
+    ) -> RefreshToken | None:
+        info = self._refresh.get(_hash(refresh_token))
+        if info is None or info["client_id"] != client.client_id:
+            return None
+        if info["expires_at"] < time.time():
+            return None
+        return RefreshToken(
+            token=refresh_token,
+            client_id=info["client_id"],
+            scopes=info["scopes"],
+            expires_at=info["expires_at"],
+            resource=info["resource"],
+            subject="owner",
+        )
+
+    async def exchange_refresh_token(
+        self,
+        client: OAuthClientInformationFull,
+        refresh_token: RefreshToken,
+        scopes: list[str],
+    ) -> OAuthToken:
+        info = self._refresh.pop(_hash(refresh_token.token), None)
+        if info is None:
+            raise TokenError("invalid_grant", "refresh token already used")
+        self._access.pop(info.get("access", ""), None)
+        return self._issue(client.client_id, scopes or info["scopes"])
+
+    async def revoke_token(self, token: AccessToken | RefreshToken) -> None:
+        token_hash = _hash(token.token)
+        access = self._access.pop(token_hash, None)
+        refresh = self._refresh.pop(token_hash, None)
+        if access:
+            self._refresh.pop(access.get("refresh", ""), None)
+        if refresh:
+            self._access.pop(refresh.get("access", ""), None)
+        if access or refresh:
+            self._save()
+
+
+# --- HTML -----------------------------------------------------------------------------------
+
+_PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LifeLog sign-in</title>
+<style>
+body{{font-family:-apple-system,system-ui,sans-serif;max-width:26rem;margin:3rem auto;
+padding:0 1rem;color:#222}}
+h1{{font-size:1.4rem}} .muted{{color:#666;font-size:.9rem}} .error{{color:#b00020}}
+input[type=password]{{width:100%;font-size:1.1rem;padding:.6rem;box-sizing:border-box;
+margin:.5rem 0 1rem}}
+button{{font-size:1rem;padding:.6rem 1.2rem;margin-right:.5rem}}
+</style></head><body>
+{body}
+</body></html>"""
+
+_SECURITY_HEADERS = {
+    "Cache-Control": "no-store",
+    "X-Frame-Options": "DENY",
+    # No form-action: browsers apply it to the redirect back to the AI app's callback.
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; "
+    "frame-ancestors 'none'",
+    "Referrer-Policy": "no-referrer",
+}
+
+
+def _redirect(url: str) -> Response:
+    return RedirectResponse(url, status_code=302, headers={"Cache-Control": "no-store"})
+
+
+def _login_page(
+    request_id: str, pending: _PendingLogin, *, error: str | None = None, status_code: int = 200
+) -> HTMLResponse:
+    client = html.escape(pending.client_name or "An AI app")
+    target = html.escape(AnyUrl(str(pending.params.redirect_uri)).host or "")
+    body = f"""<h1>Connect to your LifeLog</h1>
+<p><strong>{client}</strong> wants to read your journal.</p>
+<p class="muted">After you sign in you will be sent back to <strong>{target}</strong>.</p>
+{f'<p class="error">{html.escape(error)}</p>' if error else ""}
+<form method="post" action="{LOGIN_PATH}">
+<input type="hidden" name="request" value="{html.escape(request_id)}">
+<label for="password">Owner password</label>
+<input id="password" type="password" name="password" autocomplete="current-password" autofocus>
+<button type="submit" name="action" value="approve">Allow</button>
+<button type="submit" name="action" value="deny">Deny</button>
+</form>"""
+    return HTMLResponse(_PAGE.format(body=body), status_code=status_code, headers=_SECURITY_HEADERS)
+
+
+def _expired_page() -> HTMLResponse:
+    body = (
+        "<h1>Sign-in link expired</h1><p>This sign-in link is no longer valid. "
+        "Start connecting again from your AI app.</p>"
+    )
+    return HTMLResponse(_PAGE.format(body=body), status_code=400, headers=_SECURITY_HEADERS)
