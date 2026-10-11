@@ -1,0 +1,9 @@
+# Lightsail override: the Prism and the Lens listen on localhost only; Tailscale publishes
+# them (tailscale.sh). Spectrum stays internal as in docker-compose.yml.
+services:
+  prism:
+    ports: !override
+      - "127.0.0.1:8000:8000"
+  lens:
+    ports: !override
+      - "127.0.0.1:8002:8002"

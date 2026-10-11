@@ -52,3 +52,4 @@ Template:
 | [0032](0032-single-owner-oauth.md) | MCP: built-in single-owner OAuth with a password page |
 | [0033](0033-mcp-reads-and-feedback-writes.md) | MCP: per-call read-only index, `get_day` from storage, dual feedback write |
 | [0040](0040-facts-in-day-file-body-and-family-sections.md) | Day file format 2: facts in an "At a glance" section, places, a block per family member (`LUMEN_FAMILY`) |
+| [0041](0041-aws-lightsail-with-tailscale.md) | Hosting: one AWS Lightsail instance, Prism on the tailnet, Lens public through Tailscale Funnel |
