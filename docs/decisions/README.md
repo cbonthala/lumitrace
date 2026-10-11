@@ -34,6 +34,7 @@ Template:
 | [0004](0004-mcp-instead-of-chat-app.md) | MCP instead of a custom chat app |
 | [0005](0005-config-driven-providers-litellm.md) | Config-driven providers via LiteLLM |
 | [0006](0006-proton-drive-e2e-later.md) | Proton Drive / end-to-end encryption later |
+| [0007](0007-plain-english-test-catalog.md) | Plain-English test catalog, kept complete by a test |
 | [0010](0010-durable-inbox-and-background-worker.md) | Recording API: durable inbox in storage, one worker, client capture ids |
 | [0011](0011-save-transcript-first-then-generate.md) | Recording API: save transcript first, full vs additive generation, re-check edits |
 | [0012](0012-activity-records-monthly-jsonl.md) | Recording API: activity records as monthly JSONL without content |

@@ -106,4 +106,5 @@ on the server's disk and is backed up to your Drive. Logs never contain journal 
 | Day file format | `docs/day-file-format.md` |
 | Why things are the way they are | `docs/decisions/` |
 | Maintenance, first run | `docs/runbook.md` |
+| What each test checks, in plain English | `docs/test-cases.md` |
 | What we learned | `docs/learnings.md`, `CHANGELOG.md` |

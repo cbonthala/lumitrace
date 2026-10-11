@@ -7,6 +7,13 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- `docs/test-cases.md`: a plain-English catalog of every test, grouped by component and
+  feature, with an end-to-end story, a "covered / not covered" line per component and each
+  test's name for tracing. `tests/test_docs_test_cases.py` fails when a test is missing from
+  the catalog or the catalog names a test that no longer exists. AGENTS.md rule 8 requires
+  describing every new or changed test; linked from README and `docs/architecture.md`;
+  decision 0007.
+
 ### Recording API
 
 ### Indexer
