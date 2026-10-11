@@ -3,7 +3,7 @@
 Paths
 -----
 All paths are *relative to the LifeLog root folder* and use forward slashes, for example
-``2026/10/2026-10-10/2026-10-10.md`` or ``_system/runs/2026/10/....json``. The root itself is
+``2026/10/2026-10-10/2026-10-10.md`` or ``_system/activity/2026/10.jsonl``. The root itself is
 ``Settings.local_root`` for the local backend and the Drive folder named
 ``Settings.gdrive_root_folder`` for Google Drive. Use :func:`normalize_path` to validate a path;
 backends call it on every input. Hidden entries (any path component starting with ``.``, such as

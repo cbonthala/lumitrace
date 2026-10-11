@@ -9,13 +9,16 @@ Record your day on an iPhone; an API turns it into one Markdown journal file per
 Drive; read it in Obsidian; ask questions from any AI app through an MCP server. Three Python
 programs share one package (`lifelog/`) and one Docker image:
 
-| Program | Entry point | Package | Purpose |
-|---|---|---|---|
-| Recording API | `lifelog-api` | `lifelog/api/` | Receive audio/photos/notes, transcribe, extract facts, write the day file, nudge the indexer |
-| Indexer | `lifelog-indexer` | `lifelog/indexer/` | Watch storage for changes, build the SQLite index, record edit signals, rebuild |
-| MCP server | `lifelog-mcp` | `lifelog/mcp_server/` | Tools for AI apps: `search`, `get_day`, `query_facts`, `on_this_day`, `feedback` |
+| Program | Entry point | Package | Purpose | Status | Reference |
+|---|---|---|---|---|---|
+| Recording API | `lifelog-api` | `lifelog/api/`, `lifelog/pipeline/` | Receive audio/photos/notes, transcribe, extract facts, write the day file, nudge the indexer | implemented (0.1.0) | `docs/recording-api.md`, `docs/iphone-shortcuts.md` |
+| Indexer | `lifelog-indexer` | `lifelog/indexer/` | Watch storage for changes, build the SQLite index, record edit signals, rebuild | implemented (0.1.0) | `docs/indexer.md` |
+| MCP server | `lifelog-mcp` | `lifelog/mcp_server/` | Tools for AI apps: `search`, `get_day`, `query_facts`, `on_this_day`, `feedback` | implemented (0.1.0) | `docs/mcp-server.md` |
 
 Data flow: Phone → Recording API → Storage (Drive) → Indexer → SQLite index ← MCP server ← AI app.
+`tests/e2e/test_full_flow.py` exercises the whole chain offline; keep it green when you change
+any component. Not yet verified with real providers, real Google Drive, iPhone Shortcuts on a
+device or the Claude/ChatGPT OAuth connectors (see "Not verified yet" in the component docs).
 
 ## Key rules
 
@@ -50,6 +53,16 @@ their docs, and the tests. Full summary in `docs/contracts.md`.
 | `lifelog/embeddings.py` | `embed_texts()`; indexer and MCP must embed the same way |
 | `lifelog/nudge.py` | `nudge_indexer()`; the indexer serves `POST /nudge` |
 
+Cross-component rules that are not visible in any one module:
+
+* Every time the recording API writes a day file it writes the identical text to
+  `generated_snapshot_path(date)` right after (same `generated_at`). The indexer's edit signals
+  depend on this (`docs/indexer.md` → Edit signals).
+* The indexer is the only writer of the derived index tables and `edit_signals`; the MCP server
+  only writes `feedback`. The `_system/` folders and their writers are listed in
+  `docs/contracts.md`.
+* The indexer port (8001) is never published outside the Docker network (`/nudge` has no auth).
+
 ## Module ownership (parallel work streams)
 
 | Area | Owns | Docs it maintains |
@@ -58,6 +71,7 @@ their docs, and the tests. Full summary in `docs/contracts.md`.
 | recording-api | `lifelog/api/**`, `lifelog/pipeline/**` (new: STT, LLM, audio, photos), `prompts/**`, `tests/api/**` | `docs/recording-api.md`, ADRs 0010–0019 |
 | indexer | `lifelog/indexer/**`, `tests/indexer/**` | `docs/indexer.md`, ADRs 0020–0029 |
 | mcp | `lifelog/mcp_server/**`, `tests/mcp_server/**` | `docs/mcp-server.md`, ADRs 0030–0039 |
+| integration | `tests/e2e/**` | `docs/architecture.md` (with foundation) |
 
 Shared files everyone edits (keep edits inside your own subsection to avoid merge conflicts):
 `CHANGELOG.md`, `docs/learnings.md`, `docs/runbook.md`. If you need a new dependency or a
@@ -90,6 +104,7 @@ export UV_PYTHON_INSTALL_DIR=$PWD/.tools/python UV_CACHE_DIR=$PWD/.tools/cache
 .tools/bin/uv sync
 
 .tools/bin/uv run pytest            # all tests (offline)
+.tools/bin/uv run pytest tests/e2e  # the end-to-end flow only
 .tools/bin/uv run ruff check .      # lint
 .tools/bin/uv run ruff format .     # format
 
