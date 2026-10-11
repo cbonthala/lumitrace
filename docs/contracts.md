@@ -120,16 +120,22 @@ answers `202 Accepted` and syncs soon.
 
 | Script | Target | Status |
 |---|---|---|
-| `lifelog-api` | `lifelog.api.__main__:main` (uvicorn on `lifelog.api.app:app`; `create_app(settings)`) | `/health` only |
-| `lifelog-indexer` | `lifelog.indexer.__main__:main` (`run` \| `sync` \| `rebuild`) | placeholder |
-| `lifelog-mcp` | `lifelog.mcp_server.__main__:main` | placeholder `ping` tool |
+| `lifelog-api` | `lifelog.api.__main__:main` (uvicorn on `lifelog.api.app:app`; `create_app(settings)`; `docs/recording-api.md`) | done |
+| `lifelog-indexer` | `lifelog.indexer.__main__:main` (`run` \| `sync` \| `rebuild` \| `backup`; `docs/indexer.md`) | done |
+| `lifelog-mcp` | `lifelog.mcp_server.__main__:main` (`--transport stdio`, `reset-oauth`; `docs/mcp-server.md`) | done |
 | `lifelog-gdrive-login` | `lifelog.storage.gdrive:login_main` | done |
 
 ## Files under `_system/`
 
+Everything here lives in the owner's storage, never in the repository. `classify_path` returns
+`"system"` for all of it; the indexer reads only `generated/`.
+
 | Path | Writer | Content |
 |---|---|---|
-| `_system/generated/YYYY/MM/YYYY-MM-DD.md` | recording API | exact day file as last written by the system (`generated_snapshot_path`) |
-| `_system/runs/YYYY/MM/<timestamp>-<capture id>.json` | recording API | activity record: models, prompt version, per-step time/cost, errors |
-| `_system/feedback/YYYY/MM/<timestamp>-<id>.json` | MCP server | copy of each feedback row |
-| `_system/index-backup/lifelog.sqlite` | indexer | daily index backup |
+| `_system/inbox/<capture id>/` | recording API | raw uploads (`audio.<ext>`, `photo-NN.<ext>`, `manifest.json` last) waiting to be processed; deleted when the capture is `done` |
+| `_system/captures/<capture id>.json` | recording API | capture status (`queued` / `processing` / `done` / `failed`), no journal content; kept for `GET /captures/{id}` |
+| `_system/generated/YYYY/MM/YYYY-MM-DD.md` | recording API | exact day file as last written by the system (`generated_snapshot_path`); written right after every day-file write, same text and `generated_at` |
+| `_system/activity/YYYY/MM.jsonl` | recording API | activity records, one JSON line per processing attempt: models, prompt versions, per-step time/cost, errors; no journal content |
+| `_system/feedback/YYYY/MM/<UTC timestamp>-<id>.json` | MCP server | copy of each `feedback` call (also a row in the index) |
+| `_system/index-backup/lifelog.sqlite` | indexer | daily index backup (includes `feedback` and `edit_signals`) |
+| `_system/reports/` | weekly report job (later) | self-improvement reports |

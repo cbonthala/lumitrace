@@ -21,6 +21,8 @@ services:
   indexer:
     <<: *lifelog
     command: ["lifelog-indexer", "run"]
+    # Internal only: POST /nudge has no auth. Never add `ports:` here; the api service reaches it
+    # as http://indexer:8001 on the Compose network.
     expose:
       - "8001"
 
