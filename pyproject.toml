@@ -1,0 +1,63 @@
+[project]
+name = "lifelog"
+version = "0.1.0"
+description = "Voice journal: record your day, get a Markdown journal in Google Drive, ask questions through MCP."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "Proprietary" }
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "pyyaml>=6.0",
+    "httpx>=0.27",
+    "litellm>=1.50",
+    "google-api-python-client>=2.130",
+    "google-auth>=2.30",
+    "google-auth-oauthlib>=1.2",
+    "requests>=2.31",
+    "sqlite-vec>=0.1.6",
+    "mcp>=1.2",
+    "pillow>=10.4",
+    "pillow-heif>=0.18",
+]
+
+[project.scripts]
+lifelog-api = "lifelog.api.__main__:main"
+lifelog-indexer = "lifelog.indexer.__main__:main"
+lifelog-mcp = "lifelog.mcp_server.__main__:main"
+lifelog-gdrive-login = "lifelog.storage.gdrive:login_main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["lifelog"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".tools", ".venv", "data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "network: test needs network access or real credentials (skipped by default)",
+]

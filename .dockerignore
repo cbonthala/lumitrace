@@ -1,0 +1,13 @@
+.git
+.tools
+.venv
+.env
+.env.*
+data
+secrets
+tests
+docs
+**/__pycache__
+.pytest_cache
+.ruff_cache
+.tmp-skill
