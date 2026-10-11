@@ -85,6 +85,10 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
   `###` heading). `render_facts_section(..., include_empty=False)` gives the view without
   `none` lines.
 - Index schema version 2: new tables `places` and `family_facts`, `family_events` removed.
+- **AWS Lightsail deployment** (decision 0041): `deploy/lightsail/` scripts create a 2 GB
+  instance in `us-east-2` (SSH key, daily snapshots, static IP, SSH-only firewall), deploy the
+  committed code with ports bound to localhost, and publish the Prism on the tailnet and the
+  Lens through Tailscale Funnel. Steps in `docs/runbook.md` → *Deploying on AWS Lightsail*.
 
 ### Prism (recording API)
 

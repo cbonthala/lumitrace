@@ -24,7 +24,8 @@ and never paste real tokens or personal content here.
    To try everything first without any provider, use `fake` for all of them.
    Set `LUMEN_FAMILY` to the family members who should get their own block under Family in each
    day file (`Maya, Leo`); others only appear under People.
-5. **Deploy:** `docker compose up -d --build`. Check `curl localhost:8000/health` and
+5. **Deploy:** on AWS, follow *Deploying on AWS Lightsail* below; elsewhere
+   `docker compose up -d --build`. Check `curl localhost:8000/health` and
    `curl localhost:8002/health`; Spectrum has no published port (`docker compose logs
    spectrum`). Put HTTPS in front of the Prism (Tailscale or a reverse proxy,
    `docs/flash.md`) and of the Lens (`docs/lens.md`); in oauth mode set
@@ -106,6 +107,45 @@ and never paste real tokens or personal content here.
 3. When `/health` (or the log) shows the rebuild finished, `docker compose up -d lens` so it embeds
    queries with the same model. Until then, search fails (new dimension) or returns poor results
    (same dimension, different model).
+
+## Deploying on AWS Lightsail (with Tailscale)
+
+One 2 GB Lightsail instance in `us-east-2` runs the three services with Docker Compose
+(decision 0041). Scripts in `deploy/lightsail/` run from your computer with the AWS CLI; AI and
+speech providers stay external (their keys only in the server's `.env`).
+
+1. **AWS access:** in IAM create a user or SSO permission set with
+   `deploy/lightsail/iam-policy.json`, then on your computer `aws configure sso` (or
+   `aws configure`) and `export AWS_PROFILE=<profile>`. Never paste keys into chats or the repo.
+2. **Create the server:** `deploy/lightsail/provision.sh`. It creates (if missing) the SSH key
+   `~/.ssh/lumen-lightsail`, the instance `lumen` (Ubuntu 24.04, daily automatic snapshots), the
+   static IP `lumen-ip`, and a firewall that only allows SSH from your current IP. Re-run it if
+   your IP changes. First boot installs Docker, Tailscale and a swap file (a few minutes).
+3. **Production settings:** write a local `.env.production` (git-ignored) from `.env.example`:
+   real providers, `LUMEN_API_TOKEN`, `LUMEN_MCP_AUTH_TOKEN` and `LUMEN_MCP_OWNER_PASSWORD`,
+   `LUMEN_STORAGE_BACKEND=gdrive`, `LUMEN_FAMILY`, and `LUMEN_MCP_AUTH_MODE=oauth` (the public URL
+   comes in step 5). Put the Google Drive files in `secrets/` (see *First-run checklist*).
+4. **Deploy:** `ENV_FILE=.env.production SECRETS_DIR=secrets deploy/lightsail/deploy.sh`. It
+   uploads both, copies the committed code (git `HEAD`) to `/opt/lumen/app`, and starts the
+   services with `deploy/lightsail/compose.lightsail.yml` (ports on `127.0.0.1` only). Later
+   deploys: commit, then `deploy/lightsail/deploy.sh` (add `ENV_FILE=...` when settings change).
+5. **Tailscale (once):** `ssh -i ~/.ssh/lumen-lightsail ubuntu@<ip>`, then
+   `sudo /opt/lumen/app/deploy/lightsail/tailscale.sh`. Open the sign-in link it prints (and the
+   Funnel link if asked; MagicDNS and HTTPS certificates must be on in the Tailscale admin
+   console). It prints the two addresses:
+   * Prism, tailnet only: `https://lumen.<tailnet>.ts.net:8443`; use it in Flash Config. The
+     iPhone needs the Tailscale app with VPN On Demand (`docs/flash.md`).
+   * Lens, public through Funnel: `https://lumen.<tailnet>.ts.net/mcp`; set
+     `LUMEN_MCP_PUBLIC_URL=https://lumen.<tailnet>.ts.net` in `.env.production` and redeploy
+     with `ENV_FILE=.env.production`.
+6. **Optional:** with Tailscale SSH working (`ssh ubuntu@lumen`), remove the SSH rule in the
+   Lightsail console (Networking tab) so no port is open to the internet.
+7. **Check:** `https://lumen.<tailnet>.ts.net:8443/health` from Safari on the phone,
+   `curl https://lumen.<tailnet>.ts.net/health` from anywhere, then a test Quick Note.
+
+Logs: `ssh ... 'cd /opt/lumen/app && docker compose -p lumen logs -f'`. The data volume is
+`lumen_lumen-data`; the daily Lightsail snapshot covers it, `.env` and `secrets/`. Cost: the
+bundle price (about $12 a month for 2 GB) plus snapshot storage.
 
 ## Switching AI or speech providers
 
