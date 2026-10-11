@@ -5,9 +5,9 @@ import math
 
 import httpx
 
-from lifelog.config import Settings
-from lifelog.embeddings import embed_texts, fake_embedding
-from lifelog.nudge import nudge_indexer
+from bookshelf.config import Settings
+from bookshelf.embeddings import embed_texts, fake_embedding
+from bookshelf.nudge import nudge_indexer
 
 
 def test_fake_embeddings_are_deterministic_unit_vectors(settings: Settings) -> None:

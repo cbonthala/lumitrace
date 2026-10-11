@@ -6,14 +6,16 @@ is the test's name, so you can find it in the file listed under the section head
 
 ## What the tests cover
 
-The tests check the three LifeLog programs and the shared pieces they rely on:
+The tests check the three Bookshelf programs and the shared pieces they rely on:
 
-* the **recording API**, which receives recordings, notes and photos from the iPhone and writes
-  the day's journal file;
-* the **indexer**, which reads the journal files and keeps a small search index up to date;
-* the **MCP server**, which lets AI apps such as Claude search and read your journal;
-* the shared building blocks: the **day file** format, **storage** (local folder or Google
-  Drive), the **index schema**, settings and small helpers.
+* the **Typewriter** (recording API), which receives recordings, notes and photos from the
+  Notepad shortcuts on the iPhone and writes the day's journal file;
+* **Bookmarks** (the indexer), which reads the journal files and keeps a small search index up
+  to date;
+* the **Reading Lamp** (MCP server), which lets AI apps such as Claude search and read your
+  journal;
+* the shared building blocks: the **Books** (the day file format and **storage**, a local folder
+  or Google Drive), the **index schema**, settings and small helpers.
 
 One end-to-end test runs all three programs together, from a phone upload to an AI question.
 
@@ -29,13 +31,13 @@ How to run them (from the project folder):
 export UV_PYTHON_INSTALL_DIR=$PWD/.tools/python UV_CACHE_DIR=$PWD/.tools/cache
 .tools/bin/uv run pytest                          # all tests
 .tools/bin/uv run pytest tests/e2e                # just the end-to-end story
-.tools/bin/uv run pytest tests/api/test_auth.py   # one file
+.tools/bin/uv run pytest tests/typewriter/test_auth.py   # one file
 ```
 
 Two tests skip themselves when the computer lacks a tool: the real audio compression test
 (needs ffmpeg or afconvert able to make AAC audio) and the HEIC photo test (needs a HEIC
 encoder). Tests marked `network`, which would need real credentials, are skipped unless
-`LIFELOG_RUN_NETWORK_TESTS=1` is set. There are none at the moment.
+`BOOKSHELF_RUN_NETWORK_TESTS=1` is set. There are none at the moment.
 
 **Keeping this up to date.** `tests/test_docs_test_cases.py` fails if a test exists that is not
 described here (or a test described here no longer exists). When you add or change a test,
@@ -48,19 +50,19 @@ add or update its line in the right section.
   It has **front matter** (facts such as mood, people, meals at the top), a title, the journal,
   your own **My notes** section, and the raw **transcript** of each capture.
 * **Entry date**: the day a capture belongs to. Anything before 4 a.m. counts as the day before.
-* **Snapshot**: an exact copy of the day file as LifeLog last wrote it, kept in
+* **Snapshot**: an exact copy of the day file as Bookshelf last wrote it, kept in
   `_system/generated/`. Comparing it with the live file shows what you edited.
-* **Index**: a SQLite database the indexer builds from the day files so they can be searched.
+* **Index**: a SQLite database Bookmarks builds from the day files so they can be searched.
   It can always be rebuilt from the day files.
 * **Passage**: a short piece of a day file (a journal section, a transcript entry, the facts)
   stored in the index for searching.
 * **Embedding**: a list of numbers that captures the meaning of a passage, used for "search by
   meaning" in addition to keyword search.
-* **Nudge**: a small message from the recording API telling the indexer "these files just
+* **Nudge**: a small message from the Typewriter telling Bookmarks "these files just
   changed, index them now".
-* **Edit signal**: a record that you changed something LifeLog wrote (for example the mood or a
-  journal sentence), used to improve LifeLog later.
-* **MCP**: the protocol AI apps use to call LifeLog's tools (`search`, `get_day`,
+* **Edit signal**: a record that you changed something Bookshelf wrote (for example the mood or a
+  journal sentence), used to improve Bookshelf later.
+* **MCP**: the protocol AI apps use to call Bookshelf's tools (`search`, `get_day`,
   `query_facts`, `on_this_day`, `feedback`).
 
 ## Contents
@@ -68,11 +70,11 @@ add or update its line in the right section.
 | Component | Covered | Not covered |
 |---|---|---|
 | [End-to-end flow](#end-to-end-flow) | A recording and notes travel from upload to day file, index and every AI tool; your edit survives a later capture | Real providers, real Google Drive, iPhone Shortcuts on a device, real AI apps |
-| [Recording API](#recording-api-and-processing-pipeline) | Login, uploads, entry dates, retries, never overwriting edits, AI fallbacks, audio, photos, speech-to-text options, prompts, activity records | Real speech and AI providers, real AWS, real ffmpeg/afconvert output quality (one optional test), HEIC files from a real iPhone |
-| [Indexer](#indexer) | Incremental and full sync, passages, edit signals, rebuilds, backups, the nudge service, the command line | Real Google Drive change feed, real embedding providers, long-running polling over days |
-| [MCP server](#mcp-server) | All five tools, hybrid search, dates, feedback, token and OAuth logins | The real Claude, ChatGPT and Cursor connectors; answer quality of a real AI app |
-| [Day files](#day-files) | Paths, the 4 a.m. rule, reading and writing without losing anything, spotting your edits, merge rules | Opening the files in Obsidian |
-| [Storage](#storage) | Local folder storage and Google Drive storage against an in-memory imitation | The real Google Drive API, the `lifelog-gdrive-login` sign-in |
+| [Typewriter](#typewriter-recording-api-and-processing-pipeline) | Login, uploads, entry dates, retries, never overwriting edits, AI fallbacks, audio, photos, speech-to-text options, prompts, activity records | Real speech and AI providers, real AWS, real ffmpeg/afconvert output quality (one optional test), HEIC files from a real iPhone |
+| [Bookmarks](#bookmarks-the-indexer) | Incremental and full sync, passages, edit signals, rebuilds, backups, the nudge service, the command line | Real Google Drive change feed, real embedding providers, long-running polling over days |
+| [Reading Lamp](#reading-lamp-the-mcp-server) | All five tools, hybrid search, dates, feedback, token and OAuth logins | The real Claude, ChatGPT and Cursor connectors; answer quality of a real AI app |
+| [Books: day files](#books-day-files) | Paths, the 4 a.m. rule, reading and writing without losing anything, spotting your edits, merge rules | Opening the files in Obsidian |
+| [Books: storage](#books-storage) | Local folder storage and Google Drive storage against an in-memory imitation | The real Google Drive API, the `bookshelf-drive-login` sign-in |
 | [Index schema](#index-schema) | Tables, keyword and vector search, clean-up rules, what survives a reset | Index size and speed with years of entries |
 | [Config and shared helpers](#config-and-shared-helpers) | Settings, `.env.example`, fake embeddings, nudges, this catalog's completeness | Real embedding providers |
 | [Entry points](#entry-points) | The programs start and their commands exist | Running them in Docker |
@@ -127,7 +129,7 @@ on a computer without audio tools (the original file is kept). The story:
 
 ---
 
-## Recording API and processing pipeline
+## Typewriter: recording API and processing pipeline
 
 **Covered:** logging in, sending recordings and notes, entry dates, retries and recovery, never
 overwriting your edits, AI fallbacks, audio and photo handling, speech-to-text options, prompts
@@ -136,7 +138,7 @@ Shortcuts and HEIC photos straight from a phone.
 
 ### Logging in to the API
 
-File: `tests/api/test_auth.py`
+File: `tests/typewriter/test_auth.py`
 
 - Checks that the health page answers without a token (password). <sub>`test_health_needs_no_token`</sub>
 - Checks that sending a note without a token is refused (401) and the reply says a bearer token is needed. <sub>`test_missing_token_is_rejected`</sub>
@@ -148,27 +150,27 @@ File: `tests/api/test_auth.py`
 
 ### Sending a recording
 
-File: `tests/api/test_capture_api.py`
+File: `tests/typewriter/test_capture_api.py`
 
 - Checks the whole path of one *Log My Day* recording with two photos and a location: the API answers at once with "queued", the capture id, the entry date and a friendly message ("Saturday, October 10"); once processed the status says "done"; the day file has the AI's title and journal, the people, meals, audio and photo names, prompt and model versions, and the transcript with its time and formatted location; the audio and photos are in the day's folder; the snapshot matches; the inbox is empty; and the indexer is nudged once with the day file, audio and photos. <sub>`test_recording_end_to_end`</sub>
 
 ### Sending the same thing twice
 
-File: `tests/api/test_capture_api.py`
+File: `tests/typewriter/test_capture_api.py`
 
 - Checks that re-sending a recording with the same capture id (for example when the phone retries after a dropped connection) is recognised as a duplicate, both while it is being processed and after it is done, and the day ends up with one entry and one audio file. <sub>`test_same_capture_id_is_stored_once`</sub>
 - Checks that without a capture id every upload counts as new: two uploads in the same minute get different ids and two audio files (the second ending in `-2`). <sub>`test_without_capture_id_each_post_is_new`</sub>
 
 ### Which day an entry belongs to
 
-File: `tests/api/test_capture_api.py`
+File: `tests/typewriter/test_capture_api.py`
 
 - Checks that a recording made at 1:30 a.m. goes into the previous day's journal (with the audio named by its clock time), while one at exactly 4:00 a.m. starts the new day. <sub>`test_rollover_before_4am_counts_as_previous_day`</sub>
 - Checks that the capture time is understood whether it is sent without a timezone (taken as local time), in UTC, as a Unix timestamp, or left empty (meaning "now"). <sub>`test_captured_at_formats`</sub>
 
 ### Quick notes
 
-File: `tests/api/test_capture_api.py`
+File: `tests/typewriter/test_capture_api.py`
 
 - Checks that a typed note sent after a recording joins the same day file, entries stay in time order, and the journal and facts are rewritten using both entries. <sub>`test_note_merges_into_the_same_day`</sub>
 - Checks that a note can be sent as a web form with text, or as a short audio clip that is transcribed and keeps its audio file. <sub>`test_note_as_form_and_as_audio_clip`</sub>
@@ -176,14 +178,14 @@ File: `tests/api/test_capture_api.py`
 
 ### Refusing bad requests
 
-File: `tests/api/test_capture_api.py`
+File: `tests/typewriter/test_capture_api.py`
 
 - Checks that bad input is refused with a clear error: a recording without audio, a note without text, a capture id that tries to leave its folder (`../`), a latitude that isn't a number or is out of range, a time like "yesterday", a list instead of a form, plain text instead of a form or JSON (415), and an unknown or folder-escaping capture id when asking for a status (404). <sub>`test_validation_errors`</sub>
 - Checks that an upload larger than the configured size limit is refused (413). <sub>`test_upload_size_limit`</sub>
 
 ### Retries and recovering after a crash
 
-File: `tests/api/test_capture_api.py`
+File: `tests/typewriter/test_capture_api.py`
 
 - Checks that if speech-to-text fails once (service unreachable), the capture is retried automatically and finishes, after two attempts and with one entry in the day. <sub>`test_failed_capture_is_retried_automatically`</sub>
 - Checks that when every automatic retry fails, the capture is marked "failed" with the error and nothing is written to the day; a manual retry is accepted (and fails again while the service is down); re-sending it after the service is back works and is not treated as a duplicate; retrying a finished capture is refused (409); and the day has one entry. <sub>`test_exhausted_capture_can_be_resent_or_retried`</sub>
@@ -191,20 +193,20 @@ File: `tests/api/test_capture_api.py`
 
 ### How locations are written
 
-File: `tests/api/test_capture_api.py`
+File: `tests/typewriter/test_capture_api.py`
 
 - Checks that the location shown in the journal combines the place name and coordinates neatly, works with only coordinates or only a name (tidying spaces and line breaks), and is left out when there is nothing useful to show. <sub>`test_format_location`</sub>
 
 ### Never overwriting your edits
 
-File: `tests/api/test_pipeline.py`
+File: `tests/typewriter/test_pipeline.py`
 
 - Checks that after you edit a day (your own journal words, mood and notes), a later note does not rewrite it: your text, mood and notes stay, a short AI addition is appended under the note's time, new people are added, the AI is shown your edited journal, and fact extraction only looks at the new entry. <sub>`test_edited_day_gets_additive_update`</sub>
 - Checks that if you edit the day while the AI is still writing, the AI's version is not saved over yours; the new entry is added on top instead. <sub>`test_edit_during_generation_is_not_overwritten`</sub>
 
 ### When speech or AI services fail
 
-File: `tests/api/test_pipeline.py`
+File: `tests/typewriter/test_pipeline.py`
 
 - Checks that when the main AI model is down or replies with something that isn't valid data, the backup model is used, the day file records which model did the work, and the activity record lists each attempt and why it failed. <sub>`test_fallback_model_is_used_and_recorded`</sub>
 - Checks that when every AI model fails, the transcript is still saved in the day file (with an empty journal), the snapshot is written, and the errors are reported. <sub>`test_ai_failure_still_saves_the_transcript`</sub>
@@ -213,15 +215,15 @@ File: `tests/api/test_pipeline.py`
 
 ### Repeated, empty and offline captures
 
-File: `tests/api/test_pipeline.py`
+File: `tests/typewriter/test_pipeline.py`
 
 - Checks that processing the same capture again (for example after a crash) does not add a second entry or audio file; it only regenerates the journal and says so in a warning. <sub>`test_reprocessing_a_saved_capture_does_not_duplicate_it`</sub>
 - Checks that when a recording contains no words, the AI steps are skipped entirely. <sub>`test_empty_transcript_skips_generation`</sub>
-- Checks that the built-in `fake` AI model writes a simple journal (the note's text under "Summary") without any provider, so LifeLog can be tried offline. <sub>`test_fake_llm_model_runs_offline`</sub>
+- Checks that the built-in `fake` AI model writes a simple journal (the note's text under "Summary") without any provider, so Bookshelf can be tried offline. <sub>`test_fake_llm_model_runs_offline`</sub>
 
 ### Activity records
 
-File: `tests/api/test_activity.py`
+File: `tests/typewriter/test_activity.py`
 
 - Checks that each capture adds exactly one line to the monthly activity log with its id, status, date, models, prompt versions and how long each step took (compress audio, transcribe, write the day, extract facts, write the journal, write again, nudge), and that no names, places, transcript or journal words ever appear in it. <sub>`test_one_line_per_capture_without_content`</sub>
 - Checks that the AI cost of each step is added up into a total. <sub>`test_cost_is_summed_when_known`</sub>
@@ -232,7 +234,7 @@ File: `tests/api/test_activity.py`
 
 ### Audio
 
-File: `tests/api/test_media.py`
+File: `tests/typewriter/test_media.py`
 
 - Checks that without any audio tools installed the original audio is kept (with a warning), and the file extension is kept or sensibly chosen (`.mp4` becomes `.m4a`, no extension becomes `.audio`). <sub>`test_no_compressor_keeps_original`</sub>
 - Checks that if ffmpeg fails, macOS's afconvert is tried next, and that both are asked for single-channel AAC audio at the configured quality. <sub>`test_ffmpeg_failure_falls_back_to_afconvert`</sub>
@@ -243,7 +245,7 @@ File: `tests/api/test_media.py`
 
 ### Photos
 
-File: `tests/api/test_media.py`
+File: `tests/typewriter/test_media.py`
 
 - Checks that large photos are shrunk to the maximum size (keeping their proportions) and saved as JPEG, while small ones are not enlarged. <sub>`test_resize_fits_max_dimension_as_jpeg`</sub>
 - Checks that photos are turned upright using the camera's orientation tag, and that hidden metadata (including the GPS location) is removed. <sub>`test_resize_applies_exif_rotation_and_strips_exif`</sub>
@@ -254,7 +256,7 @@ File: `tests/api/test_media.py`
 
 ### Speech-to-text options
 
-File: `tests/api/test_stt.py`
+File: `tests/typewriter/test_stt.py`
 
 - Checks that the offline fake speech-to-text returns uploaded text as the transcript (trimmed), and a placeholder such as "(fake transcript of 9 bytes of audio)" for real audio. <sub>`test_fake_transcriber`</sub>
 - Checks that the LiteLLM option passes the configured model, language and audio file to the provider and trims the result. <sub>`test_litellm_transcriber_passes_settings`</sub>
@@ -265,7 +267,7 @@ File: `tests/api/test_stt.py`
 
 ### Prompts and AI replies
 
-File: `tests/api/test_prompts_llm.py`
+File: `tests/typewriter/test_prompts_llm.py`
 
 - Checks that all three AI instructions (extract facts, write the journal, write an addition) exist and are filled in completely with no `{{blanks}}` left, and that entries are shown to the AI with the date, weekday, time, entry type and location. <sub>`test_every_current_prompt_exists_and_renders`</sub>
 - Checks that each prompt file has the expected layout and version label and tells the AI never to invent or guess. <sub>`test_prompt_files_follow_the_layout`</sub>
@@ -278,7 +280,7 @@ File: `tests/api/test_prompts_llm.py`
 
 ---
 
-## Indexer
+## Bookmarks: the indexer
 
 **Covered:** first and incremental syncs, deletions, broken files, retries, passages, edit
 signals, rebuilds, backups, the nudge service and the command line. **Not covered:** the real
@@ -286,7 +288,7 @@ Google Drive change feed, real embedding providers and long-running polling.
 
 ### Keeping the index in step with storage
 
-File: `tests/indexer/test_sync.py`
+File: `tests/bookmarks/test_sync.py`
 
 - Checks that the first sync reads every day file and fills the index: day details (mood, city, audio, number of entries, not edited, prompt version), meals, people, activities, highlights, searchable passages with their embeddings, and a record of each file with its fingerprint. <sub>`test_first_sync_indexes_day_files`</sub>
 - Checks that audio, photos, other Markdown notes, system files and stray files are not indexed or sent for embedding. <sub>`test_non_day_files_are_ignored`</sub>
@@ -303,7 +305,7 @@ File: `tests/indexer/test_sync.py`
 
 ### Splitting days into searchable passages
 
-File: `tests/indexer/test_passages.py`
+File: `tests/bookmarks/test_passages.py`
 
 - Checks that the sample day is split, in order, into passages for the title, the facts, each journal section, your notes and each transcript entry; headings are taken out of the text; the facts read naturally ("People: Maya, Leo", "Activities: run (40 min), reading"); and no passage is over the size limit. <sub>`test_sample_day_passages`</sub>
 - Checks that the same text under different headings counts as different passages, and that the heading is part of what gets embedded. <sub>`test_text_hash_covers_heading`</sub>
@@ -314,12 +316,12 @@ File: `tests/indexer/test_passages.py`
 
 ### Learning from your edits (edit signals)
 
-File: `tests/indexer/test_edit_signals.py`
+File: `tests/bookmarks/test_edit_signals.py`
 
-- Checks that nothing is recorded when the day file matches what LifeLog last wrote. <sub>`test_no_signals_when_file_matches_snapshot`</sub>
+- Checks that nothing is recorded when the day file matches what Bookshelf last wrote. <sub>`test_no_signals_when_file_matches_snapshot`</sub>
 - Checks that your changes to the mood, people, journal, notes, title and a transcript are each recorded separately with the before and after values (plus a line-by-line comparison for longer text) and the prompt and model versions that wrote the original, and that the day is marked as edited. <sub>`test_owner_edits_become_signals`</sub>
 - Checks that saving the same edit again doesn't record it twice, a further edit to the same part replaces the earlier record, and undoing the edit removes it. <sub>`test_signals_are_deduplicated_and_superseded`</sub>
-- Checks that a new entry added by LifeLog (before its snapshot is updated) is not mistaken for your edit. <sub>`test_new_capture_is_not_an_edit`</sub>
+- Checks that a new entry added by Bookshelf (before its snapshot is updated) is not mistaken for your edit. <sub>`test_new_capture_is_not_an_edit`</sub>
 - Checks that edits are not worked out against an out-of-date snapshot from an earlier generation. <sub>`test_stale_snapshot_is_not_compared`</sub>
 - Checks that when only the snapshot changes, the edit records are worked out again without re-indexing the day. <sub>`test_snapshot_change_alone_refreshes_signals`</sub>
 - Checks that rebuilding the index, or wiping its rebuildable parts, keeps the recorded edits without duplicating them. <sub>`test_rebuild_keeps_signals_without_duplicates`</sub>
@@ -328,7 +330,7 @@ File: `tests/indexer/test_edit_signals.py`
 
 ### Rebuilding the index
 
-File: `tests/indexer/test_rebuild.py`
+File: `tests/bookmarks/test_rebuild.py`
 
 - Checks that a rebuild repairs a damaged index (missing passages) by indexing every day again, while keeping feedback and edit records and noting when the rebuild happened. <sub>`test_rebuild_reindexes_everything_and_keeps_signals`</sub>
 - Checks that changing the embedding size triggers an automatic rebuild on the next sync, after which search by meaning works at the new size, feedback is kept, and the MCP server can open the index with the new setting. <sub>`test_dimension_change_triggers_rebuild`</sub>
@@ -337,31 +339,31 @@ File: `tests/indexer/test_rebuild.py`
 
 ### Backups
 
-File: `tests/indexer/test_backup.py`
+File: `tests/bookmarks/test_backup.py`
 
 - Checks that the backup in `_system/index-backup/` is a complete, self-contained copy of the index that opens on its own with days, passages and embeddings intact. <sub>`test_backup_writes_a_consistent_copy_to_storage`</sub>
 - Checks that a backup is due at first, not again until a day has passed, and never when backups are turned off. <sub>`test_backup_is_due_by_interval`</sub>
 - Checks that the backup file itself is not treated as a change to index. <sub>`test_backup_is_not_indexed`</sub>
 - Checks that the indexer's regular cycle makes a backup when one is due and doesn't repeat it on the next cycle. <sub>`test_service_cycle_backs_up_when_due`</sub>
 
-### The indexer service and nudges
+### The Bookmarks service and nudges
 
-File: `tests/indexer/test_service.py`
+File: `tests/bookmarks/test_service.py`
 
 - Checks the indexer's web endpoints: health reports the status and how many paths are waiting; a nudge is accepted (202) with or without paths and queues them; a badly formed nudge is refused. <sub>`test_health_and_nudge_queue`</sub>
 - Checks that one indexer cycle indexes the nudged day and empties the queue. <sub>`test_run_once_indexes_nudged_paths`</sub>
 - Checks that with the background worker running, a nudge gets a new day into the index promptly without waiting for the next poll, health shows the worker running with no errors, and the worker stops on shutdown. <sub>`test_worker_indexes_promptly_after_nudge`</sub>
 
-### Indexer command line
+### Bookmarks command line
 
-File: `tests/indexer/test_cli.py`
+File: `tests/bookmarks/test_cli.py`
 
 - Checks that the `sync`, `rebuild` and `backup` commands work and print a short summary (a second `sync` finds nothing to do). <sub>`test_sync_rebuild_and_backup_commands`</sub>
 - Checks that an unknown command is refused with the usual "wrong usage" exit code. <sub>`test_unknown_command_is_rejected`</sub>
 
 ---
 
-## MCP server
+## Reading Lamp: the MCP server
 
 **Covered:** the five tools, hybrid search, date handling, feedback, the three login modes and
 the full OAuth sign-in. **Not covered:** the real Claude, ChatGPT and Cursor connectors and the
@@ -369,7 +371,7 @@ quality of a real AI app's answers.
 
 ### The server and its instructions to AI apps
 
-File: `tests/mcp_server/test_server.py`
+File: `tests/reading_lamp/test_server.py`
 
 - Checks that the instructions given to AI apps say to answer only from what the tools return, cite the date, and say when nothing was found. <sub>`test_instructions_require_grounded_cited_answers`</sub>
 - Checks that an AI app sees exactly the five tools, with the date format explained, the list of fact kinds, and only `feedback` marked as changing anything. <sub>`test_tools_are_listed_with_documented_dates`</sub>
@@ -379,7 +381,7 @@ File: `tests/mcp_server/test_server.py`
 
 ### Building a safe keyword search
 
-File: `tests/mcp_server/test_search.py`
+File: `tests/reading_lamp/test_search.py`
 
 - Checks that every word of a question is quoted in the keyword search, so search operators typed by the AI (AND, OR, NEAR, minus signs, wildcards) can't break it. <sub>`test_fts_expression_quotes_every_term`</sub>
 - Checks that filler words ("what did I") are dropped unless the question has nothing else, and that punctuation alone gives no keyword search. <sub>`test_fts_expression_drops_stopwords_but_keeps_all_stopword_queries`</sub>
@@ -387,7 +389,7 @@ File: `tests/mcp_server/test_search.py`
 
 ### Combining keyword and meaning results
 
-File: `tests/mcp_server/test_search.py`
+File: `tests/reading_lamp/test_search.py`
 
 - Checks that when keyword and meaning results are merged ("reciprocal rank fusion"), passages found by both rank above those found by one, with the expected scores, and each result remembers which method found it. <sub>`test_rrf_rewards_items_in_both_lists`</sub>
 - Checks that ties are broken in a stable order, repeats in one list count once, and no lists give no results. <sub>`test_rrf_ties_are_deterministic_and_duplicates_ignored`</sub>
@@ -396,7 +398,7 @@ File: `tests/mcp_server/test_search.py`
 
 ### Searching your journal (`search`)
 
-File: `tests/mcp_server/test_search.py`
+File: `tests/reading_lamp/test_search.py`
 
 - Checks that searching "pumpkin patch" puts the right day first, with its date, section, heading, a snippet containing the word, the file path, a score and how it was found. <sub>`test_search_finds_the_right_day`</sub>
 - Checks that results come in score order and the most relevant day ("grandma rose pasta") is first. <sub>`test_search_results_are_in_rrf_order`</sub>
@@ -412,21 +414,21 @@ File: `tests/mcp_server/test_search.py`
 
 ### Snippets
 
-File: `tests/mcp_server/test_search.py`
+File: `tests/reading_lamp/test_search.py`
 
 - Checks that for long passages the snippet is centred on the matching word and trimmed with "…" at both ends. <sub>`test_snippet_centres_on_the_first_term`</sub>
 - Checks that short passages are shown whole, with line breaks tidied. <sub>`test_snippet_short_text_is_whole`</sub>
 
 ### Dates the tools accept
 
-File: `tests/mcp_server/test_tools.py`
+File: `tests/reading_lamp/test_tools.py`
 
 - Checks that dates are accepted as YYYY-MM-DD (extra spaces ignored), "today" or "yesterday" in any case, and that other forms ("10/10/2026", month 13, "last tuesday", no dashes, empty) are refused. <sub>`test_parse_date_formats`</sub>
 - Checks that month-day dates for `on_this_day` ("10-10" or "--02-29") are understood, a full date is not mistaken for one, and month 13 is refused. <sub>`test_parse_month_day`</sub>
 
 ### Reading a whole day (`get_day`)
 
-File: `tests/mcp_server/test_tools.py`
+File: `tests/reading_lamp/test_tools.py`
 
 - Checks that `get_day` returns the full day: path, title, facts, journal, notes, transcript entries in time order with times and text, a link to the audio, and photo links (with a "file not found" note for a photo missing from storage). <sub>`test_get_day_returns_everything`</sub>
 - Checks that asking for a day without an entry returns "not found" with a note. <sub>`test_get_day_missing_day`</sub>
@@ -435,7 +437,7 @@ File: `tests/mcp_server/test_tools.py`
 
 ### Facts across days (`query_facts`)
 
-File: `tests/mcp_server/test_tools.py`
+File: `tests/reading_lamp/test_tools.py`
 
 - Checks that searching meals for "PASTA" (any case) lists each matching day newest first, with counts (rows, days, first and last date), the most common items, and a flag saying nothing was cut off. <sub>`test_query_facts_meals`</sub>
 - Checks that meal searches also match the meal type ("breakfast"), and that all meals can be summarised per meal type. <sub>`test_query_facts_meals_match_meal_type_and_aggregate`</sub>
@@ -451,7 +453,7 @@ File: `tests/mcp_server/test_tools.py`
 
 ### Memories from past years (`on_this_day`)
 
-File: `tests/mcp_server/test_tools.py`
+File: `tests/reading_lamp/test_tools.py`
 
 - Checks that `on_this_day` for 2026-10-10 returns the same date in earlier years, newest first, with how many years ago, the title, people, highlights, family events and the journal summary. <sub>`test_on_this_day_with_full_date`</sub>
 - Checks that a month-day like "10-10" counts back from the current year. <sub>`test_on_this_day_month_day_uses_current_year`</sub>
@@ -462,7 +464,7 @@ File: `tests/mcp_server/test_tools.py`
 
 ### Feedback on answers (`feedback`)
 
-File: `tests/mcp_server/test_tools.py`
+File: `tests/reading_lamp/test_tools.py`
 
 - Checks that feedback is saved in the index with the question, answer, comment, rating, tool and app, that the dates mentioned in the answer are picked out, and that a copy is saved in your storage under `_system/feedback/`. <sub>`test_feedback_writes_row_and_storage_copy`</sub>
 - Checks that feedback is kept when the index is wiped for a rebuild. <sub>`test_feedback_survives_index_rebuild`</sub>
@@ -472,7 +474,7 @@ File: `tests/mcp_server/test_tools.py`
 
 ### Login settings
 
-File: `tests/mcp_server/test_auth.py`
+File: `tests/reading_lamp/test_auth.py`
 
 - Checks that "token" mode refuses to start with an empty, placeholder or short token, and starts with a proper one. <sub>`test_token_mode_requires_a_real_token`</sub>
 - Checks that "oauth" mode refuses to start without an owner password, with a public address that isn't https, or with a path in the address, and that a valid address gives the expected `/mcp` address. <sub>`test_oauth_mode_validation`</sub>
@@ -481,14 +483,14 @@ File: `tests/mcp_server/test_auth.py`
 
 ### Connecting with a token
 
-File: `tests/mcp_server/test_auth.py`
+File: `tests/reading_lamp/test_auth.py`
 
 - Checks over HTTP that a missing or wrong token is refused (401, with a hint to use a bearer token), the right token connects, and the health page reports the login mode. <sub>`test_token_mode_rejects_missing_and_wrong_tokens`</sub>
 - Checks that in "none" mode apps connect without a token. <sub>`test_none_mode_allows_requests`</sub>
 
 ### Signing in with OAuth (Claude and ChatGPT)
 
-File: `tests/mcp_server/test_auth.py`
+File: `tests/reading_lamp/test_auth.py`
 
 - Checks that an app that isn't signed in is pointed to where it can learn how to sign in, and that the published sign-in details (addresses, registration, the PKCE security method) are correct. <sub>`test_oauth_discovery`</sub>
 - Checks the full sign-in: an app registers and is sent to a password page (showing the app's name safely and its website, and refusing to be shown inside other sites); a wrong password is refused; the right one gives a one-time code; exchanging the code with the wrong proof is refused; the right exchange gives tokens that work; the code can't be used twice; a made-up token is refused; refreshing gives new tokens and retires the old ones; and a revoked token stops working and can't be refreshed. <sub>`test_oauth_full_flow`</sub>
@@ -500,7 +502,7 @@ File: `tests/mcp_server/test_auth.py`
 
 ---
 
-## Day files
+## Books: day files
 
 **Covered:** where files go, the 4 a.m. rule, reading and writing without losing a character,
 spotting your edits, and the rules for adding entries and AI output. **Not covered:** how
@@ -508,33 +510,34 @@ Obsidian displays the files.
 
 ### Where files go
 
-File: `tests/test_dayfile.py`
+File: `tests/books/test_dayfile.py`
 
 - Checks the folder and file names: `2026/10/2026-10-10/2026-10-10.md`, audio named by date and time (a 1:30 a.m. recording goes in the previous day's folder), photos `photo-01.jpg` (with three digits when needed, starting at 1), and the snapshot and system paths. <sub>`test_path_conventions`</sub>
 - Checks that new photos continue after the highest existing number, and that a file name already taken gets `-2`, `-3` and so on. <sub>`test_next_photo_names_and_unique_names`</sub>
-- Checks that only correctly placed day files count as day files (the month folder, day folder and file name must agree, the date must exist, and the path must start at the LifeLog folder), and that files are sorted into day files, audio, photos, system files and others. <sub>`test_parse_day_file_path_and_classify`</sub>
+- Checks that only correctly placed day files count as day files (the month folder, day folder and file name must agree, the date must exist, and the path must start at the Bookshelf folder), and that files are sorted into day files, audio, photos, system files and others. <sub>`test_parse_day_file_path_and_classify`</sub>
 
 ### Which day an entry belongs to
 
-File: `tests/test_dayfile.py`
+File: `tests/books/test_dayfile.py`
 
 - Checks the 4 a.m. rule (5 cases): 9:30 p.m., 4:00 a.m. and 11:59 p.m. count as that day; 3:59 a.m. and 12:40 a.m. count as the day before. <sub>`test_entry_date_rollover`</sub>
 - Checks that times in UTC are converted to your timezone first, a time without a timezone is taken as local, and the switch-over hour can be set to midnight. <sub>`test_entry_date_converts_timezones_and_naive`</sub>
 
 ### A new day and its entries
 
-File: `tests/test_dayfile.py`
+File: `tests/books/test_dayfile.py`
 
 - Checks that a new day gets a title like "Saturday, October 10, 2026", the current format version, and isn't considered edited. <sub>`test_new_day_defaults`</sub>
 - Checks that an entry time without a timezone is refused. <sub>`test_capture_requires_aware_datetime`</sub>
 
 ### Reading and writing without losing anything
 
-File: `tests/test_dayfile.py`
+File: `tests/books/test_dayfile.py`
 
 - Checks that the sample day file is read correctly (facts, title, journal, notes, three entries with audio and photos) and written back exactly the same, character for character. <sub>`test_sample_fixture_roundtrips`</sub>
+- Checks that a day file written before the project was renamed from LifeLog (old `lifelog:` markers and `lifelog_format` key) is read exactly like a new one, and is written back with the new Bookshelf names. <sub>`test_parses_files_written_before_the_rename`</sub>
 - Checks that tricky content survives reading and writing unchanged: apostrophes and accents, values that look special ("null", "a: b"), comment arrows (`-->`), headings in notes, picture embeds, empty entries, and extra fields of your own such as tags. <sub>`test_roundtrip_model_equality_with_tricky_content`</sub>
-- Checks that the example in `docs/day-file-format.md` is identical to the sample file the tests use. <sub>`test_docs_example_matches_fixture`</sub>
+- Checks that the example in `docs/books-format.md` is identical to the sample file the tests use. <sub>`test_docs_example_matches_fixture`</sub>
 - Checks that a day file's parts are written in the documented order: facts, title, journal, My notes, Transcript. <sub>`test_render_layout_markers_in_order`</sub>
 - Checks that files without front matter, with broken front matter, without a date, or with an out-of-range mood score are reported as unreadable. <sub>`test_parse_errors`</sub>
 - Checks that an almost empty file can be read using the date from its folder, with any loose text treated as your notes. <sub>`test_parse_minimal_and_fallback_date`</sub>
@@ -545,14 +548,14 @@ File: `tests/test_dayfile.py`
 
 ### Spotting your edits
 
-File: `tests/test_dayfile.py`
+File: `tests/books/test_dayfile.py`
 
 - Checks (4 cases) that changing the mood, adding a meal item, changing the title, or rewording the journal marks the day as edited by you. <sub>`test_edits_to_facts_title_or_journal_are_detected`</sub>
-- Checks that changing your own notes, or the record of which prompt was used, does not count as editing what LifeLog wrote. <sub>`test_edits_to_notes_or_provenance_are_not_user_edits`</sub>
+- Checks that changing your own notes, or the record of which prompt was used, does not count as editing what Bookshelf wrote. <sub>`test_edits_to_notes_or_provenance_are_not_user_edits`</sub>
 
 ### Adding an entry to a day
 
-File: `tests/test_dayfile.py`
+File: `tests/books/test_dayfile.py`
 
 - Checks that the first entry of a day creates the day and lists its audio and photos. <sub>`test_merge_capture_creates_day_and_updates_front_matter`</sub>
 - Checks that entries are kept in time order, adding the same entry twice changes nothing, and the earlier version of the day is left untouched. <sub>`test_merge_capture_sorts_is_idempotent_and_pure`</sub>
@@ -561,7 +564,7 @@ File: `tests/test_dayfile.py`
 
 ### Never overwriting your edits
 
-File: `tests/test_dayfile.py`
+File: `tests/books/test_dayfile.py`
 
 - Checks that AI output sets the title, facts, journal and versions and stores a fingerprint so later edits can be spotted; generating again replaces the facts but keeps the title and versions when none are given. <sub>`test_apply_generation_sets_content_and_hash`</sub>
 - Checks that a full rewrite is refused once you have edited the day, unless explicitly forced (which still keeps your notes). <sub>`test_apply_generation_refuses_user_edits`</sub>
@@ -570,15 +573,15 @@ File: `tests/test_dayfile.py`
 
 ---
 
-## Storage
+## Books: storage
 
 **Covered:** the local folder backend and the Google Drive backend, the latter against an
 in-memory imitation of Drive. **Not covered:** the real Google Drive service and the
-`lifelog-gdrive-login` sign-in.
+`bookshelf-drive-login` sign-in.
 
 ### Local folder storage
 
-File: `tests/storage/test_local.py`
+File: `tests/books/storage/test_local.py`
 
 - Checks that a file can be written and read back exactly, with its size and a modified time that includes the timezone. <sub>`test_write_read_roundtrip`</sub>
 - Checks that text with accents and symbols comes back unchanged. <sub>`test_text_roundtrip_unicode`</sub>
@@ -587,7 +590,7 @@ File: `tests/storage/test_local.py`
 - Checks that "exists" is true only for files (not folders) and that the size is reported. <sub>`test_exists_and_stat`</sub>
 - Checks that listing includes subfolders, is sorted, and that a folder filter matches whole folder names (`2026/10` doesn't include `2026/100`). <sub>`test_list_is_recursive_sorted_and_prefix_is_a_folder`</sub>
 - Checks that hidden files and folders (such as `.obsidian` and `.DS_Store`) are ignored in listings and changes. <sub>`test_hidden_files_are_ignored`</sub>
-- Checks that deleting the last file in a folder removes the empty folders, but never the LifeLog folder itself. <sub>`test_delete_removes_empty_folders`</sub>
+- Checks that deleting the last file in a folder removes the empty folders, but never the Bookshelf folder itself. <sub>`test_delete_removes_empty_folders`</sub>
 - Checks (5 cases) that unsafe or invalid paths are refused: absolute paths, paths that climb out with `..`, empty paths and backslashes. <sub>`test_invalid_paths_rejected`</sub>
 - Checks that paths are tidied (double slashes, `./`, a trailing slash). <sub>`test_normalize_path`</sub>
 - Checks that writing a file leaves no temporary files behind. <sub>`test_atomic_write_leaves_no_temp_files`</sub>
@@ -598,9 +601,9 @@ File: `tests/storage/test_local.py`
 
 ### Google Drive storage (against an imitation of Drive)
 
-File: `tests/storage/test_gdrive.py`
+File: `tests/books/storage/test_gdrive.py`
 
-- Checks that the LifeLog folder is created once in My Drive and reused afterwards. <sub>`test_root_folder_created_once_in_my_drive`</sub>
+- Checks that the Bookshelf folder is created once in My Drive and reused afterwards. <sub>`test_root_folder_created_once_in_my_drive`</sub>
 - Checks that writing a day file creates the year, month and day folders, saves it as Markdown, and reads back. <sub>`test_write_creates_folders_and_reads_back`</sub>
 - Checks that writing again updates the same Drive file instead of making a copy. <sub>`test_overwrite_updates_same_file`</sub>
 - Checks that "exists" is true only for files, sizes are reported, and missing files give "not found". <sub>`test_exists_stat_missing`</sub>
@@ -612,8 +615,8 @@ File: `tests/storage/test_gdrive.py`
 - Checks that after a restart, a deletion is still reported under the file's path. <sub>`test_changes_after_restart_map_deletions`</sub>
 - Checks that renaming a file in Drive is reported as the old name deleted and the new name added. <sub>`test_rename_by_owner_is_delete_plus_upsert`</sub>
 - Checks that renaming a folder reports every file inside it as moved. <sub>`test_folder_rename_moves_children`</sub>
-- Checks that changes outside the LifeLog folder, and hidden files, are ignored. <sub>`test_changes_outside_root_are_ignored`</sub>
-- Checks that choosing Google Drive before signing in gives an error telling you to run `lifelog-gdrive-login`. <sub>`test_get_storage_gdrive_without_token_errors`</sub>
+- Checks that changes outside the Bookshelf folder, and hidden files, are ignored. <sub>`test_changes_outside_root_are_ignored`</sub>
+- Checks that choosing Google Drive before signing in gives an error telling you to run `bookshelf-drive-login`. <sub>`test_get_storage_gdrive_without_token_errors`</sub>
 
 ---
 
@@ -646,8 +649,8 @@ completeness of this catalog. **Not covered:** real embedding providers.
 
 File: `tests/test_config.py`
 
-- Checks the defaults with no environment variables: Chicago time, 4 a.m. switch-over, local storage, a Drive folder named "LifeLog", and embedding size 1536. <sub>`test_defaults_without_env`</sub>
-- Checks that `LIFELOG_*` environment variables override the defaults and that the API token is hidden when settings are printed. <sub>`test_env_overrides`</sub>
+- Checks the defaults with no environment variables: Chicago time, 4 a.m. switch-over, local storage, a Drive folder named "Bookshelf", and embedding size 1536. <sub>`test_defaults_without_env`</sub>
+- Checks that `BOOKSHELF_*` environment variables override the defaults and that the API token is hidden when settings are printed. <sub>`test_env_overrides`</sub>
 - Checks that an unknown timezone, a switch-over hour of 24, or an unsupported storage type are refused. <sub>`test_validation`</sub>
 - Checks that `.env.example` lists every setting, and nothing that doesn't exist. <sub>`test_env_example_documents_every_setting`</sub>
 
@@ -677,7 +680,8 @@ programs in Docker.
 
 File: `tests/test_entrypoints.py`
 
-- Checks that the recording API starts and its health page answers "ok". <sub>`test_api_health`</sub>
-- Checks that the MCP server starts and offers exactly the five tools. <sub>`test_mcp_server_lists_tools`</sub>
-- Checks that the indexer's command line shows its help and exits normally. <sub>`test_indexer_cli_help`</sub>
-- Checks that the four installed commands (`lifelog-api`, `lifelog-indexer`, `lifelog-mcp`, `lifelog-gdrive-login`) point to real functions. <sub>`test_console_scripts_resolve`</sub>
+- Checks that the Typewriter (recording API) starts and its health page answers "ok". <sub>`test_typewriter_health`</sub>
+- Checks that the Reading Lamp (MCP server) starts and offers exactly the five tools. <sub>`test_reading_lamp_lists_tools`</sub>
+- Checks that the Bookmarks (indexer) command line shows its help and exits normally. <sub>`test_bookmarks_cli_help`</sub>
+- Checks that the Typewriter command line shows its help (`bookshelf-typewriter --help`) and exits without starting the server. <sub>`test_typewriter_cli_help`</sub>
+- Checks that the four installed commands (`bookshelf-typewriter`, `bookshelf-bookmarks`, `bookshelf-reading-lamp`, `bookshelf-drive-login`) point to real functions. <sub>`test_console_scripts_resolve`</sub>

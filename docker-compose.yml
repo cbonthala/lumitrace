@@ -1,36 +1,36 @@
-# Three programs, one image, one shared data volume (local storage root + SQLite index).
-# Copy .env.example to .env first. Put Google OAuth files in ./secrets (git-ignored).
-x-lifelog: &lifelog
+# Bookshelf: three programs, one image, one shared data volume (local storage root + SQLite
+# index). Copy .env.example to .env first. Put Google OAuth files in ./secrets (git-ignored).
+x-bookshelf: &bookshelf
   build: .
-  image: lifelog:latest
+  image: bookshelf:latest
   env_file: .env
   environment:
-    LIFELOG_INDEXER_NUDGE_URL: http://indexer:8001/nudge
+    BOOKSHELF_INDEXER_NUDGE_URL: http://bookmarks:8001/nudge
   volumes:
-    - lifelog-data:/data
+    - bookshelf-data:/data
     - ./secrets:/secrets
   restart: unless-stopped
 
 services:
-  api:
-    <<: *lifelog
-    command: ["lifelog-api"]
+  typewriter:
+    <<: *bookshelf
+    command: ["bookshelf-typewriter"]
     ports:
       - "8000:8000"
 
-  indexer:
-    <<: *lifelog
-    command: ["lifelog-indexer", "run"]
-    # Internal only: POST /nudge has no auth. Never add `ports:` here; the api service reaches it
-    # as http://indexer:8001 on the Compose network.
+  bookmarks:
+    <<: *bookshelf
+    command: ["bookshelf-bookmarks", "run"]
+    # Internal only: POST /nudge has no auth. Never add `ports:` here; the typewriter service
+    # reaches it as http://bookmarks:8001 on the Compose network.
     expose:
       - "8001"
 
-  mcp:
-    <<: *lifelog
-    command: ["lifelog-mcp"]
+  reading-lamp:
+    <<: *bookshelf
+    command: ["bookshelf-reading-lamp"]
     ports:
       - "8002:8002"
 
 volumes:
-  lifelog-data:
+  bookshelf-data:

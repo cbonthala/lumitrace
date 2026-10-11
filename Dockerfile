@@ -1,4 +1,5 @@
-# One image for all three programs; docker-compose.yml picks the command per service.
+# One Bookshelf image for all three programs (Typewriter, Bookmarks, Reading Lamp);
+# docker-compose.yml picks the command per service.
 FROM python:3.12-slim
 
 RUN apt-get update \
@@ -18,22 +19,22 @@ WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-COPY lifelog ./lifelog
+COPY bookshelf ./bookshelf
 COPY prompts ./prompts
 RUN uv sync --frozen --no-dev
 
 ENV PATH="/app/.venv/bin:${PATH}" \
-    LIFELOG_LOCAL_ROOT=/data/LifeLog \
-    LIFELOG_INDEX_PATH=/data/index/lifelog.sqlite \
-    LIFELOG_PROMPTS_DIR=/app/prompts \
-    LIFELOG_GDRIVE_CLIENT_SECRETS_FILE=/secrets/gdrive_client_secret.json \
-    LIFELOG_GDRIVE_TOKEN_FILE=/secrets/gdrive_token.json
+    BOOKSHELF_LOCAL_ROOT=/data/Bookshelf \
+    BOOKSHELF_INDEX_PATH=/data/index/bookshelf.sqlite \
+    BOOKSHELF_PROMPTS_DIR=/app/prompts \
+    BOOKSHELF_GDRIVE_CLIENT_SECRETS_FILE=/secrets/gdrive_client_secret.json \
+    BOOKSHELF_GDRIVE_TOKEN_FILE=/secrets/gdrive_token.json
 
-RUN useradd --create-home --uid 10001 lifelog \
+RUN useradd --create-home --uid 10001 bookshelf \
     && mkdir -p /data /secrets \
-    && chown lifelog:lifelog /data /secrets
-USER lifelog
+    && chown bookshelf:bookshelf /data /secrets
+USER bookshelf
 VOLUME ["/data"]
 
 EXPOSE 8000 8001 8002
-CMD ["lifelog-api"]
+CMD ["bookshelf-typewriter"]

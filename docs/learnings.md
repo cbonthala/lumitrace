@@ -1,7 +1,7 @@
 # Learnings
 
 What we learned about quality, models, prompts and operations, and what to change next.
-Personal details are always removed; the full weekly reports live in `LifeLog/_system/reports/`.
+Personal details are always removed; the full weekly reports live in `Bookshelf/_system/reports/`.
 
 Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
@@ -9,7 +9,7 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 - 2026-10-10 — mcp resolved to 2.x, where `FastMCP` is now `mcp.server.mcpserver.MCPServer`;
   v1 examples online won't work as-is → use the 2.x API.
-- 2026-10-10 — With the `drive.file` scope, files created outside LifeLog are invisible to it →
+- 2026-10-10 — With the `drive.file` scope, files created outside Bookshelf are invisible to it →
   reading self-written Obsidian notes needs a decision (open question in the plan).
 - 2026-10-10 — Photos are embedded as `![[photo-NN.jpg]]`, a name that repeats in every day
   folder. Obsidian should resolve it to the file next to the note, but this is unverified →
@@ -22,8 +22,13 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 - 2026-10-10 — MCP tests built their own index fixture, so indexer → MCP compatibility (e.g.
   lower-cased meal types) was only proven by the end-to-end test → keep `tests/e2e/` running
   every component for real, no hand-built fixtures.
+- 2026-10-11 — Renaming the project (LifeLog → Bookshelf) touched the day-file markers and the
+  `lifelog_format` key, which are part of the file format, not just code names → `parse` accepts
+  both marker prefixes and the old key, and a test parses a pre-rename file (ADR 0008). The data
+  folder `data/Bookshelf` differs from the `bookshelf/` package only by case, so `.gitignore`
+  must never list `Bookshelf/` (case-insensitive filesystems would ignore the package).
 
-## Recording API
+## Typewriter (recording API)
 
 - 2026-10-10 — pydantic `ValidationError` and `json.JSONDecodeError` messages echo their input,
   which for AI replies is content about the owner's day → activity records keep only the error
@@ -35,13 +40,13 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
   AAC encoder is invisible (`afconvert -hf` lists no data formats for `m4af`) and it exits 2 →
   compression falls back to keeping the original; the real-encoder test skips there (ADR 0013).
 - 2026-10-10 — Apple Shortcuts has no error handling: a failed "Get Contents of URL" just stops
-  the shortcut → save to the LifeLog Inbox folder *before* uploading and delete only after the
-  API returns a `capture_id` (`docs/iphone-shortcuts.md`).
+  the shortcut → save to the Notepad Inbox folder *before* uploading and delete only after the
+  API returns a `capture_id` (`docs/notepad.md`).
 - 2026-10-10 — Unverified on a real iPhone: that a Form file field holding several photos sends
   one part per photo, and which Shortcuts actions run on Apple Watch → check on first use and
-  correct `docs/iphone-shortcuts.md`.
+  correct `docs/notepad.md`.
 
-## Indexer
+## Bookmarks (indexer)
 
 - 2026-10-10 — The API writes the day file and its `_system/generated/` snapshot one after the
   other, so a sync can see a new day file next to an old snapshot and blame the owner for the
@@ -54,7 +59,7 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 - 2026-10-10 — sqlite-vec returns a stored vector by rowid (`SELECT embedding FROM passages_vec
   WHERE rowid = ?`), so unchanged passages can reuse vectors instead of re-embedding (ADR 0021).
 
-## MCP server
+## Reading Lamp (MCP server)
 
 - 2026-10-10 — In mcp 2.x, sync tool functions run in a worker thread, so SQLite and LiteLLM
   calls in tools don't block the event loop → keep tools sync; open a connection per call.

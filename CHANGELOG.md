@@ -7,6 +7,33 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- **Renamed the project from LifeLog to Bookshelf** (decision 0008): *you jot it on the
+  Notepad, the Typewriter turns it into Books, Bookmarks mark every page worth finding, and the
+  Reading Lamp lets you read any of it.* Name map in README and AGENTS.md.
+  - Package `lifelog` → `bookshelf`: `api` + `pipeline` → `bookshelf/typewriter/` (pipeline in
+    `bookshelf/typewriter/pipeline/`), `indexer` → `bookshelf/bookmarks/`, `mcp_server` →
+    `bookshelf/reading_lamp/`, `dayfile.py` + `storage/` → `bookshelf/books/`. `config`,
+    `embeddings`, `nudge`, `logging_setup` and `index/schema.py` stay shared at the top. Tests
+    mirror the layout (`tests/typewriter/`, `tests/bookmarks/`, `tests/reading_lamp/`,
+    `tests/books/`).
+  - Commands `bookshelf-typewriter`, `bookshelf-bookmarks`, `bookshelf-reading-lamp`,
+    `bookshelf-drive-login` replace `lifelog-api`, `lifelog-indexer`, `lifelog-mcp`,
+    `lifelog-gdrive-login`. `bookshelf-typewriter --help` now prints help instead of starting
+    the server.
+  - Environment prefix `LIFELOG_` → `BOOKSHELF_`; default Drive root folder `Bookshelf`, local
+    root `data/Bookshelf`, index `data/index/bookshelf.sqlite` (backup
+    `_system/index-backup/bookshelf.sqlite`). `_system/` subfolders unchanged.
+  - Docker: image `bookshelf`, services `typewriter`, `bookmarks` (port still internal) and
+    `reading-lamp`, volume `bookshelf-data`.
+  - Reading Lamp shows itself to AI apps as "Bookshelf"; OAuth scope `bookshelf`.
+  - Day files are written with `bookshelf:` markers and `bookshelf_format`; files with the old
+    `lifelog:` markers and `lifelog_format` are still read. Prompt markers are
+    `bookshelf-prompt:`.
+  - Docs renamed: `typewriter.md`, `bookmarks.md`, `reading-lamp.md`, `notepad.md`,
+    `books-format.md`. Shortcuts "LifeLog Config", "LifeLog Inbox" and "Send to LifeLog" are now
+    **Notepad Config**, **Notepad Inbox** and **Send to Bookshelf**; Log My Day and Quick Note
+    keep their names.
+  - Upgrading an existing setup: `docs/runbook.md` → *Upgrading from LifeLog*.
 - `docs/test-cases.md`: a plain-English catalog of every test, grouped by component and
   feature, with an end-to-end story, a "covered / not covered" line per component and each
   test's name for tracing. `tests/test_docs_test_cases.py` fails when a test is missing from
@@ -14,13 +41,16 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
   describing every new or changed test; linked from README and `docs/architecture.md`;
   decision 0007.
 
-### Recording API
+### Typewriter (recording API)
 
-### Indexer
+### Bookmarks (indexer)
 
-### MCP server
+### Reading Lamp (MCP server)
 
 ## [0.1.0] - 2026-10-10
+
+Released as **LifeLog**; the names below are the ones it shipped with (see *Unreleased* for the
+rename to Bookshelf).
 
 First working version: record on the iPhone, get a Markdown day file in storage, read it in
 Obsidian, ask through MCP. Tested offline end to end; not yet verified with real providers, real

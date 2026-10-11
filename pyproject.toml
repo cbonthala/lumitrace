@@ -1,7 +1,7 @@
 [project]
-name = "lifelog"
+name = "bookshelf"
 version = "0.1.0"
-description = "Voice journal: record your day, get a Markdown journal in Google Drive, ask questions through MCP."
+description = "Bookshelf voice journal: record your day, get a Markdown journal in Google Drive, ask questions through MCP."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Proprietary" }
@@ -26,10 +26,10 @@ dependencies = [
 ]
 
 [project.scripts]
-lifelog-api = "lifelog.api.__main__:main"
-lifelog-indexer = "lifelog.indexer.__main__:main"
-lifelog-mcp = "lifelog.mcp_server.__main__:main"
-lifelog-gdrive-login = "lifelog.storage.gdrive:login_main"
+bookshelf-typewriter = "bookshelf.typewriter.__main__:main"
+bookshelf-bookmarks = "bookshelf.bookmarks.__main__:main"
+bookshelf-reading-lamp = "bookshelf.reading_lamp.__main__:main"
+bookshelf-drive-login = "bookshelf.books.storage.gdrive:login_main"
 
 [dependency-groups]
 dev = [
@@ -42,7 +42,7 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["lifelog"]
+packages = ["bookshelf"]
 
 [tool.ruff]
 line-length = 100
