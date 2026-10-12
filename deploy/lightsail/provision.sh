@@ -24,10 +24,12 @@ echo "AWS account $account, region $REGION, instance '$NAME'"
 if [ ! -f "$KEY_FILE" ]; then
   ssh-keygen -t ed25519 -N "" -C "lumen-lightsail" -f "$KEY_FILE"
 fi
-if ! ls_ get-key-pair --key-pair-name "$NAME" >/dev/null 2>&1; then
-  ls_ import-key-pair --key-pair-name "$NAME" \
+# Lightsail names must be unique across resource types, so the key pair can't be "$NAME".
+KEY_PAIR="$NAME-key"
+if ! ls_ get-key-pair --key-pair-name "$KEY_PAIR" >/dev/null 2>&1; then
+  ls_ import-key-pair --key-pair-name "$KEY_PAIR" \
     --public-key-base64 "$(cat "$KEY_FILE.pub")" >/dev/null
-  echo "Imported SSH key $KEY_FILE.pub as key pair '$NAME'"
+  echo "Imported SSH key $KEY_FILE.pub as key pair '$KEY_PAIR'"
 fi
 
 if ! ls_ get-instance --instance-name "$NAME" >/dev/null 2>&1; then
@@ -37,7 +39,7 @@ if ! ls_ get-instance --instance-name "$NAME" >/dev/null 2>&1; then
   price="$(ls_ get-bundles --query "bundles[?bundleId=='$bundle'].price | [0]" --output text)"
   echo "Creating instance with bundle $bundle (\$$price per month)"
   ls_ create-instances --instance-names "$NAME" --availability-zone "$ZONE" \
-    --blueprint-id ubuntu_24_04 --bundle-id "$bundle" --key-pair-name "$NAME" \
+    --blueprint-id ubuntu_24_04 --bundle-id "$bundle" --key-pair-name "$KEY_PAIR" \
     --user-data "file://$HERE/cloud-init.sh" \
     --add-ons "addOnType=AutoSnapshot,autoSnapshotAddOnRequest={snapshotTimeOfDay=$SNAPSHOT_TIME}" \
     --tags key=project,value=lumen >/dev/null

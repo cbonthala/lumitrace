@@ -32,6 +32,20 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
   compatibility test is parametrized over every old name. A search for "reading lamp" missed the
   CamelCase class `ReadingLampTools` → when renaming, also search each old name without
   separators. `data/Lumen` vs the `lumen/` package has the same case-only clash as before.
+- 2026-10-11 — First real Lightsail provisioning found two problems the scripts never hit
+  offline: Lightsail names are unique across resource types (a key pair called `lumen` blocked
+  the instance `lumen`), and Lightsail appends user data to its own `/bin/sh` launch script, so
+  `#!/bin/bash` is ignored and `set -o pipefail` killed the first-boot setup in dash → key pair
+  is `lumen-key`; `cloud-init.sh` is POSIX sh that runs the setup under bash, and can be re-run
+  by hand (ADR 0041).
+- 2026-10-11 — Bind-mounted secrets keep the host owner, not the container's: files uploaded by
+  `ubuntu` (uid 1000) with mode 0600 are unreadable to the image's `lumen` user (uid 10001), so
+  `deploy.sh` chowns `/opt/lumen/secrets` to 10001. The token file must also be writable,
+  because `load_credentials` saves the refreshed token back.
+- 2026-10-12 — Compose `env_file` values override the image's `ENV`, so a production `.env`
+  copied from `.env.example` replaced `/secrets/...` and `/data/...` with relative paths that do
+  not exist in the container (no Drive token, index outside the volume) → `.env.example` and
+  the runbook say to delete the path lines from a Docker `.env`.
 
 ## Prism (recording API)
 

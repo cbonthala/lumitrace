@@ -89,6 +89,14 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
   instance in `us-east-2` (SSH key, daily snapshots, static IP, SSH-only firewall), deploy the
   committed code with ports bound to localhost, and publish the Prism on the tailnet and the
   Lens through Tailscale Funnel. Steps in `docs/runbook.md` → *Deploying on AWS Lightsail*.
+  Fixed after the first real run: the SSH key pair is named `lumen-key` (Lightsail names are
+  unique across resource types), and `cloud-init.sh` is POSIX sh running the setup under bash
+  (Lightsail runs user data with `/bin/sh`, where `pipefail` failed); it can be re-run by hand.
+  `deploy.sh` now gives the uploaded `secrets/` to the container user (uid 10001), which
+  otherwise could not read or refresh the Google Drive token. `.env.example` and the runbook
+  warn that a Docker `.env` must not set the path settings (they override the image's container
+  paths). `docs/flash.md` now uses the Prism address `tailscale.sh` serves
+  (`https://<machine>.<tailnet>.ts.net:8443`).
 
 ### Prism (recording API)
 

@@ -63,7 +63,9 @@ and never paste real tokens or personal content here.
   after 7 days). `drive.file` is a non-sensitive scope, so no verification is needed.
 * On a machine with a browser: `uv run lumen-drive-login` (or `--no-browser` and open the
   printed URL). It writes `LUMEN_GDRIVE_TOKEN_FILE` with mode 0600.
-* Copy the token file to the server's `./secrets/` folder and restart the services.
+* Copy the token file to the server's `./secrets/` folder and restart the services. On
+  Lightsail, run `SECRETS_DIR=secrets deploy/lightsail/deploy.sh`, which also gives the files to
+  the container user (uid 10001).
 * The app must keep using the **same OAuth client**; with `drive.file`, a different client cannot
   see the existing `Lumen` folder.
 
@@ -120,11 +122,17 @@ speech providers stay external (their keys only in the server's `.env`).
 2. **Create the server:** `deploy/lightsail/provision.sh`. It creates (if missing) the SSH key
    `~/.ssh/lumen-lightsail`, the instance `lumen` (Ubuntu 24.04, daily automatic snapshots), the
    static IP `lumen-ip`, and a firewall that only allows SSH from your current IP. Re-run it if
-   your IP changes. First boot installs Docker, Tailscale and a swap file (a few minutes).
+   your IP changes. First boot installs Docker, Tailscale and a swap file (a few minutes). If
+   `/var/lib/lumen-bootstrap-done` is still missing after ~10 minutes (`sudo cloud-init status
+   --long` on the server), run it by hand:
+   `ssh -i ~/.ssh/lumen-lightsail ubuntu@<ip> 'sudo sh -s' < deploy/lightsail/cloud-init.sh`.
 3. **Production settings:** write a local `.env.production` (git-ignored) from `.env.example`:
    real providers, `LUMEN_API_TOKEN`, `LUMEN_MCP_AUTH_TOKEN` and `LUMEN_MCP_OWNER_PASSWORD`,
    `LUMEN_STORAGE_BACKEND=gdrive`, `LUMEN_FAMILY`, and `LUMEN_MCP_AUTH_MODE=oauth` (the public URL
-   comes in step 5). Put the Google Drive files in `secrets/` (see *First-run checklist*).
+   comes in step 5). Delete the `LUMEN_PROMPTS_DIR`, `LUMEN_LOCAL_ROOT`, `LUMEN_INDEX_PATH`
+   and `LUMEN_GDRIVE_*_FILE` lines: the image sets the container paths (`/secrets/...`,
+   `/data/...`) and the env file would override them with paths that do not exist there. Put
+   the Google Drive files in `secrets/` (see *First-run checklist*).
 4. **Deploy:** `ENV_FILE=.env.production SECRETS_DIR=secrets deploy/lightsail/deploy.sh`. It
    uploads both, copies the committed code (git `HEAD`) to `/opt/lumen/app`, and starts the
    services with `deploy/lightsail/compose.lightsail.yml` (ports on `127.0.0.1` only). Later

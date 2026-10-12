@@ -34,8 +34,11 @@ if [ -n "${ENV_FILE:-}" ]; then
   remote chmod 600 /opt/lumen/.env
 fi
 if [ -n "${SECRETS_DIR:-}" ]; then
-  scp "${ssh_opts[@]}" -r "$SECRETS_DIR/." "$target:/opt/lumen/secrets/"
-  remote chmod -R go-rwx /opt/lumen/secrets
+  remote 'rm -rf /tmp/lumen-secrets && mkdir -m 700 /tmp/lumen-secrets'
+  scp "${ssh_opts[@]}" -r "$SECRETS_DIR/." "$target:/tmp/lumen-secrets/"
+  # The containers run as uid 10001 (Dockerfile) and must read and refresh the Drive token.
+  remote 'sudo cp -r /tmp/lumen-secrets/. /opt/lumen/secrets/ && rm -rf /tmp/lumen-secrets &&
+    sudo chown -R 10001:10001 /opt/lumen/secrets && sudo chmod -R u=rwX,go= /opt/lumen/secrets'
 fi
 if ! remote test -f /opt/lumen/.env; then
   echo "No /opt/lumen/.env on the server: run again with ENV_FILE=<your production .env>." >&2

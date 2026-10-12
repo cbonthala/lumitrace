@@ -1,8 +1,15 @@
-#!/bin/bash
+#!/bin/sh
 # First-boot setup of the Lumen server (Lightsail runs this once as root; see provision.sh).
 # Installs Docker (official repository, for Compose's `!override`), Tailscale and jq, adds a
 # 2 GB swap file for image builds, and prepares /opt/lumen. Contains no secrets: Lightsail
 # shows user data in the console.
+#
+# Lightsail appends user data to its own /bin/sh launch script, so this file must stay POSIX
+# sh; the setup itself runs under bash (for pipefail). Safe to run again by hand:
+# ssh ... 'sudo sh -s' < deploy/lightsail/cloud-init.sh
+set -eu
+cat > /root/lumen-bootstrap.sh <<'BOOTSTRAP'
+#!/bin/bash
 set -euxo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
@@ -16,9 +23,11 @@ fi
 
 apt-get update
 apt-get install -y ca-certificates curl git jq
-curl -fsSL https://get.docker.com | sh
+command -v docker >/dev/null || curl -fsSL https://get.docker.com | sh
 usermod -aG docker ubuntu
-curl -fsSL https://tailscale.com/install.sh | sh
+command -v tailscale >/dev/null || curl -fsSL https://tailscale.com/install.sh | sh
 
 install -d -m 0750 -o ubuntu -g ubuntu /opt/lumen /opt/lumen/secrets
 touch /var/lib/lumen-bootstrap-done
+BOOTSTRAP
+bash /root/lumen-bootstrap.sh

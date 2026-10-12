@@ -28,11 +28,13 @@ so never use plain HTTP outside your home network). Two options:
 
 1. Install Tailscale on the server and on the iPhone, sign in to the same tailnet.
 2. In the Tailscale admin console enable **MagicDNS** and **HTTPS certificates**.
-3. On the server: `sudo tailscale serve --bg 8000` (proxies `https://<machine>.<tailnet>.ts.net`
-   to the API on port 8000 with a valid certificate).
+3. On the server: `sudo tailscale serve --bg --https=8443 http://127.0.0.1:8000` (proxies
+   `https://<machine>.<tailnet>.ts.net:8443` to the API with a valid certificate, tailnet only).
+   On the Lightsail server `deploy/lightsail/tailscale.sh` does this, and also publishes the Lens
+   on port 443 through Funnel (`docs/runbook.md` → Deploying on AWS Lightsail).
 4. On the iPhone, Tailscale app → settings → turn on **VPN On Demand** so the connection comes up
    by itself when a shortcut runs.
-5. The API address is `https://<machine>.<tailnet>.ts.net`.
+5. The API address is `https://<machine>.<tailnet>.ts.net:8443`.
 
 **B. Public HTTPS**
 
