@@ -143,3 +143,20 @@ docker compose up --build           # services prism, spectrum, lens; shared /da
 (`uv` may also be on your PATH; then plain `uv run ...` works.) The repository folder is being
 renamed to `lumen`; until then it may still be called `lifelog`. The folder name does not matter
 to the code.
+
+## Cursor Cloud specific instructions
+
+The Cloud Agent image already has Python 3.12, `ffmpeg`, and a C toolchain. `install` puts
+uv 0.13.0 on `/usr/local/bin` (the login shell does not load `~/.local/bin`) and runs
+`uv sync --frozen`, which includes the dev group (`pytest`, `ruff`).
+
+`start` launches Prism, Spectrum, and Lens in tmux sessions named `prism`, `spectrum`, and
+`lens`. Logs are `/tmp/lumen-prism.log`, `/tmp/lumen-spectrum.log`, and `/tmp/lumen-lens.log`.
+If `.env` is missing, `start` copies `.env.example` and sets speech, the three LLM settings,
+and embeddings to `fake`, with development tokens long enough for Prism and Lens to accept
+requests. An existing `.env` is left as it is. Read `LUMEN_API_TOKEN` and `LUMEN_MCP_AUTH_TOKEN`
+from that file. Ports: Prism `8000`, Spectrum `8001`, Lens `8002` (`/mcp`). Local day files
+are under `data/Lumen/` (gitignored). A nudge is asynchronous: wait until Spectrum
+`/health` reports `pending_paths` of 0 before searching.
+
+`uv run pytest` and `uv run ruff check .` stay the offline checks and do not need the servers.

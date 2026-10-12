@@ -7,6 +7,8 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- Cloud Agent notes in `AGENTS.md`: uv 0.13.0 on `/usr/local/bin`, `uv sync --frozen`, and
+  tmux sessions for Prism, Spectrum, and Lens with a generated offline `.env` when none exists.
 - **Renamed the project from Bookshelf to Lumen** (decision 0009, supersedes 0008): *A Flash
   captures the moment, the Prism splits it into its colors, each day becomes a Frame, the
   Spectrum lays everything out in order, and the Lens lets you zoom into any day.* Name map in
