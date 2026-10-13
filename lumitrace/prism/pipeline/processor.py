@@ -78,6 +78,8 @@ class CaptureRequest(BaseModel):
     received_at: dt.datetime
     captured_at: dt.datetime
     """Timezone-aware."""
+    entry_date: dt.date | None = None
+    """The day chosen by the sender (``?date=``); None = derived from ``captured_at``."""
     text: str = ""
     """Typed note text (notes only)."""
     location: str | None = None
@@ -132,10 +134,13 @@ class CaptureProcessor:
     def entry_date_for(self, captured_at: dt.datetime) -> dt.date:
         return entry_date(captured_at, self.settings.tz, self.settings.day_rollover_hour)
 
+    def entry_date_of(self, req: CaptureRequest) -> dt.date:
+        return req.entry_date or self.entry_date_for(req.captured_at)
+
     def process(self, req: CaptureRequest, attempt: int = 1) -> ProcessResult:
         """Process a capture. Writes one activity record either way; re-raises fatal errors."""
         local = req.captured_at.astimezone(self.settings.tz)
-        day_date = self.entry_date_for(local)
+        day_date = self.entry_date_of(req)
         record = ActivityRecord(
             capture_id=req.id,
             kind=req.kind,

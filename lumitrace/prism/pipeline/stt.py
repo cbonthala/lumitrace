@@ -15,7 +15,6 @@ from __future__ import annotations
 import io
 import json
 import logging
-import mimetypes
 import time
 import uuid
 from collections.abc import Callable
@@ -193,7 +192,20 @@ class AWSTranscribeTranscriber:
 
 
 SARVAM_API_URL = "https://api.sarvam.ai"
-SARVAM_FORMATS = {"wav", "mp3", "aac", "aiff", "ogg", "opus", "flac", "mp4", "m4a", "amr", "webm"}
+SARVAM_FORMATS = {
+    "wav": "audio/wav",
+    "mp3": "audio/mpeg",
+    "aac": "audio/aac",
+    "aiff": "audio/aiff",
+    "ogg": "audio/ogg",
+    "opus": "audio/opus",
+    "flac": "audio/flac",
+    "mp4": "audio/mp4",
+    "m4a": "audio/x-m4a",
+    "amr": "audio/amr",
+    "webm": "audio/webm",
+}
+"""Extension → the content type Sarvam accepts (``mimetypes`` guesses differ per OS)."""
 SARVAM_MAX_KEYTERMS = 50
 SARVAM_MAX_KEYTERM_CHARS = 64
 
@@ -247,6 +259,8 @@ class SarvamTranscriber:
                 warnings.append(f"translation: {_short(exc)}")
         results = self._wait(jobs)
         text = self._output(jobs["transcript"], results["transcript"])
+        if not text:
+            warnings.append("transcript: Sarvam returned no text")
         translation = ""
         if "translation" in jobs:
             try:
@@ -280,7 +294,7 @@ class SarvamTranscriber:
             content=data,
             headers={
                 "x-ms-blob-type": "BlockBlob",
-                "Content-Type": mimetypes.guess_type(name)[0] or "application/octet-stream",
+                "Content-Type": SARVAM_FORMATS[name.rsplit(".", 1)[-1]],
             },
         )
         _check(resp, "audio upload")

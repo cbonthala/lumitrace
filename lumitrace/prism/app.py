@@ -6,6 +6,7 @@ Endpoints (details and examples: ``docs/prism.md``):
   ``lon``, ``place``, ``captured_at``, ``capture_id``.
 * ``POST /notes``: multipart, urlencoded or JSON; ``text`` and/or an ``audio`` clip, same
   optional fields.
+* Both take an optional ``?date=YYYY-MM-DD`` query parameter: the day the capture belongs to.
 * ``GET /captures/{id}``, ``POST /captures/{id}/retry``: status of a capture / retry a failed one.
 * ``GET /health``: unauthenticated liveness check.
 
@@ -78,6 +79,7 @@ class ParsedCapture(BaseModel):
 
     capture_id: str | None = None
     captured_at: dt.datetime
+    entry_date: dt.date | None = None
     text: str = ""
     location: str | None = None
     audio: Upload | None = None
@@ -106,6 +108,20 @@ def parse_captured_at(value: Any, settings: Settings) -> dt.datetime:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=settings.tz)
     return parsed.astimezone(settings.tz)
+
+
+def parse_entry_date(value: str | None, settings: Settings) -> dt.date | None:
+    """The ``date`` query parameter (``YYYY-MM-DD``). None when empty: the day then follows
+    ``captured_at`` (default now) in ``LUMITRACE_TIMEZONE``, with the day rollover hour."""
+    if value is None or not value.strip():
+        return None
+    try:
+        day = dt.date.fromisoformat(value.strip())
+    except ValueError as exc:
+        raise _bad("date must be YYYY-MM-DD") from exc
+    if day > dt.datetime.now(settings.tz).date():
+        raise _bad("date is in the future")
+    return day
 
 
 def _is_number(value: str) -> bool:
@@ -211,6 +227,7 @@ async def parse_request(request: Request, settings: Settings) -> ParsedCapture:
     return ParsedCapture(
         capture_id=capture_id,
         captured_at=parse_captured_at(fields.get("captured_at"), settings),
+        entry_date=parse_entry_date(request.query_params.get("date"), settings),
         text=text,
         location=format_location(place, lat, lon),
         audio=audio,
@@ -266,6 +283,7 @@ def accept_capture(
             kind=kind,
             received_at=received,
             captured_at=parsed.captured_at,
+            entry_date=parsed.entry_date,
             text=parsed.text,
             location=parsed.location,
             audio=audio_ref,
@@ -278,7 +296,7 @@ def accept_capture(
             capture_id=capture_id,
             kind=kind,
             status="queued",
-            entry_date=services.processor.entry_date_for(parsed.captured_at),
+            entry_date=services.processor.entry_date_of(req),
             captured_at=parsed.captured_at,
             received_at=received,
             attempts=existing.attempts if existing else 0,

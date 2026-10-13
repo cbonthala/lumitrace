@@ -38,6 +38,12 @@ logs an error at start-up. The token is compared in constant time.
 | `place` | no | a place name, e.g. the city from Get Details of Locations |
 | `capture_id` | no | client id for safe retries: letters, digits, `.`, `_`, `-`, max 128 |
 
+Query parameter (also on `POST /notes`), ADR 0017:
+
+| Parameter | Required | Meaning |
+|---|---|---|
+| `date` | no | the day the capture belongs to, `YYYY-MM-DD` (`/recordings?date=2026-10-08`); not after today. Empty or missing: the day of `captured_at` (default now) in `LUMITRACE_TIMEZONE`, before `LUMITRACE_DAY_ROLLOVER_HOUR` counting as the previous day. `422` if malformed or in the future |
+
 Response `202 Accepted` (new) or `200 OK` (this `capture_id` was already received):
 
 ```json
@@ -152,8 +158,10 @@ retries keep working. The inbox folder is deleted once a capture is `done`.
 `lumitrace.prism.pipeline.processor.CaptureProcessor.process(request)`; each step is timed into the
 activity record.
 
-1. **Entry date:** `entry_date(captured_at, LUMITRACE_TIMEZONE, LUMITRACE_DAY_ROLLOVER_HOUR)`; before
-   4 a.m. counts as the previous day. The capture time is stored in the local timezone.
+1. **Entry date:** the `date` query parameter if one was sent (kept in the inbox manifest as
+   `CaptureRequest.entry_date`, so retries and restarts use it too), otherwise
+   `entry_date(captured_at, LUMITRACE_TIMEZONE, LUMITRACE_DAY_ROLLOVER_HOUR)`; before 4 a.m. counts
+   as the previous day. The capture time is stored in the local timezone either way.
 2. **Audio** (`pipeline/audio.py`, ADR 0013): compress to `.m4a`, AAC, mono, at
    `LUMITRACE_AUDIO_BITRATE_KBPS` with `ffmpeg`, else macOS `afconvert`. If neither exists or both
    fail, the original is kept unchanged (with its own extension, e.g. `.wav`; MPEG-4 audio keeps

@@ -173,6 +173,8 @@ File: `tests/prism/test_capture_api.py`
 
 - Checks that a recording made at 1:30 a.m. goes into the previous day's journal (with the audio named by its clock time), while one at exactly 4:00 a.m. starts the new day. <sub>`test_rollover_before_4am_counts_as_previous_day`</sub>
 - Checks that the capture time is understood whether it is sent without a timezone (taken as local time), in UTC, as a Unix timestamp, or left empty (meaning "now"). <sub>`test_captured_at_formats`</sub>
+- Checks that `?date=2026-10-08` files a recording made on Oct 10 under Oct 8 (day file, audio name and the confirmation message), keeps its real capture time, leaves Oct 10 untouched, and that an empty `date` falls back to the capture time's day. <sub>`test_date_query_parameter_chooses_the_day`</sub>
+- Checks that a `date` that is not a real `YYYY-MM-DD` date, or is after today, is refused with 422. <sub>`test_date_query_parameter_validation`</sub>
 
 ### Quick notes
 
@@ -270,7 +272,8 @@ File: `tests/prism/test_stt.py`
 - Checks, against an imitation of Amazon's services, that the AWS option uploads the audio, starts a job with the right format and language, waits for it, reads the transcript and deletes every file it created. <sub>`test_aws_transcribe_round_trip_and_cleanup`</sub>
 - Checks that a failed AWS job still cleans up its files and reports the failure, and that an audio format AWS can't read is refused up front. <sub>`test_aws_transcribe_failure_still_cleans_up`</sub>
 - Checks how the language setting is passed to AWS: a full code like "en-GB" as is, "es" as US Spanish, and an empty setting as "detect the language". <sub>`test_aws_language_options`</sub>
-- Checks, against an imitation of Sarvam's batch service, that the Sarvam option runs a transcript job and a translation job on the same upload, sends the model, mode, Telugu language code and the family names plus extra keyterms, keeps the API key away from the file-storage links, and returns both texts. <sub>`test_sarvam_transcript_and_translation`</sub>
+- Checks, against an imitation of Sarvam's batch service, that the Sarvam option runs a transcript job and a translation job on the same upload, sends the model, mode, Telugu language code and the family names plus extra keyterms, keeps the API key away from the file-storage links, uploads `.m4a` as `audio/x-m4a` (Sarvam returns an empty transcript for a generic type), and returns both texts. <sub>`test_sarvam_transcript_and_translation`</sub>
+- Checks that an empty Sarvam transcript is reported as a warning (so it shows in the capture status) and that `.mp3` is uploaded as `audio/mpeg`. <sub>`test_sarvam_empty_transcript_is_a_warning`</sub>
 - Checks the Sarvam options: translation can be turned off, keyterms are only sent to the v4 model, an empty language means "detect it", unsupported audio formats are refused, and a missing API key gives a clear error. <sub>`test_sarvam_options`</sub>
 - Checks that when only Sarvam's translation fails, the transcript is still returned, with a warning that says why. <sub>`test_sarvam_failed_translation_keeps_the_transcript`</sub>
 - Checks that a failed Sarvam transcript job raises an error with the reason, and that a refused upload reports only the HTTP status, never the secret upload link. <sub>`test_sarvam_failed_transcript_raises_without_leaking_urls`</sub>
@@ -694,12 +697,13 @@ File: `tests/test_shared_helpers.py`
 - Checks that fake embeddings put texts that share words closer together, so search by meaning behaves sensibly in tests. <sub>`test_fake_embeddings_rank_shared_words_closer`</sub>
 - Checks that a nudge sends the changed paths to the indexer's address. <sub>`test_nudge_posts_paths`</sub>
 - Checks that a nudge reports failure instead of crashing when the indexer is down, answers with an error, or has no address configured. <sub>`test_nudge_never_raises`</sub>
+- Checks that even with debug logging the HTTP client libraries only log warnings, so request URLs (Sarvam's signed storage links) never reach the logs. <sub>`test_http_client_logs_never_show_request_urls`</sub>
 
 ### Bruno collection
 
 File: `tests/test_bruno_collection.py`
 
-- Checks that every request in the Bruno collection (`bruno/`) calls a route that really exists in the Prism, Spectrum or Lens, with the right method. <sub>`test_every_request_matches_a_real_route`</sub>
+- Checks that every request in the Bruno collection (`bruno/`) calls a route that really exists in the Prism, Spectrum or Lens, with the right method (ignoring query parameters such as `?date=`). <sub>`test_every_request_matches_a_real_route`</sub>
 - Checks that the collection's MCP requests, sent in order against a real Lens, open a session, list the tools, call all five tools without errors and close the session. <sub>`test_lens_mcp_requests_run_in_order`</sub>
 - Checks that the collection contains no tokens: requests use `{{variables}}`, environments read tokens from the git-ignored `bruno/.env`, and `.env.example` leaves them blank. <sub>`test_collection_holds_no_secrets`</sub>
 

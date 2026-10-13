@@ -263,6 +263,8 @@ an HTTP API: **Prism**, **Spectrum** and **Lens** (with **OAuth** and **MCP** su
 4. **Prism:** Quick note (JSON) needs nothing else. For the multipart requests, put a photo and a
    short audio file in `bruno/samples/` (git-ignored) as `photo.jpg` and `recording.m4a`, or pick
    files in the Body tab. Each upload saves its `capture_id`, so **Capture status** works next.
+   The uploads have an empty `date` query parameter (Params tab): leave it empty for today, or
+   set `YYYY-MM-DD` to file the capture under an earlier day.
 5. **Lens → MCP:** run **Initialize** first (it saves the session id), then any tool call.
 
 In production, notes and recordings are added to today's real journal and **feedback** writes a

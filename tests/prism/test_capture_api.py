@@ -135,6 +135,40 @@ def test_rollover_before_4am_counts_as_previous_day(
     assert late.json()["entry_date"] == "2026-10-11"
 
 
+def test_date_query_parameter_chooses_the_day(
+    app: FastAPI, client: TestClient, api_storage: LocalStorage
+) -> None:
+    files = [("audio", ("Recording.m4a", b"Pancakes with Leo.", "audio/mp4"))]
+    resp = client.post(
+        "/recordings?date=2026-10-08", data={"captured_at": EVENING}, files=files, headers=AUTH
+    )
+    assert resp.status_code == 202, resp.text
+    assert resp.json()["entry_date"] == "2026-10-08"
+    assert "Thursday, October 8" in resp.json()["message"]
+    wait_idle(app)
+    day = read_day(api_storage, dt.date(2026, 10, 8))
+    assert day.meta.audio == ["2026-10-08-2130.m4a"]
+    assert day.captures[0].captured_at.isoformat() == "2026-10-10T21:30:00-05:00"
+    assert not api_storage.exists(day_file_path(OCT10))
+
+    note = client.post(
+        "/notes", params={"date": ""}, json={"text": "Tea.", "captured_at": EVENING}, headers=AUTH
+    )
+    assert note.json()["entry_date"] == "2026-10-10"
+
+
+def test_date_query_parameter_validation(client: TestClient, api_settings: Settings) -> None:
+    note = {"text": "x", "captured_at": EVENING}
+    for bad in ("10/08/2026", "2026-02-30", "yesterday"):
+        resp = client.post("/notes", params={"date": bad}, json=note, headers=AUTH)
+        assert resp.status_code == 422
+        assert "YYYY-MM-DD" in resp.text
+    tomorrow = dt.datetime.now(api_settings.tz).date() + dt.timedelta(days=1)
+    resp = client.post("/notes", params={"date": tomorrow.isoformat()}, json=note, headers=AUTH)
+    assert resp.status_code == 422
+    assert "future" in resp.text
+
+
 def test_captured_at_formats(client: TestClient, api_settings: Settings) -> None:
     naive = post_recording(client, captured_at="2026-10-10T23:00:00").json()
     assert naive["entry_date"] == "2026-10-10"

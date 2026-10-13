@@ -85,7 +85,7 @@ def _assert_routes_exist(requests: list[BruRequest], base: str, routes: set[tupl
     patterns = [(method, _route_re(path)) for method, path in routes]
     for req in requests:
         assert req.url.startswith("{{" + base + "}}/"), f"{req.path}: url must start with {base}"
-        path = VAR_RE.sub("x", req.url.removeprefix("{{" + base + "}}"))
+        path = VAR_RE.sub("x", req.url.removeprefix("{{" + base + "}}")).partition("?")[0]
         assert any(m == req.method and p.match(path) for m, p in patterns), (
             f"{req.path}: {req.method} {path} is not a route"
         )

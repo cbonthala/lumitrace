@@ -136,8 +136,11 @@ def test_aws_language_options(settings: Settings) -> None:
 class FakeSarvam:
     """Imitates the Sarvam batch API and its presigned blob storage."""
 
-    def __init__(self, fail_modes: tuple[str, ...] = ()) -> None:
+    def __init__(
+        self, fail_modes: tuple[str, ...] = (), transcripts: dict[str, str] | None = None
+    ) -> None:
         self.fail_modes = fail_modes
+        self.transcripts = {"translate": "We went to the park.", **(transcripts or {})}
         self.jobs: dict[str, dict[str, Any]] = {}
         self.uploads: dict[str, bytes] = {}
         self.blob_headers: list[httpx.Headers] = []
@@ -153,7 +156,7 @@ class FakeSarvam:
                 return httpx.Response(201)
             job_id = url.path.split("/")[1]
             mode = self.jobs[job_id]["params"]["mode"]
-            text = "We went to the park." if mode == "translate" else "mana park ki vellam"
+            text = self.transcripts.get(mode, "mana park ki vellam")
             return httpx.Response(200, json={"transcript": f" {text} ", "language_code": "te-IN"})
         self.api_keys.add(request.headers.get("api-subscription-key"))
         path = url.path.removeprefix("/speech-to-text/job/v1")
@@ -219,6 +222,21 @@ def test_sarvam_transcript_and_translation(settings: Settings) -> None:
     assert server.api_keys == {"sk-test"}
     assert all("api-subscription-key" not in h for h in server.blob_headers)
     assert server.blob_headers[0]["x-ms-blob-type"] == "BlockBlob"
+    assert {h["content-type"] for h in server.blob_headers if "x-ms-blob-type" in h} == {
+        "audio/x-m4a"
+    }
+
+
+def test_sarvam_empty_transcript_is_a_warning(settings: Settings) -> None:
+    server = FakeSarvam(transcripts={"codemix": "  "})
+    result = sarvam(sarvam_settings(settings, sarvam_translate=False), server).transcribe(
+        b"audio", "audio.mp3"
+    )
+    assert result.text == ""
+    assert result.warnings == ("transcript: Sarvam returned no text",)
+    assert {h["content-type"] for h in server.blob_headers if "x-ms-blob-type" in h} == {
+        "audio/mpeg"
+    }
 
 
 def test_sarvam_options(settings: Settings) -> None:

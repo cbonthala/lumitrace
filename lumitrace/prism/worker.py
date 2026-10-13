@@ -90,7 +90,7 @@ class CaptureWorker:
                         capture_id=req.id,
                         kind=req.kind,
                         status="queued",
-                        entry_date=self.processor.entry_date_for(req.captured_at),
+                        entry_date=self.processor.entry_date_of(req),
                         captured_at=req.captured_at,
                         received_at=req.received_at,
                     )

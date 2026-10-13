@@ -111,3 +111,10 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
   Sarvam with a code-mixed transcript plus an English translation (ADR 0015), prompts with the
   speaker, relations and who-did-what rules (ADR 0016). Fixing the day by hand recorded the
   corrections as edit signals, which give a before/after to compare the new versions against.
+- 2026-10-13 — First real Sarvam recordings came back with `chars: 0` and no error: the
+  Docker image's `mimetypes` has no `.m4a` type, the upload went out as
+  `application/octet-stream`, and Sarvam "succeeded" on noise (6 characters vs 1,555 with
+  `audio/x-m4a`, same file). macOS guessed `audio/mp4a-latm`, which Sarvam refuses outright, so
+  it only showed in production → fixed content types per extension, an empty transcript is now a
+  warning, and a new provider gets one real recording replayed against it before deploying.
+  The same check showed `httpx` logging signed URLs at INFO → quieted in `setup_logging`.

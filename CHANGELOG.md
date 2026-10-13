@@ -7,6 +7,8 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- `setup_logging` keeps `httpx` and `httpcore` at WARNING: their INFO lines printed full request
+  URLs, including Sarvam's signed storage links.
 - **English translation in the day file** (ADR 0043): `Capture.translation`, written at the
   end of a recording's transcript block under a `<!-- lumitrace:translation -->` marker and an
   `#### English translation` heading; files without it read as before.
@@ -133,6 +135,14 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Prism (recording API)
 
+- **Fix: Sarvam returned empty transcripts in Docker.** The upload's content type came from
+  `mimetypes`, which knows no type for `.m4a` on the Linux image, so Sarvam got
+  `application/octet-stream` and transcribed noise. Each supported extension now has a fixed
+  type (`.m4a` → `audio/x-m4a`). An empty Sarvam transcript is now a capture warning.
+- **`?date=YYYY-MM-DD` on `POST /recordings` and `POST /notes`** (ADR 0017): files the capture
+  under that day (day file, audio name, confirmation message); kept in the inbox manifest for
+  retries. Empty or missing: the day of `captured_at` (default now) in `LUMITRACE_TIMEZONE`, as
+  before. Malformed or future dates get `422`.
 - **Sarvam speech to text** (`LUMITRACE_STT_PROVIDER=sarvam`, ADR 0015) for Indian languages
   mixed with English: Saaras batch jobs (recordings up to 2 hours) give the transcript in
   `LUMITRACE_SARVAM_MODE` (default `codemix`: English words in English, the rest in its own

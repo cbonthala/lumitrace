@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 
 import httpx
 
 from lumitrace.config import Settings
 from lumitrace.embeddings import embed_texts, fake_embedding
+from lumitrace.logging_setup import setup_logging
 from lumitrace.nudge import nudge_indexer
 
 
@@ -49,3 +51,10 @@ def test_nudge_never_raises(settings: Settings) -> None:
     with httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(500))) as client:
         assert nudge_indexer(s, client=client) is False
     assert nudge_indexer(settings) is False
+
+
+def test_http_client_logs_never_show_request_urls() -> None:
+    setup_logging("DEBUG")
+    for name in ("httpx", "httpcore"):
+        assert not logging.getLogger(name).isEnabledFor(logging.INFO)
+        assert logging.getLogger(name).isEnabledFor(logging.WARNING)
