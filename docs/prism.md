@@ -161,6 +161,8 @@ activity record.
    the compressed copy, the original is kept.
 3. **Speech to text** (`pipeline/stt.py`), by `LUMEN_STT_PROVIDER`:
    * `litellm`: `litellm.transcription(model=LUMEN_STT_MODEL, language=LUMEN_STT_LANGUAGE)`.
+     An empty `LUMEN_STT_LANGUAGE` omits the language so the model detects it per recording
+     (use this for mixed speech such as Telugu and English; `en` forces English).
      The original audio is sent (best quality) unless it is over 24 MB or in a format hosted APIs
      reject; then the compressed copy is sent.
    * `aws_transcribe`: uploads to `LUMEN_AWS_TRANSCRIBE_BUCKET` under `lumen-stt/`, runs a

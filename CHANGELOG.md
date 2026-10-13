@@ -104,6 +104,8 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Prism (recording API)
 
+- Documented that an empty `LUMEN_STT_LANGUAGE` lets the speech model detect the language per
+  recording, for mixed speech such as Telugu and English (`.env.example`, `docs/prism.md`).
 - Prompt `extract_facts` v2: extracts `places` and per-member `family` facts for the names in
   `LUMEN_FAMILY` (new `{{family}}` placeholder); anyone else is dropped and names are spelled as
   configured (`keep_family`). Every configured member gets a block, empty if the day says
