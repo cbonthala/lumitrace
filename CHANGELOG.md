@@ -7,6 +7,8 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- Cloud Agent notes in `AGENTS.md`: uv 0.13.0 on `/usr/local/bin`, `uv sync --frozen`, and
+  tmux sessions for Prism, Spectrum, and Lens with a generated offline `.env` when none exists.
 - **Renamed the project from Lumen to Lumitrace** (decision 0042, supersedes 0009), everywhere;
   the module names (Flash, Prism, Frames, Spectrum, Lens) are unchanged. Entries below this one
   use the Lumen names.
