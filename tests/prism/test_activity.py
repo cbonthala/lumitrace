@@ -54,7 +54,7 @@ def test_one_line_per_capture_without_content(
         "extract_facts": "test/extract",
         "write_journal": "test/journal",
     }
-    assert record["prompt_versions"] == {"extract_facts": "v3", "write_journal": "v2"}
+    assert record["prompt_versions"] == {"extract_facts": "v4", "write_journal": "v3"}
     names = [s["name"] for s in record["steps"]]
     assert names == [
         "compress_audio",

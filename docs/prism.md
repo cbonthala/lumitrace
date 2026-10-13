@@ -225,7 +225,7 @@ activity record.
    * If one step fails on every model, the other step's result is still applied (facts without a
      new journal, or a journal with the old facts). If both fail, the day keeps the transcript
      and `generation` is `failed`.
-   * Front matter: `prompt_version` (e.g. `extract_facts-v3+write_journal-v2`) and `models_used`
+   * Front matter: `prompt_version` (e.g. `extract_facts-v4+write_journal-v3`) and `models_used`
      (`stt`, `extract_facts`, `write_journal` or `journal_addendum`: the models that actually
      answered), merged with what was there.
 7. **Write** the day file and its snapshot again.
@@ -251,8 +251,8 @@ models set to `fake`, the whole API runs offline.
 
 ### Prompts
 
-Versioned files in `prompts/<task>/<version>.md` (`prompts/README.md`): `extract_facts/v3.md`,
-`write_journal/v2.md`, `journal_addendum/v2.md` (older versions are kept for reference). The
+Versioned files in `prompts/<task>/<version>.md` (`prompts/README.md`): `extract_facts/v4.md`,
+`write_journal/v3.md`, `journal_addendum/v3.md` (older versions are kept for reference). The
 current versions are in `lumitrace.prism.pipeline.prompts.PROMPT_VERSIONS`. Each file has a
 system part and a user part separated by `<!-- lumitrace-prompt: system -->` /
 `<!-- lumitrace-prompt: user -->`, with `{{name}}` placeholders (`date`, `location`, `captures`,
@@ -271,9 +271,16 @@ The current versions (ADR 0016) also tell the model:
   subject of something someone else did.
 * **How to read the entries:** a recording with a translation is shown as
   `English translation (machine-made from the audio):` followed by
-  `Original transcript (as spoken):`. The model understands it from the translation, checks
-  names in the original, drops details the two disagree on, never turns a misheard phrase into
-  a food, place or name, and writes in English.
+  `Original transcript (as spoken):`. The model reads both and follows the original when they
+  disagree (machine translations mix up who did what and mistranslate idioms; v4/v3, ADR 0018),
+  leaves a detail out only when neither makes sense, never turns a misheard phrase into a food,
+  place or name, and writes in English. Parents talking about themselves in their child's words
+  ("Dad went to bed early") mean the author.
+* **The author's own block** (`extract_facts` v4) always repeats the author's mood, meals,
+  places, activities and moments; a meal eaten without a named food is described from the
+  entry ("food from the deli") instead of borrowing another meal's food, and a meal's type may
+  come from the order of events. Feelings and worries anyone expressed are kept as moments and
+  in the journal.
 * **The facts can be wrong:** `write_journal` follows the entries when the extracted facts
   disagree with them, and uses Morning/Afternoon/Evening only for events the entries place
   there.

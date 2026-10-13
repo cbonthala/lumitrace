@@ -118,3 +118,10 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
   it only showed in production → fixed content types per extension, an empty transcript is now a
   warning, and a new provider gets one real recording replayed against it before deploying.
   The same check showed `httpx` logging signed URLs at INFO → quieted in `setup_logging`.
+- 2026-10-13 — With good Sarvam transcripts, the remaining errors came from the prompts and the
+  facts model: "drop what the translation and original disagree on" dropped the parts the
+  machine translation got wrong (pronouns, a parent calling himself "Dad", an idiom read as
+  "excited"), and `gpt-4o-mini` copied breakfast into lunch and left the author's block empty.
+  A dry run on one real day (generate only, no writes) compared models and prompt versions
+  side by side in minutes → prompts follow the original (ADR 0018), `gpt-4.1` for facts and
+  journal; dry-run any prompt change on a real day before deploying it.

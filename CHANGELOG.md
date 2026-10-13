@@ -135,6 +135,12 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Prism (recording API)
 
+- **Prompts `extract_facts` v4, `write_journal` v3, `journal_addendum` v3** (ADR 0018): follow
+  the original transcript when the machine translation disagrees (instead of dropping the
+  detail), understand parents talking about themselves as "Dad"/"Nanna", always fill the
+  author's own family block, describe a meal with no named food from the entry instead of
+  borrowing another meal's food, and keep feelings people expressed. `openai/gpt-4.1` is the
+  recommended facts and journal model for mixed-language entries.
 - **Fix: Sarvam returned empty transcripts in Docker.** The upload's content type came from
   `mimetypes`, which knows no type for `.m4a` on the Linux image, so Sarvam got
   `application/octet-stream` and transcribed noise. Each supported extension now has a fixed

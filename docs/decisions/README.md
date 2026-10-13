@@ -45,6 +45,7 @@ Template:
 | [0015](0015-sarvam-speech-to-text-and-translation.md) | Recording API: Sarvam batch speech to text, code-mixed transcript plus an English translation |
 | [0016](0016-prompts-know-the-speaker-and-relations.md) | Recording API: prompts know the speaker and family relations, read translation and original together |
 | [0017](0017-date-field.md) | Recording API: optional `date` field (`YYYY-MM-DD`) chooses the day; empty = capture time's day |
+| [0018](0018-follow-the-original-over-the-translation.md) | Recording API: prompts follow the original transcript over the translation, always fill the author's block; `gpt-4.1` recommended |
 | [0020](0020-incremental-sync-change-feed-and-hashes.md) | Indexer: change feed, hashes, retries, daily full scan |
 | [0021](0021-passages-and-embedding-reuse.md) | Indexer: passages by section/heading, embedding reuse |
 | [0022](0022-edit-signal-baseline-and-supersede.md) | Indexer: edit-signal baseline and one row per baseline |

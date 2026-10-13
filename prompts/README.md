@@ -11,12 +11,12 @@ One file per task and version:
 
 ```
 prompts/
-  extract_facts/v3.md      facts for the day, incl. places and per family member facts
+  extract_facts/v4.md      facts for the day, incl. places and per family member facts
                            (validated against lumitrace.frames.dayfile.DayFacts); knows the
-                           speaker, family relations and translations; v1, v2 are older
-  write_journal/v2.md      {headline, journal} for the whole day; v1 is older
-  journal_addendum/v2.md   {text}: a paragraph about a new entry, for days the owner edited;
-                           v1 is older
+                           speaker, family relations and translations; v1-v3 are older
+  write_journal/v3.md      {headline, journal} for the whole day; v1, v2 are older
+  journal_addendum/v3.md   {text}: a paragraph about a new entry, for days the owner edited;
+                           v1, v2 are older
 ```
 
 * **Task** folders match the per-task model settings: `extract_facts` (uses
