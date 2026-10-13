@@ -41,6 +41,21 @@ def test_family_members_from_a_comma_separated_list(monkeypatch: pytest.MonkeyPa
     assert Settings(_env_file=None, family="").family_members == []
 
 
+def test_family_relations_and_owner() -> None:
+    s = Settings(_env_file=None, family="Sam (me), Maya ( wife ),Leo (son), leo, Rose, Ann (")
+    assert s.family_relations == {"Sam": "me", "Maya": "wife", "Leo": "son", "Rose": ""}
+    assert s.family_members == ["Sam", "Maya", "Leo", "Rose"]
+    assert s.owner_name == "Sam"
+    assert Settings(_env_file=None, family="Maya (wife), Leo").owner_name is None
+    assert Settings(_env_file=None, family="Sam (Self)").owner_name == "Sam"
+
+
+def test_stt_keyterms_start_with_the_family() -> None:
+    s = Settings(_env_file=None, family="Sam (me), Maya", stt_keyterms=" Corner Bakery ,maya,,")
+    assert s.stt_keyterm_list == ["Sam", "Maya", "Corner Bakery"]
+    assert Settings(_env_file=None).stt_keyterm_list == []
+
+
 def test_validation() -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, timezone="Mars/Olympus")

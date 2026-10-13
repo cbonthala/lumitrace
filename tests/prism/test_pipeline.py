@@ -70,7 +70,7 @@ def test_edited_day_gets_additive_update(
     assert day.facts.people == ["Maya", "Leo"]
     assert day.notes == "Private thought."
     assert day.is_user_edited()
-    assert day.meta.prompt_version == "extract_facts-v2+journal_addendum-v1"
+    assert day.meta.prompt_version == "extract_facts-v3+journal_addendum-v2"
     assert day.meta.models_used["journal_addendum"] == "test/journal"
     assert day.meta.models_used["stt"] == "fake"
     addendum_call = next(c for c in fake_llm.calls if c[0] == "journal_addendum")
@@ -155,6 +155,30 @@ def test_transcription_failure_writes_nothing(
     record = json.loads(api_storage.read_text("_system/activity/2026/10.jsonl"))
     assert record["status"] == "failed"
     assert record["errors"] == ["transcribe: TimeoutError: took too long"]
+
+
+def test_translation_is_saved_with_the_transcript(
+    processor: CaptureProcessor, api_settings: Settings, api_storage: LocalStorage
+) -> None:
+    from lumitrace.prism.pipeline.stt import Transcript
+
+    class Translating:
+        def transcribe(self, data: bytes, filename: str) -> Transcript:
+            return Transcript(
+                text="mana park ki vellam",
+                model="sarvam/saaras:v4",
+                translation="We went to the park.",
+                warnings=("keyterms ignored",),
+            )
+
+    processor.transcriber = Translating()
+    processor.process(make_request(api_settings, api_storage, "a", spoken="ignored"))
+    (saved,) = parse(api_storage.read_text(day_file_path(OCT10))).captures
+    assert (saved.text, saved.translation) == ("mana park ki vellam", "We went to the park.")
+    record = json.loads(api_storage.read_text("_system/activity/2026/10.jsonl"))
+    assert record["warnings"] == ["transcribe: keyterms ignored"]
+    step = next(s for s in record["steps"] if s["name"] == "transcribe")
+    assert step["detail"]["translation_chars"] == len("We went to the park.")
 
 
 def test_nudge_failure_does_not_fail_the_capture(

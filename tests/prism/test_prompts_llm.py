@@ -116,14 +116,41 @@ def test_keep_family_drops_unknown_names_and_uses_configured_spelling() -> None:
 
 
 def test_extract_facts_sends_the_family_list(api_settings: Settings) -> None:
-    settings = api_settings.model_copy(update={"family": "Maya, Leo"})
+    at = dt.datetime(2026, 10, 10, 13, 5, tzinfo=api_settings.tz)
+    capture = Capture(id="c", kind="note", captured_at=at, text="x")
+    users = {}
+    for family in ("Sam (me), Maya (wife), Leo", "Maya, Leo"):
+        settings = api_settings.model_copy(update={"family": family})
+        llm = FakeLLM()
+        gen = Generator(LLMClient(settings, completion_fn=llm), settings.prompts_dir)
+        gen.extract_facts(dt.date(2026, 10, 10), [capture])
+        users[family] = llm.calls[0][2][1]["content"]
+    with_owner = users["Sam (me), Maya (wife), Leo"]
+    assert "The author (the person speaking): Sam\n" in with_owner
+    assert (
+        "relation to the author (may be empty): Sam (the author), Maya (the author's wife), Leo\n"
+    ) in with_owner
+    assert "The author (the person speaking): (not given)\n" in users["Maya, Leo"]
+    assert "relation to the author (may be empty): Maya, Leo\n" in users["Maya, Leo"]
+
+
+def test_captures_show_translation_and_original(api_settings: Settings) -> None:
     llm = FakeLLM()
-    gen = Generator(LLMClient(settings, completion_fn=llm), settings.prompts_dir)
-    at = dt.datetime(2026, 10, 10, 13, 5, tzinfo=settings.tz)
-    gen.extract_facts(
-        dt.date(2026, 10, 10), [Capture(id="c", kind="note", captured_at=at, text="x")]
+    gen = Generator(LLMClient(api_settings, completion_fn=llm), api_settings.prompts_dir)
+    at = dt.datetime(2026, 10, 10, 21, 30, tzinfo=api_settings.tz)
+    capture = Capture(
+        id="c",
+        kind="recording",
+        captured_at=at,
+        text="mana park ki vellam",
+        translation="We went to the park.",
     )
-    assert "Family members (may be empty): Maya, Leo" in llm.calls[0][2][1]["content"]
+    gen.extract_facts(dt.date(2026, 10, 10), [capture])
+    assert (
+        "### 21:30 · Log My Day\n\n"
+        "English translation (machine-made from the audio):\nWe went to the park.\n\n"
+        "Original transcript (as spoken):\nmana park ki vellam"
+    ) in llm.calls[0][2][1]["content"]
 
 
 def test_llm_client_passes_config_and_falls_back(api_settings: Settings) -> None:

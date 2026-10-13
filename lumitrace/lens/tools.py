@@ -218,6 +218,7 @@ class LensTools:
                     "audio": capture.audio,
                     "photos": capture.photos,
                     "text": capture.text,
+                    "translation": capture.translation or None,
                 }
                 for capture in day.captures
             ],

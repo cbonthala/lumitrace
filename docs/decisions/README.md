@@ -42,6 +42,8 @@ Template:
 | [0012](0012-activity-records-monthly-jsonl.md) | Recording API: activity records as monthly JSONL without content |
 | [0013](0013-audio-and-photo-processing.md) | Recording API: ffmpeg → afconvert → keep original; photos without EXIF |
 | [0014](0014-llm-json-validation-and-fallback.md) | Recording API: JSON validated per model, own fallback loop, `fake` model, prompt format |
+| [0015](0015-sarvam-speech-to-text-and-translation.md) | Recording API: Sarvam batch speech to text, code-mixed transcript plus an English translation |
+| [0016](0016-prompts-know-the-speaker-and-relations.md) | Recording API: prompts know the speaker and family relations, read translation and original together |
 | [0020](0020-incremental-sync-change-feed-and-hashes.md) | Indexer: change feed, hashes, retries, daily full scan |
 | [0021](0021-passages-and-embedding-reuse.md) | Indexer: passages by section/heading, embedding reuse |
 | [0022](0022-edit-signal-baseline-and-supersede.md) | Indexer: edit-signal baseline and one row per baseline |
@@ -54,3 +56,4 @@ Template:
 | [0040](0040-facts-in-day-file-body-and-family-sections.md) | Day file format 2: facts in an "At a glance" section, places, a block per family member (`LUMITRACE_FAMILY`) |
 | [0041](0041-aws-lightsail-with-tailscale.md) | Hosting: one AWS Lightsail instance, Prism on the tailnet, Lens public through Tailscale Funnel |
 | [0042](0042-rename-to-lumitrace.md) | Rename Lumen to Lumitrace everywhere; module names unchanged |
+| [0043](0043-capture-translation-in-day-file.md) | Day file: a recording's English translation stored under its transcript |

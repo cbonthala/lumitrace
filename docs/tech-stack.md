@@ -42,7 +42,7 @@ The foundation every program uses (`lumitrace/config.py`, `lumitrace/logging_set
 | FFmpeg (Debian package) | | Converts audio. Example: a 6-minute recording is compressed to AAC `.m4a` at 32 kbps (about 1.5 MB) before it is stored in Drive (`pipeline/audio.py`). | Yes (LGPL / GPL) |
 | Pillow | 12.3 | Image processing. Example: a 12-megapixel photo is resized so its longest side is 2048 px and saved as a JPEG at quality 85, keeping Drive small. | Yes (MIT-CMU / HPND) |
 | pillow-heif | 1.8 | Lets Pillow open iPhone photos, which are saved in Apple's HEIC format by default. | Yes (BSD-3-Clause; bundled libheif is LGPL-3.0) |
-| httpx | 0.28 | Makes HTTP calls from Python. Example: right after writing a day file, the Prism calls Spectrum's `/nudge` so the new entry is searchable within seconds instead of at the next 5-minute check (`lumitrace/nudge.py`). | Yes (BSD-3-Clause) |
+| httpx | 0.28 | Makes HTTP calls from Python. Example: right after writing a day file, the Prism calls Spectrum's `/nudge` so the new entry is searchable within seconds instead of at the next 5-minute check (`lumitrace/nudge.py`). Also calls Sarvam's speech-to-text API when that provider is chosen. | Yes (BSD-3-Clause) |
 | boto3 | 1.43 | The AWS library, used only if speech-to-text is switched to Amazon Transcribe (`LUMITRACE_STT_PROVIDER=aws_transcribe`). Installed but not used in production. | Yes (Apache-2.0) |
 
 AI models (production uses OpenAI; where each is called: `docs/prism.md` → *Models and
@@ -51,13 +51,14 @@ fallback*):
 | Task | Setting | Current model | What it does, with an example | Open source? |
 |---|---|---|---|---|
 | Speech to text | `LUMITRACE_STT_MODEL` | `openai/gpt-4o-transcribe` | Turns the recording into text. Example: "We took the kids to the park after lunch…" becomes the raw transcript kept in the day file. | No (OpenAI API) |
+| Speech to text and English translation (option) | `LUMITRACE_STT_PROVIDER=sarvam`, `LUMITRACE_SARVAM_MODEL` | `saaras:v4` | For Indian languages mixed with English: the transcript keeps English words in English and Telugu in Telugu script, and a second job translates the audio to English. Called over HTTP with httpx (ADR 0015). | No (Sarvam API) |
 | Extracting facts | `LUMITRACE_LLM_EXTRACT_FACTS_MODEL` | `openai/gpt-4o-mini` | Pulls structured facts out of the text for "At a glance". Example: Lunch: tacos; Places: City Park; Activities: walk, 40 min; Mood: happy. | No (OpenAI API) |
 | Writing the journal and addendums | `LUMITRACE_LLM_WRITE_JOURNAL_MODEL` | `openai/gpt-4o` | Writes the readable journal (Summary, Morning, Afternoon, Evening, ...) and the day's headline. If you edited the day, it only adds a short passage under `## Later` instead. | No (OpenAI API) |
 | Fallback | `LUMITRACE_LLM_FALLBACK_MODEL` | `openai/gpt-4o-mini` | Used when a task's model fails or returns badly formed output, so a recording is still processed. | No (OpenAI API) |
 
 Any LiteLLM provider works for the chat models (Anthropic, Gemini, Bedrock, Groq, Azure, local
-Ollama, ...); speech to text needs one that offers transcription (OpenAI, Groq, Azure) or Amazon
-Transcribe. Tests use `fake` providers.
+Ollama, ...); speech to text needs one that offers transcription (OpenAI, Groq, Azure), Amazon
+Transcribe or Sarvam. Tests use `fake` providers.
 
 ## Frames (day files and storage)
 

@@ -217,6 +217,7 @@ File: `tests/prism/test_pipeline.py`
 - Checks that when the main AI model is down or replies with something that isn't valid data, the backup model is used, the day file records which model did the work, and the activity record lists each attempt and why it failed. <sub>`test_fallback_model_is_used_and_recorded`</sub>
 - Checks that when every AI model fails, the transcript is still saved in the day file (with an empty journal), the snapshot is written, and the errors are reported. <sub>`test_ai_failure_still_saves_the_transcript`</sub>
 - Checks that if speech-to-text fails, nothing is written to the journal folders and the activity record shows the failure. <sub>`test_transcription_failure_writes_nothing`</sub>
+- Checks that an English translation from speech-to-text is saved with the recording's transcript in the day file, and that speech-to-text warnings and the translation length appear in the activity record. <sub>`test_translation_is_saved_with_the_transcript`</sub>
 - Checks that if the indexer can't be reached, the capture still succeeds. <sub>`test_nudge_failure_does_not_fail_the_capture`</sub>
 
 ### Repeated, empty and offline captures
@@ -269,7 +270,11 @@ File: `tests/prism/test_stt.py`
 - Checks, against an imitation of Amazon's services, that the AWS option uploads the audio, starts a job with the right format and language, waits for it, reads the transcript and deletes every file it created. <sub>`test_aws_transcribe_round_trip_and_cleanup`</sub>
 - Checks that a failed AWS job still cleans up its files and reports the failure, and that an audio format AWS can't read is refused up front. <sub>`test_aws_transcribe_failure_still_cleans_up`</sub>
 - Checks how the language setting is passed to AWS: a full code like "en-GB" as is, "es" as US Spanish, and an empty setting as "detect the language". <sub>`test_aws_language_options`</sub>
-- Checks that the speech-to-text setting picks the right option (fake or LiteLLM), and that choosing AWS without a storage bucket gives a clear error. <sub>`test_get_transcriber`</sub>
+- Checks, against an imitation of Sarvam's batch service, that the Sarvam option runs a transcript job and a translation job on the same upload, sends the model, mode, Telugu language code and the family names plus extra keyterms, keeps the API key away from the file-storage links, and returns both texts. <sub>`test_sarvam_transcript_and_translation`</sub>
+- Checks the Sarvam options: translation can be turned off, keyterms are only sent to the v4 model, an empty language means "detect it", unsupported audio formats are refused, and a missing API key gives a clear error. <sub>`test_sarvam_options`</sub>
+- Checks that when only Sarvam's translation fails, the transcript is still returned, with a warning that says why. <sub>`test_sarvam_failed_translation_keeps_the_transcript`</sub>
+- Checks that a failed Sarvam transcript job raises an error with the reason, and that a refused upload reports only the HTTP status, never the secret upload link. <sub>`test_sarvam_failed_transcript_raises_without_leaking_urls`</sub>
+- Checks that the speech-to-text setting picks the right option (fake, LiteLLM or Sarvam), and that choosing AWS without a storage bucket gives a clear error. <sub>`test_get_transcriber`</sub>
 
 ### Prompts and AI replies
 
@@ -281,7 +286,8 @@ File: `tests/prism/test_prompts_llm.py`
 - Checks that the prompts folder is found in the project even when the program is started from another folder. <sub>`test_relative_prompts_dir_falls_back_to_repository`</sub>
 - Checks that prompt versions are combined into one label (such as `extract_facts-v1+write_journal-v2`) for the day file. <sub>`test_combined_version`</sub>
 - Checks that only the family members listed in the settings keep a family block: anyone else is dropped, names are spelled as in the settings ("leo" becomes "Leo"), they come in the settings' order, a name given twice keeps its first block, an empty list drops everyone, and every listed member the AI said nothing about gets an empty block. <sub>`test_keep_family_drops_unknown_names_and_uses_configured_spelling`</sub>
-- Checks that the fact-extraction prompt tells the AI who counts as family ("Family members (may be empty): Maya, Leo"). <sub>`test_extract_facts_sends_the_family_list`</sub>
+- Checks that the fact-extraction prompt tells the AI who is speaking and how each family member is related to them ("Sam (the author), Maya (the author's wife), Leo"), and says "(not given)" when nobody is marked "(me)". <sub>`test_extract_facts_sends_the_family_list`</sub>
+- Checks that a recording with an English translation is shown to the AI as the translation first, then the original transcript as spoken. <sub>`test_captures_show_translation_and_original`</sub>
 - Checks that the AI's structured (JSON) reply is understood even when wrapped in code fences or surrounded by chatty text, and refused when there is no data at all. <sub>`test_extract_json_tolerates_fences_and_chatter`</sub>
 - Checks that extracted facts are held to the day-file format: a reply wrapped in a "facts" object is unwrapped, an out-of-range mood score and empty values are dropped, and badly shaped replies (not an object, a meal without a type) are refused. <sub>`test_parse_facts_validates_against_dayfacts`</sub>
 - Checks that the AI client passes the timeout, retry and "reply in JSON" settings to the provider, switches to the backup model when the main one fails, records each attempt, tries a model only once when it is also the backup, and gives a clear error naming both models when all fail. <sub>`test_llm_client_passes_config_and_falls_back`</sub>
@@ -321,6 +327,7 @@ File: `tests/spectrum/test_passages.py`
 - Checks that one enormous word is cut into fixed-size pieces, and blank text produces nothing. <sub>`test_chunk_text_hard_splits_giant_words`</sub>
 - Checks that journal sections are found correctly: text before the first heading is kept, a heading with nothing under it (like "Sleep: 8 hours") is kept, and a `#` line inside a code block is not mistaken for a heading. <sub>`test_split_by_headings_ignores_code_fences_and_keeps_heading_only_sections`</sub>
 - Checks that an empty day produces only a title passage and no facts. <sub>`test_empty_day_has_title_only`</sub>
+- Checks that a recording's English translation becomes its own searchable transcript passage, headed "21:30 · Log My Day · English", right after the original. <sub>`test_translation_gets_its_own_transcript_passages`</sub>
 
 ### Learning from your edits (edit signals)
 
@@ -439,7 +446,7 @@ File: `tests/lens/test_tools.py`
 
 File: `tests/lens/test_tools.py`
 
-- Checks that `get_day` returns the full day: path, title, facts, journal, notes, transcript entries in time order with times and text, a link to the audio, and photo links (with a "file not found" note for a photo missing from storage). <sub>`test_get_day_returns_everything`</sub>
+- Checks that `get_day` returns the full day: path, title, facts, journal, notes, transcript entries in time order with times, text and translation (none here), a link to the audio, and photo links (with a "file not found" note for a photo missing from storage). <sub>`test_get_day_returns_everything`</sub>
 - Checks that asking for a day without an entry returns "not found" with a note. <sub>`test_get_day_missing_day`</sub>
 - Checks that `get_day` reads straight from storage, so it works even without an index. <sub>`test_get_day_works_without_index`</sub>
 - Checks that a date like "October 10" is refused. <sub>`test_get_day_bad_date`</sub>
@@ -548,6 +555,7 @@ File: `tests/frames/test_dayfile.py`
 - Checks that the sample day file is read correctly (facts, title, journal, notes, three entries with audio and photos) and written back exactly the same, character for character. <sub>`test_sample_fixture_roundtrips`</sub>
 - Checks that a day file written under an earlier project name (LifeLog's `lifelog:` markers and `lifelog_format` key, Bookshelf's `bookshelf:` markers and `bookshelf_format` key, or Lumen's `lumen:` markers and `lumen_format` key; run once for each) is read exactly like a new one, and is written back with the new Lumitrace names. <sub>`test_parses_files_written_before_the_rename`</sub>
 - Checks that tricky content survives reading and writing unchanged: apostrophes and accents, values that look special ("null", "a: b"), comment arrows (`-->`), headings in notes, picture embeds, empty entries, and extra fields of your own such as tags. <sub>`test_roundtrip_model_equality_with_tricky_content`</sub>
+- Checks that a recording's English translation is written below its transcript under a marker and an "English translation" heading, reads back unchanged (also for a recording with only a translation), and is still found when the heading is deleted or an older marker name is used. <sub>`test_capture_translation_roundtrip_and_hand_edits`</sub>
 - Checks that the example in `docs/frames-format.md` is identical to the sample file the tests use. <sub>`test_docs_example_matches_fixture`</sub>
 - Checks that a day file's parts are written in the documented order: front matter, title, "At a glance" facts (Food, Places, People, Activities, Family, Highlights), journal, My notes, Transcript. <sub>`test_render_layout_markers_in_order`</sub>
 - Checks that a day file in the old layout (facts in the front matter) is read with the same facts, its old "family events" moved into highlights, still counts as unedited, and is written back in the new layout. <sub>`test_reads_format_1_files_and_writes_format_2`</sub>
@@ -675,6 +683,8 @@ File: `tests/test_config.py`
 - Checks that an unknown timezone, a switch-over hour of 24, or an unsupported storage type are refused. <sub>`test_validation`</sub>
 - Checks that `.env.example` lists every setting, and nothing that doesn't exist. <sub>`test_env_example_documents_every_setting`</sub>
 - Checks that `LUMITRACE_FAMILY` is read as a list of names: spaces trimmed, empty entries and repeats (ignoring case) dropped, and an empty setting means no family. <sub>`test_family_members_from_a_comma_separated_list`</sub>
+- Checks that relations in `LUMITRACE_FAMILY` ("Sam (me), Maya (wife), Leo (son)") are read per name, that "(me)" or "(self)" marks the owner, that names without a relation still count, and that a broken entry is skipped. <sub>`test_family_relations_and_owner`</sub>
+- Checks that the speech-to-text keyterms are the family names followed by `LUMITRACE_STT_KEYTERMS`, trimmed and without repeats (ignoring case). <sub>`test_stt_keyterms_start_with_the_family`</sub>
 
 ### Embeddings and nudges
 

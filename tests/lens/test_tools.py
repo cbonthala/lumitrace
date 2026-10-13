@@ -53,6 +53,7 @@ def test_get_day_returns_everything(tools: LensTools, populated: Path) -> None:
     assert [t["kind"] for t in out["transcript"]] == ["note", "recording", "note"]
     assert out["transcript"][1]["time"] == "2026-10-10T21:30:00-05:00"
     assert "Leo lost his first tooth" in out["transcript"][1]["text"]
+    assert out["transcript"][1]["translation"] is None
 
     [audio] = out["audio"]
     assert audio["name"] == "2026-10-10-2130.m4a"

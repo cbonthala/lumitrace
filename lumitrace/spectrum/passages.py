@@ -4,7 +4,8 @@ One day becomes, in this order: a ``title`` passage, ``facts``, ``journal`` and 
 passages split at Markdown headings (the facts are the day file's "At a glance" text without
 its "none" lines, so a passage's heading is "Food", "Places", ... or a family member's name),
 and ``transcript``
-passages, one or more per capture. Every passage is at most :data:`MAX_CHARS` characters;
+passages, one or more per capture (then its English translation, if any, under the heading
+``HH:MM · Log My Day · English``). Every passage is at most :data:`MAX_CHARS` characters;
 longer text is cut at paragraph, then sentence, then word boundaries. ``ordinal`` counts
 passages within a section.
 """
@@ -63,6 +64,9 @@ def build_passages(day: DayFile, max_chars: int = MAX_CHARS) -> list[Passage]:
         heading = f"{capture.captured_at:%H:%M} · {CAPTURE_LABELS.get(capture.kind, capture.kind)}"
         for chunk in chunk_text(capture.text, max_chars):
             out.append(Passage("transcript", heading, capture.id, ordinal, chunk))
+            ordinal += 1
+        for chunk in chunk_text(capture.translation, max_chars):
+            out.append(Passage("transcript", f"{heading} · English", capture.id, ordinal, chunk))
             ordinal += 1
     return out
 

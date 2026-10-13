@@ -62,6 +62,10 @@ All paths are relative to the `Lumitrace` root folder.
 ![[photo-01.jpg]]
 
 raw transcript or note text
+<!-- lumitrace:translation (...) -->      optional: Capture.translation
+#### English translation
+
+English translation of the recording
 <!-- lumitrace:transcript:end -->
 ```
 
@@ -170,6 +174,28 @@ The `<!-- lumitrace:capture {...} -->` comment holds JSON: `id` (unique within t
 existing id is a no-op, so retries from the offline inbox are safe), `kind` (`recording` or
 `note`), `captured_at` (ISO-8601 with offset), `audio`, `photos`, `location`. The heading and
 embed lines are regenerated from it; the text below them is the transcript and may be edited.
+
+**English translation** (`Capture.translation`, ADR 0043). When the speech-to-text provider
+also translated the recording (Sarvam, `docs/prism.md`), the block continues after the
+transcript with the `<!-- lumitrace:translation (...) -->` marker, a `#### English translation`
+heading and the translated text. The raw transcript above it is kept as spoken. On parsing,
+everything after the marker is the translation (the heading is dropped if present, so deleting
+it by hand is harmless); a block without the marker has no translation. The translation may be
+edited like the transcript. Spectrum indexes it as extra transcript passages headed
+`HH:MM · Log My Day · English`, so English searches find days spoken in another language.
+
+```markdown
+<!-- lumitrace:capture {"id": "...", "kind": "recording", ...} -->
+### 21:30 · Log My Day
+![[2026-10-10-2130.m4a]]
+
+mana park ki vellam, Leo slide meeda chala sepu aadadu
+
+<!-- lumitrace:translation (English translation of the recording) -->
+#### English translation
+
+We went to the park, and Leo played on the slide for a long time.
+```
 
 ## Never overwrite the owner's edits
 

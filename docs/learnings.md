@@ -100,3 +100,14 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
   connection, record any client quirks here.
 
 ## Models and prompts
+
+- 2026-10-12 — A real Telugu-English recording through `gpt-4o-transcribe` (language detection)
+  came out as English words spelled in Telugu script with broken word boundaries and misheard
+  names; `extract_facts-v2` on `gpt-4o-mini` then read a phrase meaning "in the car itself" as a
+  lunch called "Carlone", gave the wife's park trip to the owner, missed that the child's "Dad"
+  was the owner, and the journal model copied those facts and filled gaps ("got up early",
+  "consoled her"). Causes: speech-to-text weak on code-mixed speech, prompts that didn't know
+  the speaker, the relations or the language, and a journal prompt that trusted the facts →
+  Sarvam with a code-mixed transcript plus an English translation (ADR 0015), prompts with the
+  speaker, relations and who-did-what rules (ADR 0016). Fixing the day by hand recorded the
+  corrections as edit signals, which give a before/after to compare the new versions against.

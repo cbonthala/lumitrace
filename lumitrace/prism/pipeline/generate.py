@@ -79,11 +79,33 @@ def format_capture(capture: Capture) -> str:
     head = f"### {capture.captured_at:%H:%M} · {label}"
     if capture.location:
         head += f" (location: {capture.location})"
-    return f"{head}\n\n{capture.text.strip() or '(no words)'}"
+    text = capture.text.strip()
+    if capture.translation.strip():
+        return (
+            f"{head}\n\nEnglish translation (machine-made from the audio):\n"
+            f"{capture.translation.strip()}\n\nOriginal transcript (as spoken):\n"
+            f"{text or '(no words)'}"
+        )
+    return f"{head}\n\n{text or '(no words)'}"
 
 
 def format_captures(captures: Sequence[Capture]) -> str:
-    return "\n\n".join(format_capture(c) for c in captures if c.text.strip())
+    return "\n\n".join(
+        format_capture(c) for c in captures if c.text.strip() or c.translation.strip()
+    )
+
+
+def describe_family(relations: dict[str, str], owner: str | None) -> str:
+    """``Sam (the author), Maya (the author's wife), Leo``: the ``family`` prompt value."""
+    parts = []
+    for name, relation in relations.items():
+        if name == owner:
+            parts.append(f"{name} (the author)")
+        elif relation:
+            parts.append(f"{name} (the author's {relation})")
+        else:
+            parts.append(name)
+    return ", ".join(parts)
 
 
 def _date_label(day: dt.date) -> str:
@@ -99,6 +121,14 @@ class Generator:
     def prompt(self, task: str) -> Prompt:
         return load_prompt(self.prompts_dir, task)
 
+    def _people(self) -> dict[str, str]:
+        """The ``author`` and ``family`` prompt values."""
+        owner = self.settings.owner_name
+        return {
+            "author": owner or "(not given)",
+            "family": describe_family(self.settings.family_relations, owner),
+        }
+
     def extract_facts(
         self, day: dt.date, captures: Sequence[Capture]
     ) -> tuple[LLMResult[DayFacts], Prompt]:
@@ -107,7 +137,7 @@ class Generator:
         family = self.settings.family_members
         messages = prompt.render(
             date=_date_label(day),
-            family=", ".join(family),
+            **self._people(),
             location="; ".join(locations),
             captures=format_captures(captures),
         )
@@ -126,6 +156,7 @@ class Generator:
         prompt = self.prompt("write_journal")
         messages = prompt.render(
             date=_date_label(day),
+            **self._people(),
             facts=json.dumps(facts.model_dump(mode="json"), ensure_ascii=False, indent=2),
             captures=format_captures(captures),
         )
@@ -149,6 +180,7 @@ class Generator:
         prompt = self.prompt("journal_addendum")
         messages = prompt.render(
             date=_date_label(day),
+            **self._people(),
             journal=journal.strip() or "(empty)",
             capture=format_capture(capture),
         )

@@ -391,6 +391,36 @@ def test_roundtrip_model_equality_with_tricky_content() -> None:
     assert parsed.meta.model_extra == {"tags": ["journal", "family"]}
 
 
+def test_capture_translation_roundtrip_and_hand_edits() -> None:
+    day = D.DayFile(
+        meta=D.FrontMatter(date=DAY),
+        captures=[
+            capture(
+                "c1",
+                at(21, 30),
+                kind="recording",
+                text="mana park ki vellam",
+                translation="We went to the park.\n\nThen home.",
+                audio="2026-10-10-2130.m4a",
+            ),
+            capture("c2", at(22), kind="recording", translation="Only a translation."),
+        ],
+    )
+    md = D.render(day)
+    assert (
+        "![[2026-10-10-2130.m4a]]\n\nmana park ki vellam\n\n"
+        f"{D.TRANSLATION_MARKER}\n#### English translation\n\nWe went to the park.\n\nThen home.\n"
+    ) in md
+    parsed = D.parse(md)
+    assert parsed == day
+    assert D.render(parsed) == md
+    edited = md.replace("#### English translation\n\nWe went", "We went").replace(
+        D.TRANSLATION_MARKER, "<!-- lumen:translation -->"
+    )
+    first = D.parse(edited).captures[0]
+    assert (first.text, first.translation) == ("mana park ki vellam", day.captures[0].translation)
+
+
 def test_docs_example_matches_fixture(sample_day_markdown: str) -> None:
     from pathlib import Path
 

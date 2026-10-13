@@ -85,6 +85,30 @@ def test_split_by_headings_ignores_code_fences_and_keeps_heading_only_sections()
     assert "# not a heading" in parts[2][1]
 
 
+def test_translation_gets_its_own_transcript_passages() -> None:
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+
+    from lumitrace.frames.dayfile import Capture, DayFile
+
+    day = DayFile.new(dt.date(2026, 10, 10))
+    at = dt.datetime(2026, 10, 10, 21, 30, tzinfo=ZoneInfo("America/Chicago"))
+    day.captures = [
+        Capture(
+            id="c1",
+            kind="recording",
+            captured_at=at,
+            text="mana park ki vellam",
+            translation="We went to the park.",
+        )
+    ]
+    transcript = [p for p in build_passages(day) if p.section == "transcript"]
+    assert [(p.heading, p.capture_id, p.ordinal, p.text) for p in transcript] == [
+        ("21:30 · Log My Day", "c1", 0, "mana park ki vellam"),
+        ("21:30 · Log My Day · English", "c1", 1, "We went to the park."),
+    ]
+
+
 def test_empty_day_has_title_only() -> None:
     import datetime as dt
 

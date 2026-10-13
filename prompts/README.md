@@ -11,11 +11,12 @@ One file per task and version:
 
 ```
 prompts/
-  extract_facts/v2.md      facts for the day, incl. places and per family member facts
-                           (validated against lumitrace.frames.dayfile.DayFacts); v1.md is the
-                           previous version
-  write_journal/v1.md      {headline, journal} for the whole day
-  journal_addendum/v1.md   {text}: a paragraph about a new entry, for days the owner edited
+  extract_facts/v3.md      facts for the day, incl. places and per family member facts
+                           (validated against lumitrace.frames.dayfile.DayFacts); knows the
+                           speaker, family relations and translations; v1, v2 are older
+  write_journal/v2.md      {headline, journal} for the whole day; v1 is older
+  journal_addendum/v2.md   {text}: a paragraph about a new entry, for days the owner edited;
+                           v1 is older
 ```
 
 * **Task** folders match the per-task model settings: `extract_facts` (uses
@@ -46,12 +47,17 @@ prompt and the code cannot silently drift apart. Available values:
 
 | Task | Placeholders |
 |---|---|
-| `extract_facts` | `date` (`2026-10-10 (Saturday)`), `family` (`LUMITRACE_FAMILY`, comma-separated; v2), `location`, `captures` |
-| `write_journal` | `date`, `facts` (JSON), `captures` |
-| `journal_addendum` | `date`, `journal` (the edited page), `capture` (the new entry) |
+| `extract_facts` | `date` (`2026-10-10 (Saturday)`), `author`, `family`, `location`, `captures` |
+| `write_journal` | `date`, `author`, `family`, `facts` (JSON), `captures` |
+| `journal_addendum` | `date`, `author`, `family`, `journal` (the edited page), `capture` (the new entry) |
+
+`author` is the `LUMITRACE_FAMILY` member marked `(me)`, or `(not given)`. `family` lists every
+member with their relation to the author: `Sam (the author), Maya (the author's wife), Leo`.
 
 `captures` / `capture` are rendered as `### HH:MM · Log My Day (location: ...)` followed by the
-transcript or note text.
+transcript or note text. A recording with an English translation is shown as
+`English translation (machine-made from the audio):` + the translation, then
+`Original transcript (as spoken):` + the transcript.
 
 ## Rules
 

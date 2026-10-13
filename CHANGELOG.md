@@ -7,6 +7,12 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- **English translation in the day file** (ADR 0043): `Capture.translation`, written at the
+  end of a recording's transcript block under a `<!-- lumitrace:translation -->` marker and an
+  `#### English translation` heading; files without it read as before.
+- `LUMITRACE_FAMILY` accepts relations and marks the owner: `Sam (me), Maya (wife), Leo (son)`.
+  New `Settings.family_relations` and `Settings.owner_name`; `family_members` still returns the
+  names only.
 - **Bruno collection** (`bruno/`) for trying the APIs by hand, one folder per module: Prism
   (health, notes, recording, capture status, retry), Spectrum (health, nudge) and Lens (health,
   OAuth discovery, and the MCP session with all five tools). Local and Production environments
@@ -127,6 +133,22 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Prism (recording API)
 
+- **Sarvam speech to text** (`LUMITRACE_STT_PROVIDER=sarvam`, ADR 0015) for Indian languages
+  mixed with English: Saaras batch jobs (recordings up to 2 hours) give the transcript in
+  `LUMITRACE_SARVAM_MODE` (default `codemix`: English words in English, the rest in its own
+  script) and, at the same time, an **English translation** of the audio
+  (`LUMITRACE_SARVAM_TRANSLATE`). Family names and `LUMITRACE_STT_KEYTERMS` are sent as
+  keyterms so names come out right. A failed translation only adds a warning. New settings:
+  `LUMITRACE_SARVAM_API_KEY`, `LUMITRACE_SARVAM_MODEL`, `LUMITRACE_SARVAM_MODE`,
+  `LUMITRACE_SARVAM_TRANSLATE`, `LUMITRACE_STT_KEYTERMS`.
+- **Prompts `extract_facts` v3, `write_journal` v2, `journal_addendum` v2** (ADR 0016): the
+  model is told who is speaking and how each family member is related (`{{author}}`,
+  `{{family}}` from `LUMITRACE_FAMILY=Sam (me), Maya (wife), Leo (son)`), gives every action to
+  the person who did it, resolves words like "Dad" or "Amma" from the speaker's point of view,
+  reads the English translation for meaning and the original for names, never turns a misheard
+  phrase into a fact, fills the owner's own family block, and (journal) follows the entries
+  over the extracted facts and only uses Morning/Afternoon/Evening when the entries say so.
+  Captures with a translation are shown to the AI as the translation, then the original.
 - Documented that an empty `LUMEN_STT_LANGUAGE` lets the speech model detect the language per
   recording, for mixed speech such as Telugu and English (`.env.example`, `docs/prism.md`).
 - Prompt `extract_facts` v2: extracts `places` and per-member `family` facts for the names in
@@ -141,8 +163,12 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
   passages are that section's rendered text without its `none` lines, one passage per heading
   (one per family member with facts).
 - Rebuilds automatically when the index's schema version differs from the current one.
+- A recording's English translation is indexed as extra transcript passages
+  (`HH:MM · Log My Day · English`), so English searches find days spoken in another language.
 
 ### Lens (MCP server)
+
+- `get_day` returns each capture's English `translation` (or `null`).
 
 - `query_facts` kinds `places` and `family` (replacing `family_events`), with a `person`
   filter for family and aggregates `by_place`, `by_person_and_category` and `top_items`.

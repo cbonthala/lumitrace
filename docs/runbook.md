@@ -23,7 +23,9 @@ and never paste real tokens or personal content here.
    Organizations **AI services opt-out policy**; for other providers check their API data terms.
    To try everything first without any provider, use `fake` for all of them.
    Set `LUMITRACE_FAMILY` to the family members who should get their own block under Family in each
-   day file (`Maya, Leo`); others only appear under People.
+   day file, with each person's relation to you and yourself marked `(me)`:
+   `Sam (me), Maya (wife), Leo (son), Rose (mother)`. The AI then knows who is speaking and who
+   "Dad", "Amma" or "my wife" means. Others only appear under People.
 5. **Deploy:** on AWS, follow *Deploying on AWS Lightsail* below; elsewhere
    `docker compose up -d --build`. Check `curl localhost:8000/health` and
    `curl localhost:8002/health`; Spectrum has no published port (`docker compose logs
@@ -212,6 +214,14 @@ logged).
   DeleteObject` on that prefix and `transcribe:StartTranscriptionJob/GetTranscriptionJob/
   DeleteTranscriptionJob`. Enable the AWS Organizations **AI services opt-out policy** for
   Amazon Transcribe. Restart `prism`.
+* **Switching speech to Sarvam** (Telugu, Hindi, Tamil, ... also mixed with English): create an
+  API key at [dashboard.sarvam.ai](https://dashboard.sarvam.ai), then set
+  `LUMITRACE_STT_PROVIDER=sarvam`, `LUMITRACE_SARVAM_API_KEY=<key>`, `LUMITRACE_STT_LANGUAGE=te`
+  (or empty to detect), and optionally `LUMITRACE_STT_KEYTERMS` (places and brands you mention;
+  family names are added automatically). Keep `LUMITRACE_SARVAM_TRANSLATE=true` so each
+  recording also gets an English translation under its transcript. Check Sarvam's data terms
+  before sending private audio. Restart `prism`. The next recording's activity record shows
+  `"stt": "sarvam/saaras:v4"` and `translation_chars` in the `transcribe` step.
 * **Trying it offline:** `LUMITRACE_STT_PROVIDER=fake` and all three `LUMITRACE_LLM_*_MODEL=fake`;
   then `curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json'
   -d '{"text": "Test note"}' localhost:8000/notes`.

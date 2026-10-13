@@ -5,13 +5,16 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
+from pydantic import SecretStr
 
 from lumitrace.config import Settings
 from lumitrace.prism.pipeline.stt import (
     AWSTranscribeTranscriber,
     FakeTranscriber,
     LiteLLMTranscriber,
+    SarvamTranscriber,
     get_transcriber,
 )
 
@@ -130,9 +133,138 @@ def test_aws_language_options(settings: Settings) -> None:
         assert stt._language_args() == expected
 
 
+class FakeSarvam:
+    """Imitates the Sarvam batch API and its presigned blob storage."""
+
+    def __init__(self, fail_modes: tuple[str, ...] = ()) -> None:
+        self.fail_modes = fail_modes
+        self.jobs: dict[str, dict[str, Any]] = {}
+        self.uploads: dict[str, bytes] = {}
+        self.blob_headers: list[httpx.Headers] = []
+        self.api_keys: set[str | None] = set()
+        self.polls = 0
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        url = request.url
+        if url.host == "blob.example":
+            self.blob_headers.append(request.headers)
+            if request.method == "PUT":
+                self.uploads[url.path] = request.content
+                return httpx.Response(201)
+            job_id = url.path.split("/")[1]
+            mode = self.jobs[job_id]["params"]["mode"]
+            text = "We went to the park." if mode == "translate" else "mana park ki vellam"
+            return httpx.Response(200, json={"transcript": f" {text} ", "language_code": "te-IN"})
+        self.api_keys.add(request.headers.get("api-subscription-key"))
+        path = url.path.removeprefix("/speech-to-text/job/v1")
+        body = json.loads(request.content) if request.content else {}
+        if path == "":
+            job_id = f"job{len(self.jobs)}"
+            self.jobs[job_id] = {"params": body["job_parameters"], "started": False}
+            return httpx.Response(202, json={"job_id": job_id, "job_state": "Accepted"})
+        if path == "/upload-files":
+            name = body["files"][0]
+            link = f"https://blob.example/{body['job_id']}/{name}?sig=secret"
+            return httpx.Response(200, json={"upload_urls": {name: {"file_url": link}}})
+        if path == "/download-files":
+            name = body["files"][0]
+            link = f"https://blob.example/{body['job_id']}/{name}?sig=secret"
+            return httpx.Response(200, json={"download_urls": {name: {"file_url": link}}})
+        job_id, action = path.strip("/").split("/")
+        if action == "start":
+            self.jobs[job_id]["started"] = True
+            return httpx.Response(200, json={"job_state": "Running"})
+        self.polls += 1
+        if self.polls <= 2:
+            return httpx.Response(200, json={"job_state": "Running"})
+        if self.jobs[job_id]["params"]["mode"] in self.fail_modes:
+            failed = {"state": "API Error", "error_message": "audio unreadable", "outputs": []}
+            return httpx.Response(200, json={"job_state": "Completed", "job_details": [failed]})
+        done = {"state": "Success", "outputs": [{"file_name": "0.json", "file_id": "o"}]}
+        return httpx.Response(200, json={"job_state": "Completed", "job_details": [done]})
+
+
+def sarvam_settings(settings: Settings, **update: Any) -> Settings:
+    values = {
+        "stt_provider": "sarvam",
+        "sarvam_api_key": SecretStr("sk-test"),
+        "stt_language": "te",
+        "family": "Sam (me), Maya (wife)",
+        "stt_keyterms": "Corner Bakery",
+        **update,
+    }
+    return settings.model_copy(update=values)
+
+
+def sarvam(settings: Settings, server: FakeSarvam) -> SarvamTranscriber:
+    client = httpx.Client(transport=httpx.MockTransport(server.handler))
+    return SarvamTranscriber(settings, client=client, poll_seconds=0)
+
+
+def test_sarvam_transcript_and_translation(settings: Settings) -> None:
+    server = FakeSarvam()
+    result = sarvam(sarvam_settings(settings), server).transcribe(b"audio", "audio.m4a")
+    assert result.text == "mana park ki vellam"
+    assert result.translation == "We went to the park."
+    assert result.model == "sarvam/saaras:v4"
+    assert result.warnings == ()
+    params = [job["params"] for job in server.jobs.values()]
+    assert [p["mode"] for p in params] == ["codemix", "translate"]
+    for p in params:
+        assert p["model"] == "saaras:v4"
+        assert p["language_code"] == "te-IN"
+        assert p["keyterms"] == ["Sam", "Maya", "Corner Bakery"]
+    assert all(job["started"] for job in server.jobs.values())
+    assert set(server.uploads.values()) == {b"audio"}
+    assert server.api_keys == {"sk-test"}
+    assert all("api-subscription-key" not in h for h in server.blob_headers)
+    assert server.blob_headers[0]["x-ms-blob-type"] == "BlockBlob"
+
+
+def test_sarvam_options(settings: Settings) -> None:
+    server = FakeSarvam()
+    s = sarvam_settings(settings, sarvam_translate=False, sarvam_model="saaras:v3", stt_language="")
+    result = sarvam(s, server).transcribe(b"audio", "audio.wav")
+    assert result.translation == ""
+    (job,) = server.jobs.values()
+    assert job["params"] == {"model": "saaras:v3", "mode": "codemix", "language_code": "unknown"}
+    with pytest.raises(ValueError, match="cannot read"):
+        sarvam(s, server).transcribe(b"audio", "audio.caf")
+    with pytest.raises(ValueError, match="SARVAM_API_KEY"):
+        SarvamTranscriber(settings.model_copy(update={"stt_provider": "sarvam"}))
+
+
+def test_sarvam_failed_translation_keeps_the_transcript(settings: Settings) -> None:
+    result = sarvam(sarvam_settings(settings), FakeSarvam(fail_modes=("translate",))).transcribe(
+        b"audio", "audio.m4a"
+    )
+    assert result.text == "mana park ki vellam"
+    assert result.translation == ""
+    assert result.warnings == ("translation: RuntimeError: Sarvam job failed: audio unreadable",)
+
+
+def test_sarvam_failed_transcript_raises_without_leaking_urls(settings: Settings) -> None:
+    with pytest.raises(RuntimeError, match="audio unreadable"):
+        sarvam(sarvam_settings(settings), FakeSarvam(fail_modes=("codemix",))).transcribe(
+            b"audio", "audio.m4a"
+        )
+
+    def reject_upload(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "blob.example":
+            return httpx.Response(403, text="AuthenticationFailed sig=secret")
+        return FakeSarvam().handler(request)
+
+    client = httpx.Client(transport=httpx.MockTransport(reject_upload))
+    stt = SarvamTranscriber(sarvam_settings(settings), client=client, poll_seconds=0)
+    with pytest.raises(RuntimeError) as info:
+        stt.transcribe(b"audio", "audio.m4a")
+    assert str(info.value) == "Sarvam audio upload failed: HTTP 403"
+
+
 def test_get_transcriber(settings: Settings) -> None:
     assert isinstance(get_transcriber(settings), FakeTranscriber)
     s = settings.model_copy(update={"stt_provider": "litellm"})
     assert isinstance(get_transcriber(s), LiteLLMTranscriber)
     with pytest.raises(ValueError, match="BUCKET"):
         get_transcriber(settings.model_copy(update={"stt_provider": "aws_transcribe"}))
+    assert isinstance(get_transcriber(sarvam_settings(settings)), SarvamTranscriber)

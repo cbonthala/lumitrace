@@ -15,10 +15,10 @@ Tests construct `Settings(_env_file=None, ...)` directly; the `settings` fixture
 
 | Group | Fields |
 |---|---|
-| General | `log_level`, `timezone` (`"America/Chicago"`), `day_rollover_hour` (4), `prompts_dir`, property `tz -> ZoneInfo`, `family` (comma-separated names, `""`), property `family_members -> list[str]` (trimmed, duplicates dropped ignoring case) |
+| General | `log_level`, `timezone` (`"America/Chicago"`), `day_rollover_hour` (4), `prompts_dir`, property `tz -> ZoneInfo`, `family` (comma-separated names, each optionally `Name (relation)`, the owner marked `(me)`; `""`), properties `family_members -> list[str]` (names only, trimmed, duplicates dropped ignoring case), `family_relations -> dict[str, str]` (name → relation, `""` if none), `owner_name -> str \| None` (the `(me)`/`(self)` member) |
 | API (Prism) | `api_token: SecretStr`, `api_host`, `api_port` (8000), `api_max_upload_mb`, `audio_bitrate_kbps` (32), `photo_max_dimension` (2048), `photo_jpeg_quality` (85) |
 | Storage | `storage_backend: "local" \| "gdrive"`, `local_root` (`data/Lumitrace`), `gdrive_client_secrets_file`, `gdrive_token_file`, `gdrive_root_folder` (`"Lumitrace"`) |
-| Speech | `stt_provider: "litellm" \| "aws_transcribe" \| "fake"`, `stt_model`, `stt_language`, `aws_region`, `aws_transcribe_bucket` |
+| Speech | `stt_provider: "litellm" \| "aws_transcribe" \| "sarvam" \| "fake"`, `stt_model`, `stt_language`, `stt_keyterms` (comma-separated; property `stt_keyterm_list` = family names + these), `aws_region`, `aws_transcribe_bucket`, `sarvam_api_key: SecretStr`, `sarvam_model` (`saaras:v4`), `sarvam_mode: "transcribe" \| "codemix" \| "verbatim" \| "translit"` (`codemix`), `sarvam_translate` (`True`) |
 | LLM | `llm_extract_facts_model`, `llm_write_journal_model`, `llm_fallback_model` (LiteLLM strings), `llm_timeout_seconds`, `llm_max_retries` |
 | Embeddings | `embedding_model` (`"fake"` = offline), `embedding_dimension` |
 | Index (Spectrum) | `index_path` (`data/index/lumitrace.sqlite`), `indexer_host`, `indexer_port` (8001), `indexer_poll_interval_seconds` (300), `indexer_nudge_url`, `indexer_backup_interval_hours` (24) |
@@ -92,8 +92,9 @@ Models (pydantic):
   `generated_at`, `generated_hash`, `lumitrace_format` (read from `lumen_format`,
   `bookshelf_format` or `lifelog_format` in files written under the earlier names); unknown keys preserved. Facts are
   not in the front matter since format 2.
-* `Capture`: `id`, `kind: "recording" | "note"`, `captured_at` (aware), `text`, `audio`,
-  `photos`, `location`; `Capture.make_id(kind, captured_at)`.
+* `Capture`: `id`, `kind: "recording" | "note"`, `captured_at` (aware), `text`, `translation`
+  (English translation of a recording, `""` if none; written under `TRANSLATION_MARKER`),
+  `audio`, `photos`, `location`; `Capture.make_id(kind, captured_at)`.
 * `DayFile`: `meta: FrontMatter`, `facts: DayFacts`, `title`, `journal`, `notes`, `captures`; `.date`,
   `DayFile.new(d)`, `.compute_generated_hash()`, `.is_user_edited()`, `.capture_ids()`.
 

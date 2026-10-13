@@ -170,8 +170,27 @@ activity record.
      `en-US` (also `es`, `fr`, `de`, ... mapped; `xx-YY` codes are used as-is; anything else uses
      language identification). Turn on the **AWS Organizations AI services opt-out policy** so
      AWS does not use the audio to improve its models. Needs `boto3` and AWS credentials.
+   * `sarvam` (ADR 0015): Sarvam's Saaras batch API (`https://api.sarvam.ai`, header
+     `api-subscription-key: LUMITRACE_SARVAM_API_KEY`; recordings up to 2 hours). Two jobs run at
+     the same time on the same audio: the **transcript** in `LUMITRACE_SARVAM_MODE` (default
+     `codemix`: English words in English, Telugu or other Indian-language words in their own
+     script) and, with `LUMITRACE_SARVAM_TRANSLATE=true`, an **English translation** (`translate`
+     mode). Each job: create (`POST /speech-to-text/job/v1` with `model`, `mode`,
+     `language_code`, `keyterms`), get a presigned upload URL, `PUT` the audio
+     (`x-ms-blob-type: BlockBlob`; the API key is never sent to the storage URL), start, poll the
+     status, then download the result JSON and read `transcript`. `LUMITRACE_STT_LANGUAGE=te`
+     becomes `te-IN` (`xx-YY` is used as-is, empty means `unknown` = detect). `keyterms` (only
+     sent to `saaras:v4`) are the `LUMITRACE_FAMILY` names plus `LUMITRACE_STT_KEYTERMS`, at most
+     50, each cut to 64 characters; they help the names come out right. A failed transcript job
+     fails the capture (it is retried); a failed translation job only adds a
+     `transcribe: translation: ...` warning and the capture keeps its transcript. Errors never
+     echo the presigned URLs (they carry access tokens). Sarvam has no endpoint to delete a job;
+     check its data-retention terms before sending private audio. `models_used.stt` is
+     `sarvam/<model>`; no cost is recorded (Sarvam prices in rupees per hour of audio).
    * `fake`: offline; uploaded bytes that are UTF-8 text become the transcript.
-   If transcription fails nothing has been written yet, so the capture is simply retried.
+   If transcription fails nothing has been written yet, so the capture is simply retried. A
+   translation is stored in the capture block below the transcript (`Capture.translation`,
+   `docs/frames-format.md` → Capture metadata).
 4. **Photos** (`pipeline/photos.py`): Pillow + pillow-heif (HEIC); rotated upright from EXIF,
    fitted within `LUMITRACE_PHOTO_MAX_DIMENSION`, saved as JPEG at `LUMITRACE_PHOTO_JPEG_QUALITY`
    without EXIF (no GPS or device data in the copy). Named with `next_photo_names()` after the
@@ -202,7 +221,7 @@ activity record.
    * If one step fails on every model, the other step's result is still applied (facts without a
      new journal, or a journal with the old facts). If both fail, the day keeps the transcript
      and `generation` is `failed`.
-   * Front matter: `prompt_version` (e.g. `extract_facts-v2+write_journal-v1`) and `models_used`
+   * Front matter: `prompt_version` (e.g. `extract_facts-v3+write_journal-v2`) and `models_used`
      (`stt`, `extract_facts`, `write_journal` or `journal_addendum`: the models that actually
      answered), merged with what was there.
 7. **Write** the day file and its snapshot again.
@@ -228,14 +247,32 @@ models set to `fake`, the whole API runs offline.
 
 ### Prompts
 
-Versioned files in `prompts/<task>/<version>.md` (`prompts/README.md`): `extract_facts/v2.md`
-(v2 adds `places` and the per-member `family` blocks; v1 is kept for reference),
-`write_journal/v1.md`, `journal_addendum/v1.md`. The current versions are in
-`lumitrace.prism.pipeline.prompts.PROMPT_VERSIONS`. Each file has a system part and a user part separated
-by `<!-- lumitrace-prompt: system -->` / `<!-- lumitrace-prompt: user -->`, with `{{name}}`
-placeholders (`date`, `location`, `captures`, `facts`, `journal`, `capture`, `family` = the
-`LUMITRACE_FAMILY` names). A missing value
-raises an error. Prompts tell the model to use only what the entries say and never invent.
+Versioned files in `prompts/<task>/<version>.md` (`prompts/README.md`): `extract_facts/v3.md`,
+`write_journal/v2.md`, `journal_addendum/v2.md` (older versions are kept for reference). The
+current versions are in `lumitrace.prism.pipeline.prompts.PROMPT_VERSIONS`. Each file has a
+system part and a user part separated by `<!-- lumitrace-prompt: system -->` /
+`<!-- lumitrace-prompt: user -->`, with `{{name}}` placeholders (`date`, `location`, `captures`,
+`facts`, `journal`, `capture`, `author`, `family`). A missing value raises an error. Prompts tell
+the model to use only what the entries say and never invent.
+
+The current versions (ADR 0016) also tell the model:
+
+* **Who is speaking and how everyone is related:** `author` is the `LUMITRACE_FAMILY` member
+  marked `(me)` (`(not given)` otherwise) and `family` lists every member with their relation,
+  e.g. `Sam (the author), Maya (the author's wife), Leo`. Relationship words in any language
+  (Dad, Amma, Nanna, ...) are resolved from the point of view of whoever says them, and the
+  author's own facts go in their family block.
+* **Who did what:** every action, meal, place and feeling belongs to the person who did it;
+  "we" is the author plus whoever it clearly includes; the journal never makes the author the
+  subject of something someone else did.
+* **How to read the entries:** a recording with a translation is shown as
+  `English translation (machine-made from the audio):` followed by
+  `Original transcript (as spoken):`. The model understands it from the translation, checks
+  names in the original, drops details the two disagree on, never turns a misheard phrase into
+  a food, place or name, and writes in English.
+* **The facts can be wrong:** `write_journal` follows the entries when the extracted facts
+  disagree with them, and uses Morning/Afternoon/Evening only for events the entries place
+  there.
 
 ## Activity records (`_system/activity/YYYY/MM.jsonl`)
 
@@ -245,7 +282,7 @@ One JSON line per processing attempt, appended to the file for the month the att
 ```json
 {"capture_id": "phone-001", "kind": "recording", "attempt": 1, "status": "done",
  "entry_date": "2026-10-10", "received_at": "...", "started_at": "...", "finished_at": "...",
- "generation": "full", "prompt_versions": {"extract_facts": "v2", "write_journal": "v1"},
+ "generation": "full", "prompt_versions": {"extract_facts": "v3", "write_journal": "v2"},
  "models": {"stt": "openai/gpt-4o-transcribe", "extract_facts": "openai/gpt-4o-mini",
             "write_journal": "openai/gpt-4o"},
  "steps": [
@@ -298,9 +335,10 @@ One JSON line per processing attempt, appended to the file for the month the att
 | `LUMITRACE_AUDIO_BITRATE_KBPS` | AAC bitrate of the stored audio |
 | `LUMITRACE_PHOTO_MAX_DIMENSION`, `LUMITRACE_PHOTO_JPEG_QUALITY` | photo copies |
 | `LUMITRACE_TIMEZONE`, `LUMITRACE_DAY_ROLLOVER_HOUR` | entry dates and capture times |
-| `LUMITRACE_STT_PROVIDER`, `LUMITRACE_STT_MODEL`, `LUMITRACE_STT_LANGUAGE`, `LUMITRACE_AWS_REGION`, `LUMITRACE_AWS_TRANSCRIBE_BUCKET` | speech to text |
+| `LUMITRACE_STT_PROVIDER`, `LUMITRACE_STT_MODEL`, `LUMITRACE_STT_LANGUAGE`, `LUMITRACE_STT_KEYTERMS`, `LUMITRACE_AWS_REGION`, `LUMITRACE_AWS_TRANSCRIBE_BUCKET` | speech to text |
+| `LUMITRACE_SARVAM_API_KEY`, `LUMITRACE_SARVAM_MODEL` (`saaras:v4`), `LUMITRACE_SARVAM_MODE` (`codemix`), `LUMITRACE_SARVAM_TRANSLATE` (`true`) | the `sarvam` speech-to-text option |
 | `LUMITRACE_LLM_EXTRACT_FACTS_MODEL`, `LUMITRACE_LLM_WRITE_JOURNAL_MODEL`, `LUMITRACE_LLM_FALLBACK_MODEL`, `LUMITRACE_LLM_TIMEOUT_SECONDS`, `LUMITRACE_LLM_MAX_RETRIES` | AI steps (`fake` = offline) |
-| `LUMITRACE_FAMILY` | comma-separated family members (`Maya, Leo`) who get their own block under Family; empty = no family blocks |
+| `LUMITRACE_FAMILY` | comma-separated family members who get their own block under Family, each optionally with their relation to the owner in parentheses, the owner marked `(me)`: `Sam (me), Maya (wife), Leo (son)`; empty = no family blocks |
 | `LUMITRACE_PROMPTS_DIR` | prompt files; a relative path that does not exist falls back to the repository's `prompts/` |
 | `LUMITRACE_INDEXER_NUDGE_URL` | nudge after each capture (empty = off) |
 | storage settings | where everything is written (`get_storage`) |

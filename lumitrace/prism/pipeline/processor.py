@@ -199,6 +199,7 @@ class CaptureProcessor:
         self, req: CaptureRequest, local: dt.datetime, day_date: dt.date, record: ActivityRecord
     ) -> Capture:
         text = req.text.strip()
+        translation = ""
         audio: AudioResult | None = None
         if req.audio is not None:
             raw = self.storage.read_bytes(req.audio.path)
@@ -216,9 +217,14 @@ class CaptureProcessor:
                 transcript = self.transcriber.transcribe(stt_data, stt_name)
                 step.model = transcript.model
                 step.cost_usd = transcript.cost_usd
-                step.detail = {"audio_bytes": len(stt_data), "chars": len(transcript.text)}
+                detail = {"audio_bytes": len(stt_data), "chars": len(transcript.text)}
+                if transcript.translation:
+                    detail["translation_chars"] = len(transcript.translation)
+                step.detail = detail
+            record.warnings.extend(f"transcribe: {w}" for w in transcript.warnings)
             record.models["stt"] = transcript.model
             text = "\n\n".join(t for t in (text, transcript.text) if t)
+            translation = transcript.translation
 
         listing = [f.path.rsplit("/", 1)[-1] for f in self.storage.list(day_dir(day_date))]
         audio_name: str | None = None
@@ -260,6 +266,7 @@ class CaptureProcessor:
             kind=req.kind,
             captured_at=local,
             text=text,
+            translation=translation,
             audio=audio_name,
             photos=photo_names,
             location=req.location,

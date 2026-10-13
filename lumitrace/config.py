@@ -7,6 +7,7 @@ not modelled here. `.env.example` documents every variable; keep the two in sync
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -14,6 +15,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+OWNER_RELATIONS = frozenset({"me", "self"})
+"""Relations in ``LUMITRACE_FAMILY`` that mark the owner (``Sam (me)``)."""
+_FAMILY_ENTRY_RE = re.compile(r"^([^()]*?)\s*(?:\(([^()]*)\))?$")
 
 
 class Settings(BaseSettings):
@@ -31,7 +36,9 @@ class Settings(BaseSettings):
     prompts_dir: Path = Path("prompts")
     family: str = ""
     """Comma-separated names of the family members who get their own "Family" sub-section in
-    each day file, e.g. ``Maya, Leo``. Use :attr:`family_members`."""
+    each day file, each optionally followed by its relation to the owner in parentheses, e.g.
+    ``Sam (me), Maya (wife), Leo (son)``; ``(me)`` marks the owner. Use :attr:`family_members`,
+    :attr:`family_relations` and :attr:`owner_name`."""
 
     # --- Recording API -------------------------------------------------------------------
     api_token: SecretStr = SecretStr("")
@@ -50,11 +57,22 @@ class Settings(BaseSettings):
     gdrive_root_folder: str = "Lumitrace"
 
     # --- Speech to text ------------------------------------------------------------------
-    stt_provider: Literal["litellm", "aws_transcribe", "fake"] = "litellm"
+    stt_provider: Literal["litellm", "aws_transcribe", "sarvam", "fake"] = "litellm"
     stt_model: str = "openai/gpt-4o-transcribe"
     stt_language: str = "en"
+    stt_keyterms: str = ""
+    """Comma-separated names, places and brands to bias recognition toward (Sarvam only). The
+    family names are always added. Use :attr:`stt_keyterm_list`."""
     aws_region: str = "us-east-1"
     aws_transcribe_bucket: str = ""
+    sarvam_api_key: SecretStr = SecretStr("")
+    sarvam_model: str = "saaras:v4"
+    sarvam_mode: Literal["transcribe", "codemix", "verbatim", "translit"] = "codemix"
+    """Output of the transcript kept in the day file; ``codemix`` keeps English words in English
+    and the rest in its own script."""
+    sarvam_translate: bool = True
+    """Also translate each recording to English (stored next to the transcript and used by the
+    AI steps)."""
 
     # --- LLMs (LiteLLM model strings) ----------------------------------------------------
     llm_extract_facts_model: str = "openai/gpt-4o-mini"
@@ -100,13 +118,43 @@ class Settings(BaseSettings):
 
     @property
     def family_members(self) -> list[str]:
-        """:attr:`family` as a list: trimmed, empty names dropped, duplicates (any case) removed."""
-        names: dict[str, str] = {}
+        """:attr:`family` names as a list: relations dropped, trimmed, empty names dropped,
+        duplicates (any case) removed."""
+        return list(self.family_relations)
+
+    @property
+    def family_relations(self) -> dict[str, str]:
+        """``{name: relation}`` from :attr:`family`, in order; ``""`` when no relation is given.
+        ``Maya (wife)`` gives ``{"Maya": "wife"}``."""
+        relations: dict[str, str] = {}
+        seen: set[str] = set()
         for raw in self.family.split(","):
-            name = " ".join(raw.split())
-            if name:
-                names.setdefault(name.casefold(), name)
-        return list(names.values())
+            match = _FAMILY_ENTRY_RE.match(" ".join(raw.split()))
+            if not match or not match.group(1):
+                continue
+            name, relation = match.group(1).strip(), (match.group(2) or "").strip()
+            if name.casefold() not in seen:
+                seen.add(name.casefold())
+                relations[name] = relation
+        return relations
+
+    @property
+    def owner_name(self) -> str | None:
+        """The family member marked ``(me)`` or ``(self)``: the person who keeps the journal."""
+        for name, relation in self.family_relations.items():
+            if relation.casefold() in OWNER_RELATIONS:
+                return name
+        return None
+
+    @property
+    def stt_keyterm_list(self) -> list[str]:
+        """Family names, then :attr:`stt_keyterms`: trimmed, duplicates (any case) removed."""
+        terms: dict[str, str] = {}
+        for raw in [*self.family_members, *self.stt_keyterms.split(",")]:
+            term = " ".join(raw.split())
+            if term:
+                terms.setdefault(term.casefold(), term)
+        return list(terms.values())
 
 
 @lru_cache(maxsize=1)

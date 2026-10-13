@@ -106,7 +106,7 @@ section):
 | `facts` | the "At a glance" section without its `none` lines (`render_facts_section(facts, include_empty=False)`, so empty sections and empty family members make no passage), split at its headings: mood/city/weather lines, then Food, Places, People, Activities, one passage per family member, Highlights | heading text (`Food`, ..., the member's name) | |
 | `journal` | split at Markdown headings, then packed paragraphs | heading text | |
 | `notes` | same as journal; a heading with no text under it is its own passage | heading text | |
-| `transcript` | one or more passages per capture | `21:30 · Log My Day` | capture id |
+| `transcript` | one or more passages per capture, then its English translation (if any) as more passages | `21:30 · Log My Day`; translation: `21:30 · Log My Day · English` | capture id |
 
 Long text is cut at paragraph, then sentence, then word boundaries (`chunk_text`).
 

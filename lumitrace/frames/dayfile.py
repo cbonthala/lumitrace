@@ -32,6 +32,10 @@ Full specification with an example: ``docs/frames-format.md``. Summary of the la
     ![[2026-10-10-2130.m4a]]
 
     transcript text
+    <!-- lumitrace:translation ... -->           optional English translation (Capture.translation)
+    #### English translation
+
+    translated text
     <!-- lumitrace:transcript:end -->
 
 The facts live only in the "At a glance" region, never in the front matter. Format 1 files kept
@@ -93,6 +97,8 @@ NOTES_END = "<!-- lumitrace:notes:end -->"
 TRANSCRIPT_START = "<!-- lumitrace:transcript:start (raw transcripts, added by Lumitrace) -->"
 TRANSCRIPT_END = "<!-- lumitrace:transcript:end -->"
 CAPTURE_MARKER = "lumitrace:capture"
+TRANSLATION_MARKER = "<!-- lumitrace:translation (English translation of the recording) -->"
+TRANSLATION_HEADING = "#### English translation"
 MARKER_PREFIXES: tuple[str, ...] = ("lumitrace", "lumen", "bookshelf", "lifelog")
 """Marker prefixes :func:`parse` accepts; the first is written, the rest are legacy."""
 FORMAT_KEY = "lumitrace_format"
@@ -520,6 +526,8 @@ class Capture(BaseModel):
     """Timezone-aware, in the owner's local timezone (its wall clock is shown in the heading)."""
     text: StrippedStr = ""
     """Raw transcript (recording) or note text."""
+    translation: StrippedStr = ""
+    """English translation of the recording, when the speech-to-text provider made one."""
     audio: str | None = None
     photos: list[str] = Field(default_factory=list)
     location: str | None = None
@@ -638,6 +646,8 @@ def _render_capture(capture: Capture) -> str:
     lines.extend(f"![[{p}]]" for p in capture.photos)
     if capture.text:
         lines.extend(["", capture.text])
+    if capture.translation:
+        lines.extend(["", TRANSLATION_MARKER, TRANSLATION_HEADING, "", capture.translation])
     return "\n".join(lines) + "\n"
 
 
@@ -853,6 +863,10 @@ _PREFIX_RE = "(?:" + "|".join(MARKER_PREFIXES) + ")"
 _CAPTURE_RE = re.compile(
     r"^[ \t]*<!--\s*" + _PREFIX_RE + r":capture\s+(\{.*?\})\s*-->[ \t]*$", re.MULTILINE
 )
+_TRANSLATION_RE = re.compile(
+    r"^[ \t]*<!--\s*" + _PREFIX_RE + r":translation\b.*?-->[ \t]*$", re.MULTILINE
+)
+_TRANSLATION_HEADING_RE = re.compile(r"\A#{1,6}[ \t]+English translation[ \t]*(?:\n|\Z)", re.I)
 _TITLE_RE = re.compile(r"^#[ \t]+(.+?)[ \t]*$", re.MULTILINE)
 _EMBED_RE = re.compile(r"^!\[\[([^\]]+)\]\]$")
 
@@ -904,12 +918,25 @@ def _parse_captures(region: str) -> tuple[list[Capture], str]:
                 idx += 1
                 continue
             break
-        meta["text"] = "\n".join(lines[idx:])
+        meta["text"], meta["translation"] = _split_translation("\n".join(lines[idx:]))
         try:
             captures.append(Capture.model_validate(meta))
         except ValidationError as exc:
             raise DayFileParseError(f"invalid capture {meta.get('id')!r}: {exc}") from exc
     return captures, stray.strip()
+
+
+def _split_translation(body: str) -> tuple[str, str]:
+    """``(text, translation)`` of a capture body: the translation follows the translation marker,
+    under an optional "English translation" heading."""
+    marker = _TRANSLATION_RE.search(body)
+    if not marker:
+        return body, ""
+    translation = body[marker.end() :].strip()
+    heading = _TRANSLATION_HEADING_RE.match(translation)
+    if heading:
+        translation = translation[heading.end() :]
+    return body[: marker.start()], translation
 
 
 _FACT_HEADING_RE = re.compile(r"^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$")
