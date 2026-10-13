@@ -79,7 +79,7 @@ class CaptureRequest(BaseModel):
     captured_at: dt.datetime
     """Timezone-aware."""
     entry_date: dt.date | None = None
-    """The day chosen by the sender (``?date=``); None = derived from ``captured_at``."""
+    """The day chosen by the sender (``date`` field); None = derived from ``captured_at``."""
     text: str = ""
     """Typed note text (notes only)."""
     location: str | None = None

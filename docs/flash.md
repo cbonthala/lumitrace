@@ -164,9 +164,9 @@ New shortcut **Quick Note**:
 
 Dictated notes before 4 a.m. count for the previous day, like recordings.
 
-**Filing under another day** (both shortcuts, optional): add `?date=YYYY-MM-DD` to the URL, e.g.
-*API* `/recordings?date=` *Formatted Date* (a **Format Date** action with custom format
-`yyyy-MM-dd`, from an **Ask for Input** of type Date). Leave it off, or empty, for today.
+**Filing under another day** (both shortcuts, optional): add a Text field `date` →
+*Formatted Date* to the request body, next to `captured_at` (a **Format Date** action with custom
+format `yyyy-MM-dd`, from an **Ask for Input** of type Date). Leave it off, or empty, for today.
 
 ## 7. Send pending
 

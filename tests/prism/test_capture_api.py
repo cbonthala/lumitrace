@@ -135,13 +135,10 @@ def test_rollover_before_4am_counts_as_previous_day(
     assert late.json()["entry_date"] == "2026-10-11"
 
 
-def test_date_query_parameter_chooses_the_day(
+def test_date_field_chooses_the_day(
     app: FastAPI, client: TestClient, api_storage: LocalStorage
 ) -> None:
-    files = [("audio", ("Recording.m4a", b"Pancakes with Leo.", "audio/mp4"))]
-    resp = client.post(
-        "/recordings?date=2026-10-08", data={"captured_at": EVENING}, files=files, headers=AUTH
-    )
+    resp = post_recording(client, audio=b"Pancakes with Leo.", date="2026-10-08")
     assert resp.status_code == 202, resp.text
     assert resp.json()["entry_date"] == "2026-10-08"
     assert "Thursday, October 8" in resp.json()["message"]
@@ -151,20 +148,22 @@ def test_date_query_parameter_chooses_the_day(
     assert day.captures[0].captured_at.isoformat() == "2026-10-10T21:30:00-05:00"
     assert not api_storage.exists(day_file_path(OCT10))
 
-    note = client.post(
-        "/notes", params={"date": ""}, json={"text": "Tea.", "captured_at": EVENING}, headers=AUTH
-    )
-    assert note.json()["entry_date"] == "2026-10-10"
+    form = {"text": "Tea.", "captured_at": EVENING, "date": "2026-10-09"}
+    assert client.post("/notes", data=form, headers=AUTH).json()["entry_date"] == "2026-10-09"
+    note = {"text": "Tea.", "captured_at": EVENING, "date": "2026-10-09"}
+    assert client.post("/notes", json=note, headers=AUTH).json()["entry_date"] == "2026-10-09"
+    note["date"] = ""
+    assert client.post("/notes", json=note, headers=AUTH).json()["entry_date"] == "2026-10-10"
 
 
-def test_date_query_parameter_validation(client: TestClient, api_settings: Settings) -> None:
+def test_date_field_validation(client: TestClient, api_settings: Settings) -> None:
     note = {"text": "x", "captured_at": EVENING}
     for bad in ("10/08/2026", "2026-02-30", "yesterday"):
-        resp = client.post("/notes", params={"date": bad}, json=note, headers=AUTH)
+        resp = client.post("/notes", json={**note, "date": bad}, headers=AUTH)
         assert resp.status_code == 422
         assert "YYYY-MM-DD" in resp.text
     tomorrow = dt.datetime.now(api_settings.tz).date() + dt.timedelta(days=1)
-    resp = client.post("/notes", params={"date": tomorrow.isoformat()}, json=note, headers=AUTH)
+    resp = client.post("/notes", json={**note, "date": tomorrow.isoformat()}, headers=AUTH)
     assert resp.status_code == 422
     assert "future" in resp.text
 

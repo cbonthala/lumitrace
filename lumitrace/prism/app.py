@@ -3,10 +3,9 @@
 Endpoints (details and examples: ``docs/prism.md``):
 
 * ``POST /recordings``: multipart; ``audio`` file, optional ``photos``/``photos[]``, ``lat``,
-  ``lon``, ``place``, ``captured_at``, ``capture_id``.
+  ``lon``, ``place``, ``captured_at``, ``date``, ``capture_id``.
 * ``POST /notes``: multipart, urlencoded or JSON; ``text`` and/or an ``audio`` clip, same
   optional fields.
-* Both take an optional ``?date=YYYY-MM-DD`` query parameter: the day the capture belongs to.
 * ``GET /captures/{id}``, ``POST /captures/{id}/retry``: status of a capture / retry a failed one.
 * ``GET /health``: unauthenticated liveness check.
 
@@ -111,7 +110,7 @@ def parse_captured_at(value: Any, settings: Settings) -> dt.datetime:
 
 
 def parse_entry_date(value: str | None, settings: Settings) -> dt.date | None:
-    """The ``date`` query parameter (``YYYY-MM-DD``). None when empty: the day then follows
+    """The ``date`` field (``YYYY-MM-DD``). None when empty: the day then follows
     ``captured_at`` (default now) in ``LUMITRACE_TIMEZONE``, with the day rollover hour."""
     if value is None or not value.strip():
         return None
@@ -227,7 +226,7 @@ async def parse_request(request: Request, settings: Settings) -> ParsedCapture:
     return ParsedCapture(
         capture_id=capture_id,
         captured_at=parse_captured_at(fields.get("captured_at"), settings),
-        entry_date=parse_entry_date(request.query_params.get("date"), settings),
+        entry_date=parse_entry_date(_text_field(fields.get("date")), settings),
         text=text,
         location=format_location(place, lat, lon),
         audio=audio,

@@ -139,7 +139,8 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
   `mimetypes`, which knows no type for `.m4a` on the Linux image, so Sarvam got
   `application/octet-stream` and transcribed noise. Each supported extension now has a fixed
   type (`.m4a` → `audio/x-m4a`). An empty Sarvam transcript is now a capture warning.
-- **`?date=YYYY-MM-DD` on `POST /recordings` and `POST /notes`** (ADR 0017): files the capture
+- **`date` field (`YYYY-MM-DD`) on `POST /recordings` and `POST /notes`** (ADR 0017): form
+  field or JSON key, next to `captured_at`; files the capture
   under that day (day file, audio name, confirmation message); kept in the inbox manifest for
   retries. Empty or missing: the day of `captured_at` (default now) in `LUMITRACE_TIMEZONE`, as
   before. Malformed or future dates get `422`.

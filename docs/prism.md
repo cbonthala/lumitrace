@@ -34,15 +34,10 @@ logs an error at start-up. The token is compared in constant time.
 | `audio` | yes | the voice recording (any format; iPhone Record Audio gives `.m4a`) |
 | `photos` or `photos[]` (or `photo`) | no | any number of image files (HEIC, JPEG, PNG, ...); max 60 |
 | `captured_at` | no | when it was recorded: ISO-8601 (`2026-10-10T21:30:00-05:00`; no offset = server timezone) or Unix seconds. Default: now |
+| `date` | no | the day the capture belongs to, `YYYY-MM-DD` (`2026-10-08`); not after today (ADR 0017). Empty or missing: the day of `captured_at` (default now) in `LUMITRACE_TIMEZONE`, before `LUMITRACE_DAY_ROLLOVER_HOUR` counting as the previous day. `422` if malformed or in the future |
 | `lat`, `lon` | no | decimal degrees |
 | `place` | no | a place name, e.g. the city from Get Details of Locations |
 | `capture_id` | no | client id for safe retries: letters, digits, `.`, `_`, `-`, max 128 |
-
-Query parameter (also on `POST /notes`), ADR 0017:
-
-| Parameter | Required | Meaning |
-|---|---|---|
-| `date` | no | the day the capture belongs to, `YYYY-MM-DD` (`/recordings?date=2026-10-08`); not after today. Empty or missing: the day of `captured_at` (default now) in `LUMITRACE_TIMEZONE`, before `LUMITRACE_DAY_ROLLOVER_HOUR` counting as the previous day. `422` if malformed or in the future |
 
 Response `202 Accepted` (new) or `200 OK` (this `capture_id` was already received):
 
@@ -66,7 +61,8 @@ Same fields, but `audio` is optional and `text` is added; at least one of `text`
 photo is required (text and audio: the transcript is appended after the text; photos only: e.g.
 photos shared from the Photos app). Accepts `multipart/form-data`,
 `application/x-www-form-urlencoded` or `application/json` (text-only notes, e.g.
-`{"text": "...", "captured_at": "...", "capture_id": "..."}`). Same response.
+`{"text": "...", "captured_at": "...", "date": "2026-10-08", "capture_id": "..."}`). Same
+response.
 
 ### `GET /captures/{capture_id}`
 
@@ -158,7 +154,7 @@ retries keep working. The inbox folder is deleted once a capture is `done`.
 `lumitrace.prism.pipeline.processor.CaptureProcessor.process(request)`; each step is timed into the
 activity record.
 
-1. **Entry date:** the `date` query parameter if one was sent (kept in the inbox manifest as
+1. **Entry date:** the `date` field if one was sent (kept in the inbox manifest as
    `CaptureRequest.entry_date`, so retries and restarts use it too), otherwise
    `entry_date(captured_at, LUMITRACE_TIMEZONE, LUMITRACE_DAY_ROLLOVER_HOUR)`; before 4 a.m. counts
    as the previous day. The capture time is stored in the local timezone either way.

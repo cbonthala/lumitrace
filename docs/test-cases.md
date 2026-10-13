@@ -173,8 +173,8 @@ File: `tests/prism/test_capture_api.py`
 
 - Checks that a recording made at 1:30 a.m. goes into the previous day's journal (with the audio named by its clock time), while one at exactly 4:00 a.m. starts the new day. <sub>`test_rollover_before_4am_counts_as_previous_day`</sub>
 - Checks that the capture time is understood whether it is sent without a timezone (taken as local time), in UTC, as a Unix timestamp, or left empty (meaning "now"). <sub>`test_captured_at_formats`</sub>
-- Checks that `?date=2026-10-08` files a recording made on Oct 10 under Oct 8 (day file, audio name and the confirmation message), keeps its real capture time, leaves Oct 10 untouched, and that an empty `date` falls back to the capture time's day. <sub>`test_date_query_parameter_chooses_the_day`</sub>
-- Checks that a `date` that is not a real `YYYY-MM-DD` date, or is after today, is refused with 422. <sub>`test_date_query_parameter_validation`</sub>
+- Checks that a `date` field of `2026-10-08` files a recording made on Oct 10 under Oct 8 (day file, audio name and the confirmation message), keeps its real capture time and leaves Oct 10 untouched; that notes accept `date` as a form field and in JSON; and that an empty `date` falls back to the capture time's day. <sub>`test_date_field_chooses_the_day`</sub>
+- Checks that a `date` that is not a real `YYYY-MM-DD` date, or is after today, is refused with 422. <sub>`test_date_field_validation`</sub>
 
 ### Quick notes
 
@@ -703,7 +703,7 @@ File: `tests/test_shared_helpers.py`
 
 File: `tests/test_bruno_collection.py`
 
-- Checks that every request in the Bruno collection (`bruno/`) calls a route that really exists in the Prism, Spectrum or Lens, with the right method (ignoring query parameters such as `?date=`). <sub>`test_every_request_matches_a_real_route`</sub>
+- Checks that every request in the Bruno collection (`bruno/`) calls a route that really exists in the Prism, Spectrum or Lens, with the right method (ignoring any query string). <sub>`test_every_request_matches_a_real_route`</sub>
 - Checks that the collection's MCP requests, sent in order against a real Lens, open a session, list the tools, call all five tools without errors and close the session. <sub>`test_lens_mcp_requests_run_in_order`</sub>
 - Checks that the collection contains no tokens: requests use `{{variables}}`, environments read tokens from the git-ignored `bruno/.env`, and `.env.example` leaves them blank. <sub>`test_collection_holds_no_secrets`</sub>
 
