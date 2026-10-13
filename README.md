@@ -130,5 +130,6 @@ lives on the server's disk and is backed up to your Drive. Logs never contain jo
 | Frames (day file format) | `docs/frames-format.md` |
 | Why things are the way they are | `docs/decisions/` (names: `0042-rename-to-lumitrace.md`) |
 | Maintenance, first run, upgrading from LifeLog, Bookshelf or Lumen | `docs/runbook.md` |
+| Trying the APIs by hand (Bruno collection, one folder per module) | `bruno/`, `docs/runbook.md` |
 | What each test checks, in plain English | `docs/test-cases.md` |
 | What we learned | `docs/learnings.md`, `CHANGELOG.md` |

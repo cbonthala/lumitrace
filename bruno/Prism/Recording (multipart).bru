@@ -1,0 +1,33 @@
+meta {
+  name: Recording (multipart)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{prismUrl}}/recordings
+  body: multipartForm
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiToken}}
+}
+
+body:multipart-form {
+  audio: @file(samples/recording.m4a)
+  place: Austin
+  lat: 30.2672
+  lon: -97.7431
+}
+
+script:post-response {
+  if (res.body && res.body.capture_id) {
+    bru.setVar("captureId", res.body.capture_id);
+  }
+}
+
+docs {
+  Log My Day recording: an `audio` file (m4a, mp3, wav, ...) is required; `photos`,
+  `captured_at`, `lat`, `lon`, `place` and `capture_id` are optional.
+}

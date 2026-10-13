@@ -1,0 +1,16 @@
+docs {
+  # Lumitrace API
+
+  One folder per module that has an HTTP API: **Prism** (recording API), **Spectrum** (indexer)
+  and **Lens** (MCP server). Flash (the iPhone Shortcuts) and Frames (the day files) have no API
+  of their own: Flash calls the Prism, Frames are files in storage.
+
+  Setup (details in `docs/runbook.md` → *Trying the API with Bruno*):
+
+  1. Copy `bruno/.env.example` to `bruno/.env` and fill it in (git-ignored).
+  2. Pick the **Local** or **Production** environment (top right).
+  3. Run **Health** in each folder first.
+
+  In **Production**, notes and recordings land in today's real journal, and Lens → MCP →
+  feedback writes a real feedback record.
+}

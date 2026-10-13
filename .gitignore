@@ -35,6 +35,7 @@ vault/
 *.mp3
 *.wav
 *.heic
+bruno/samples/
 
 # Editors / OS
 .DS_Store

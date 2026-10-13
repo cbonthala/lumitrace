@@ -1,0 +1,14 @@
+meta {
+  name: Lens
+  seq: 3
+}
+
+docs {
+  MCP server. Run **MCP → Initialize** first: it opens a session and saves its id
+  (`mcpSessionId`), which every other MCP request sends. Re-run it if a request answers
+  "Missing session ID" or 404 (the server restarted).
+
+  MCP requests use the static `LUMITRACE_MCP_AUTH_TOKEN` as a bearer token; it works in both
+  `token` and `oauth` mode. Answers come as an event stream: the JSON-RPC reply is the
+  `data:` line.
+}

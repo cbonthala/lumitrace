@@ -1,0 +1,19 @@
+meta {
+  name: Retry capture
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{prismUrl}}/captures/{{captureId}}/retry
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiToken}}
+}
+
+docs {
+  Queue a `failed` capture again. `409` if it isn't failed, `410` if its upload is gone.
+}

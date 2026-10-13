@@ -1,0 +1,16 @@
+meta {
+  name: Health
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{spectrumUrl}}/health
+  body: none
+  auth: none
+}
+
+docs {
+  Worker state, sync cycles, `pending_paths` (0 means every nudge has been indexed) and the
+  last error, if any.
+}

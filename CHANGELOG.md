@@ -7,6 +7,12 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- **Bruno collection** (`bruno/`) for trying the APIs by hand, one folder per module: Prism
+  (health, notes, recording, capture status, retry), Spectrum (health, nudge) and Lens (health,
+  OAuth discovery, and the MCP session with all five tools). Local and Production environments
+  read tokens from a git-ignored `bruno/.env`; `tests/test_bruno_collection.py` checks the
+  requests against the real routes and runs the MCP sequence. Guide: `docs/runbook.md` →
+  *Trying the API with Bruno*.
 - Cloud Agent notes in `AGENTS.md`: uv 0.13.0 on `/usr/local/bin`, `uv sync --frozen`, and
   tmux sessions for Prism, Spectrum, and Lens with a generated offline `.env` when none exists.
 - **Renamed the project from Lumen to Lumitrace** (decision 0042, supersedes 0009), everywhere;

@@ -78,7 +78,7 @@ add or update its line in the right section.
 | [Frames: day files](#frames-day-files) | Paths, the 4 a.m. rule, reading and writing without losing anything, spotting your edits, merge rules | Opening the files in Obsidian |
 | [Frames: storage](#frames-storage) | Local folder storage and Google Drive storage against an in-memory imitation | The real Google Drive API, the `lumitrace-drive-login` sign-in |
 | [Index schema](#index-schema) | Tables, keyword and vector search, clean-up rules, what survives a reset | Index size and speed with years of entries |
-| [Config and shared helpers](#config-and-shared-helpers) | Settings, `.env.example`, fake embeddings, nudges, this catalog's completeness | Real embedding providers |
+| [Config and shared helpers](#config-and-shared-helpers) | Settings, `.env.example`, fake embeddings, nudges, the Bruno collection, this catalog's completeness | Real embedding providers, running the collection in the Bruno app |
 | [Entry points](#entry-points) | The programs start and their commands exist | Running them in Docker |
 
 ---
@@ -662,8 +662,9 @@ File: `tests/index/test_schema.py`
 
 ## Config and shared helpers
 
-**Covered:** settings and their defaults, `.env.example`, the fake embeddings, nudges, and the
-completeness of this catalog. **Not covered:** real embedding providers.
+**Covered:** settings and their defaults, `.env.example`, the fake embeddings, nudges, the Bruno
+collection, and the completeness of this catalog. **Not covered:** real embedding providers,
+running the collection in the Bruno app itself.
 
 ### Settings
 
@@ -683,6 +684,14 @@ File: `tests/test_shared_helpers.py`
 - Checks that fake embeddings put texts that share words closer together, so search by meaning behaves sensibly in tests. <sub>`test_fake_embeddings_rank_shared_words_closer`</sub>
 - Checks that a nudge sends the changed paths to the indexer's address. <sub>`test_nudge_posts_paths`</sub>
 - Checks that a nudge reports failure instead of crashing when the indexer is down, answers with an error, or has no address configured. <sub>`test_nudge_never_raises`</sub>
+
+### Bruno collection
+
+File: `tests/test_bruno_collection.py`
+
+- Checks that every request in the Bruno collection (`bruno/`) calls a route that really exists in the Prism, Spectrum or Lens, with the right method. <sub>`test_every_request_matches_a_real_route`</sub>
+- Checks that the collection's MCP requests, sent in order against a real Lens, open a session, list the tools, call all five tools without errors and close the session. <sub>`test_lens_mcp_requests_run_in_order`</sub>
+- Checks that the collection contains no tokens: requests use `{{variables}}`, environments read tokens from the git-ignored `bruno/.env`, and `.env.example` leaves them blank. <sub>`test_collection_holds_no_secrets`</sub>
 
 ### Keeping this catalog complete
 

@@ -1,0 +1,41 @@
+meta {
+  name: search
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{lensUrl}}/mcp
+  body: json
+  auth: bearer
+}
+
+headers {
+  Accept: application/json, text/event-stream
+  Content-Type: application/json
+  Mcp-Session-Id: {{mcpSessionId}}
+  MCP-Protocol-Version: {{mcpProtocolVersion}}
+}
+
+auth:bearer {
+  token: {{mcpToken}}
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/call",
+    "params": {
+      "name": "search",
+      "arguments": {
+        "query": "tacos",
+        "limit": 5
+      }
+    }
+  }
+}
+
+docs {
+  Keyword + meaning search. Optional `from_date`, `to_date` (YYYY-MM-DD, inclusive) and `limit` (1-50).
+}

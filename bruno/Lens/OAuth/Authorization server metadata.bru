@@ -1,0 +1,11 @@
+meta {
+  name: Authorization server metadata
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{lensUrl}}/.well-known/oauth-authorization-server
+  body: none
+  auth: none
+}

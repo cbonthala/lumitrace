@@ -1,0 +1,47 @@
+meta {
+  name: Initialize
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{lensUrl}}/mcp
+  body: json
+  auth: bearer
+}
+
+headers {
+  Accept: application/json, text/event-stream
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{mcpToken}}
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "{{mcpProtocolVersion}}",
+      "capabilities": {},
+      "clientInfo": {
+        "name": "bruno",
+        "version": "1.0"
+      }
+    }
+  }
+}
+
+script:post-response {
+  const sid = res.getHeader("mcp-session-id");
+  if (sid) {
+    bru.setVar("mcpSessionId", sid);
+  }
+}
+
+docs {
+  Opens an MCP session and saves its id from the `mcp-session-id` response header.
+}

@@ -1,0 +1,40 @@
+meta {
+  name: on_this_day
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{lensUrl}}/mcp
+  body: json
+  auth: bearer
+}
+
+headers {
+  Accept: application/json, text/event-stream
+  Content-Type: application/json
+  Mcp-Session-Id: {{mcpSessionId}}
+  MCP-Protocol-Version: {{mcpProtocolVersion}}
+}
+
+auth:bearer {
+  token: {{mcpToken}}
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 6,
+    "method": "tools/call",
+    "params": {
+      "name": "on_this_day",
+      "arguments": {
+        "years_back": 10
+      }
+    }
+  }
+}
+
+docs {
+  Same calendar date in earlier years. Optional `date` (YYYY-MM-DD or MM-DD, default today).
+}

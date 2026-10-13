@@ -239,6 +239,35 @@ Setup and client configs: `docs/lens.md`.
 * **Feedback:** each `feedback` call is in `Lumitrace/_system/feedback/YYYY/MM/*.json` and in the
   index's `feedback` table (kept across rebuilds).
 
+## Trying the API with Bruno
+
+`bruno/` is a [Bruno](https://www.usebruno.com) collection with one folder per module that has
+an HTTP API: **Prism**, **Spectrum** and **Lens** (with **OAuth** and **MCP** subfolders).
+`tests/test_bruno_collection.py` keeps it in step with the code.
+
+1. In Bruno: **Open Collection** → choose the `bruno/` folder.
+2. Copy `bruno/.env.example` to `bruno/.env` (git-ignored) and fill in the tokens (the same
+   values as `LUMITRACE_API_TOKEN` and `LUMITRACE_MCP_AUTH_TOKEN` on that server) and, for
+   production, the Tailscale addresses.
+3. Pick the **Local** or **Production** environment, then run **Health** in each folder.
+4. **Prism:** Quick note (JSON) needs nothing else. For the multipart requests, put a photo and a
+   short audio file in `bruno/samples/` (git-ignored) as `photo.jpg` and `recording.m4a`, or pick
+   files in the Body tab. Each upload saves its `capture_id`, so **Capture status** works next.
+5. **Lens → MCP:** run **Initialize** first (it saves the session id), then any tool call.
+
+In production, notes and recordings are added to today's real journal and **feedback** writes a
+real feedback record. Production Prism calls need this computer on the tailnet.
+
+**Spectrum in production** is not published (port 8001, no auth). To reach it, open a tunnel
+and keep it running while you use the Spectrum requests (`spectrumUrl` is `localhost:18001`):
+
+```bash
+ip=$(aws lightsail get-static-ip --static-ip-name lumitrace-ip --query staticIp.ipAddress --output text)
+cid=$(ssh -i ~/.ssh/lumitrace-lightsail ubuntu@$ip \
+  "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' lumitrace-spectrum-1")
+ssh -i ~/.ssh/lumitrace-lightsail -N -L 18001:$cid:8001 ubuntu@$ip
+```
+
 ## Upgrading from LifeLog, Bookshelf or Lumen
 
 The project was renamed three times: LifeLog (0.1.0) → Bookshelf (decision 0008) → Lumen

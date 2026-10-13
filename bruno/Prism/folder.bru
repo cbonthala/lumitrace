@@ -1,0 +1,13 @@
+meta {
+  name: Prism
+  seq: 1
+}
+
+docs {
+  Recording API (what the Flash shortcuts call). Every request except Health needs
+  `Authorization: Bearer <LUMITRACE_API_TOKEN>`. Uploads answer `202` with a `capture_id`;
+  the notes and recording requests save it so **Capture status** works right after.
+
+  For the multipart requests, put files in `bruno/samples/` (git-ignored) or pick one in the
+  Body tab.
+}
