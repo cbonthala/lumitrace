@@ -7,6 +7,10 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- `docs/tech-stack.md`: every language, library, tool, AI provider, service and client Lumen
+  uses, grouped by module (shared, Flash, Prism, Frames, Spectrum, Lens, deployment,
+  development), with versions, what each is for, and whether it is open source (license).
+  Linked from README.
 - **Renamed the project from Bookshelf to Lumen** (decision 0009, supersedes 0008): *A Flash
   captures the moment, the Prism splits it into its colors, each day becomes a Frame, the
   Spectrum lays everything out in order, and the Lens lets you zoom into any day.* Name map in

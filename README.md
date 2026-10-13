@@ -123,6 +123,7 @@ lives on the server's disk and is backed up to your Drive. Logs never contain jo
 |---|---|
 | Conventions and context for AI coding agents | `AGENTS.md` |
 | How the pieces fit | `docs/architecture.md`, `docs/contracts.md` |
+| Tech stack, services and licenses | `docs/tech-stack.md` |
 | Prism (recording API) and Flash (iPhone Shortcuts) | `docs/prism.md`, `docs/flash.md` |
 | Spectrum (indexer) | `docs/spectrum.md`, `docs/index-schema.md` |
 | Lens (MCP server) and AI-app setup | `docs/lens.md` |
