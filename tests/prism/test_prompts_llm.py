@@ -7,11 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from lumen.config import Settings
-from lumen.frames.dayfile import Capture, DayFacts, FamilyMember
-from lumen.prism.pipeline.generate import Generator, keep_family, parse_facts
-from lumen.prism.pipeline.llm import LLMClient, LLMError, extract_json
-from lumen.prism.pipeline.prompts import (
+from lumitrace.config import Settings
+from lumitrace.frames.dayfile import Capture, DayFacts, FamilyMember
+from lumitrace.prism.pipeline.generate import Generator, keep_family, parse_facts
+from lumitrace.prism.pipeline.llm import LLMClient, LLMError, extract_json
+from lumitrace.prism.pipeline.prompts import (
     PROMPT_VERSIONS,
     PromptError,
     combined_version,
@@ -58,7 +58,7 @@ def test_prompt_errors(tmp_path: Path) -> None:
     with pytest.raises(PromptError):
         parse_prompt("x", "v1", "no markers here")
     prompt = parse_prompt(
-        "x", "v1", "<!-- lumen-prompt: system -->\nS {{a}}\n<!-- lumen-prompt: user -->\nU"
+        "x", "v1", "<!-- lumitrace-prompt: system -->\nS {{a}}\n<!-- lumitrace-prompt: user -->\nU"
     )
     with pytest.raises(KeyError):
         prompt.render()

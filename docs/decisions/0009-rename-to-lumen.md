@@ -1,6 +1,6 @@
 # 0009. Rename to Lumen
 
-- Status: accepted
+- Status: superseded by [0042](0042-rename-to-lumitrace.md)
 - Date: 2026-10-11
 - Supersedes: [0008](0008-project-and-module-names.md)
 

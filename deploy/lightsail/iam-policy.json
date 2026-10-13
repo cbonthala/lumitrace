@@ -2,7 +2,7 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "LumenLightsail",
+      "Sid": "LumitraceLightsail",
       "Effect": "Allow",
       "Action": ["lightsail:*", "sts:GetCallerIdentity"],
       "Resource": "*"

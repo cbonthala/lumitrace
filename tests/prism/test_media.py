@@ -15,13 +15,13 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from lumen.config import Settings
-from lumen.frames.dayfile import day_file_path, parse
-from lumen.frames.storage.local import LocalStorage
-from lumen.prism.pipeline.audio import compress_audio, original_ext
-from lumen.prism.pipeline.llm import LLMClient
-from lumen.prism.pipeline.photos import resize_photo
-from lumen.prism.pipeline.processor import CaptureProcessor, CaptureRequest, UploadedFile
+from lumitrace.config import Settings
+from lumitrace.frames.dayfile import day_file_path, parse
+from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.prism.pipeline.audio import compress_audio, original_ext
+from lumitrace.prism.pipeline.llm import LLMClient
+from lumitrace.prism.pipeline.photos import resize_photo
+from lumitrace.prism.pipeline.processor import CaptureProcessor, CaptureRequest, UploadedFile
 from tests.prism.conftest import FakeLLM, NudgeRecorder, image_bytes
 
 OCT10 = dt.date(2026, 10, 10)

@@ -1,7 +1,7 @@
 # Index schema (schema version 2)
 
-One SQLite file (`LUMEN_INDEX_PATH`, default `data/index/lumen.sqlite`) with FTS5 keyword
-search and sqlite-vec vector search. Code: `lumen/index/schema.py` (shared: Spectrum writes,
+One SQLite file (`LUMITRACE_INDEX_PATH`, default `data/index/lumitrace.sqlite`) with FTS5 keyword
+search and sqlite-vec vector search. Code: `lumitrace/index/schema.py` (shared: Spectrum writes,
 the Lens reads). Open it only with `connect(path, embedding_dimension)`, which loads
 sqlite-vec, creates the schema, turns on foreign keys and WAL, sets a 5-second busy timeout and
 returns `sqlite3.Row` rows.

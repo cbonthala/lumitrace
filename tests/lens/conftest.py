@@ -1,5 +1,5 @@
 """Fixtures for the MCP server: fictional day files in LocalStorage and a small index built
-directly with ``lumen.index.schema`` (the real indexer is a separate work stream)."""
+directly with ``lumitrace.index.schema`` (the real indexer is a separate work stream)."""
 
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from lumen.config import Settings
-from lumen.embeddings import embed_texts
-from lumen.frames.dayfile import (
+from lumitrace.config import Settings
+from lumitrace.embeddings import embed_texts
+from lumitrace.frames.dayfile import (
     Activity,
     Capture,
     DayFacts,
@@ -26,9 +26,9 @@ from lumen.frames.dayfile import (
     parse,
     render,
 )
-from lumen.frames.storage.local import LocalStorage
-from lumen.index.schema import connect, serialize_embedding
-from lumen.lens.tools import LensTools
+from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.index.schema import connect, serialize_embedding
+from lumitrace.lens.tools import LensTools
 
 TZ = ZoneInfo("America/Chicago")
 

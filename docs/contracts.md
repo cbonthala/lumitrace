@@ -5,11 +5,11 @@ server) build on. They are implemented and
 tested (`tests/`); this page is the quick reference. Changing any of them is a cross-cutting
 change: update every caller, the tests, this page and `CHANGELOG.md` in one commit.
 
-## Config: `lumen.config`
+## Config: `lumitrace.config`
 
-`Settings` (pydantic-settings, env prefix `LUMEN_`, reads `.env`), `get_settings()` (cached).
+`Settings` (pydantic-settings, env prefix `LUMITRACE_`, reads `.env`), `get_settings()` (cached).
 Field names keep their technical prefixes (`api_*` = Prism, `indexer_*` = Spectrum,
-`mcp_*` = Lens), so `LUMEN_API_TOKEN` is the Prism's token.
+`mcp_*` = Lens), so `LUMITRACE_API_TOKEN` is the Prism's token.
 Tests construct `Settings(_env_file=None, ...)` directly; the `settings` fixture in
 `tests/conftest.py` gives an offline configuration.
 
@@ -17,16 +17,16 @@ Tests construct `Settings(_env_file=None, ...)` directly; the `settings` fixture
 |---|---|
 | General | `log_level`, `timezone` (`"America/Chicago"`), `day_rollover_hour` (4), `prompts_dir`, property `tz -> ZoneInfo`, `family` (comma-separated names, `""`), property `family_members -> list[str]` (trimmed, duplicates dropped ignoring case) |
 | API (Prism) | `api_token: SecretStr`, `api_host`, `api_port` (8000), `api_max_upload_mb`, `audio_bitrate_kbps` (32), `photo_max_dimension` (2048), `photo_jpeg_quality` (85) |
-| Storage | `storage_backend: "local" \| "gdrive"`, `local_root` (`data/Lumen`), `gdrive_client_secrets_file`, `gdrive_token_file`, `gdrive_root_folder` (`"Lumen"`) |
+| Storage | `storage_backend: "local" \| "gdrive"`, `local_root` (`data/Lumitrace`), `gdrive_client_secrets_file`, `gdrive_token_file`, `gdrive_root_folder` (`"Lumitrace"`) |
 | Speech | `stt_provider: "litellm" \| "aws_transcribe" \| "fake"`, `stt_model`, `stt_language`, `aws_region`, `aws_transcribe_bucket` |
 | LLM | `llm_extract_facts_model`, `llm_write_journal_model`, `llm_fallback_model` (LiteLLM strings), `llm_timeout_seconds`, `llm_max_retries` |
 | Embeddings | `embedding_model` (`"fake"` = offline), `embedding_dimension` |
-| Index (Spectrum) | `index_path` (`data/index/lumen.sqlite`), `indexer_host`, `indexer_port` (8001), `indexer_poll_interval_seconds` (300), `indexer_nudge_url`, `indexer_backup_interval_hours` (24) |
+| Index (Spectrum) | `index_path` (`data/index/lumitrace.sqlite`), `indexer_host`, `indexer_port` (8001), `indexer_poll_interval_seconds` (300), `indexer_nudge_url`, `indexer_backup_interval_hours` (24) |
 | MCP (Lens) | `mcp_transport: "stdio" \| "streamable-http"`, `mcp_host`, `mcp_port` (8002), `mcp_path` (`/mcp`), `mcp_public_url`, `mcp_auth_mode: "none" \| "token" \| "oauth"`, `mcp_auth_token: SecretStr`, `mcp_owner_password: SecretStr` |
 
-## Frames, storage: `lumen.frames.storage`
+## Frames, storage: `lumitrace.frames.storage`
 
-`get_storage(settings=None) -> Storage`. Paths are relative to the Lumen root, POSIX style;
+`get_storage(settings=None) -> Storage`. Paths are relative to the Lumitrace root, POSIX style;
 `normalize_path()` validates them (`InvalidPathError`, a `ValueError`). Hidden entries (any
 component starting with `.`) are never listed. Missing files raise `FileNotFoundError`; backend
 failures raise `StorageError`.
@@ -56,9 +56,9 @@ changes since the token (latest state per path, renames = deleted + upserted). T
 
 Backends: `LocalStorage(root)` (atomic writes; mtime-snapshot tokens) and
 `GDriveStorage(root_folder_name, *, credentials=None, service=None)` (`drive.file` scope, Drive
-changes API, `GDriveStorage.from_settings(settings)`, `login_main()` = `lumen-drive-login`).
+changes API, `GDriveStorage.from_settings(settings)`, `login_main()` = `lumitrace-drive-login`).
 
-## Frames, day files: `lumen.frames.dayfile`
+## Frames, day files: `lumitrace.frames.dayfile`
 
 Format details and an example: `docs/frames-format.md`.
 
@@ -70,9 +70,10 @@ Paths: `day_dir(d)`, `day_file_path(d)`, `audio_file_name(d, local_time)`,
 Constants: `SYSTEM_DIR = "_system"`, `FORMAT_VERSION = 2`, `FACTS_HEADING = "## At a glance"`,
 `FACT_SECTIONS`, `FAMILY_FIELDS`, `MEAL_TYPES` (breakfast, lunch, dinner, snacks, drinks),
 `NONE_TEXT = "none"`, `JOURNAL_SECTIONS` (Summary, Morning, Afternoon, Evening, Thoughts,
-Later), `MARKER_PREFIXES = ("lumen",
-"bookshelf", "lifelog")` (`parse` accepts all; `render` writes `lumen:`), `FORMAT_KEY =
-"lumen_format"`, `LEGACY_FORMAT_KEYS = ("bookshelf_format", "lifelog_format")`.
+Later), `MARKER_PREFIXES = ("lumitrace", "lumen",
+"bookshelf", "lifelog")` (`parse` accepts all; `render` writes `lumitrace:`), `FORMAT_KEY =
+"lumitrace_format"`, `LEGACY_FORMAT_KEYS = ("lumen_format", "bookshelf_format",
+"lifelog_format")`.
 
 Dates: `entry_date(captured_at, tz="America/Chicago", rollover_hour=4) -> date`,
 `default_title(d)`.
@@ -88,8 +89,8 @@ Models (pydantic):
   schema of fact extraction. Values are normalised (one line, no separators inside items) so
   render and parse agree. `FACT_FIELDS`.
 * `FrontMatter`: `date`, `audio`, `photos`, `prompt_version`, `models_used` (task → model),
-  `generated_at`, `generated_hash`, `lumen_format` (read from `bookshelf_format` or
-  `lifelog_format` in files written under the earlier names); unknown keys preserved. Facts are
+  `generated_at`, `generated_hash`, `lumitrace_format` (read from `lumen_format`,
+  `bookshelf_format` or `lifelog_format` in files written under the earlier names); unknown keys preserved. Facts are
   not in the front matter since format 2.
 * `Capture`: `id`, `kind: "recording" | "note"`, `captured_at` (aware), `text`, `audio`,
   `photos`, `location`; `Capture.make_id(kind, captured_at)`.
@@ -112,9 +113,9 @@ Functions:
 * `merge_generation_additive(day, *, facts, journal_addendum=None, addendum_label=None,
   prompt_version=None, models_used=None, generated_at=None) -> DayFile`
 
-## Index: `lumen.index.schema`
+## Index: `lumitrace.index.schema`
 
-Details: `docs/index-schema.md`. Shared rather than inside `lumen/spectrum/`: Spectrum
+Details: `docs/index-schema.md`. Shared rather than inside `lumitrace/spectrum/`: Spectrum
 writes the index, the Lens reads it.
 
 * `connect(path, embedding_dimension, *, embedding_model=None, read_only=False) -> sqlite3.Connection`
@@ -125,25 +126,25 @@ writes the index, the Lens reads it.
 * `SCHEMA_VERSION`, `META_*` keys, `DERIVED_TABLES`, `PRESERVED_TABLES`,
   `EmbeddingDimensionMismatch`
 
-## Embeddings: `lumen.embeddings`
+## Embeddings: `lumitrace.embeddings`
 
 `embed_texts(texts, settings, batch_size=64) -> list[list[float]]` (LiteLLM, or deterministic
 `fake_embedding` when `embedding_model == "fake"`). Spectrum embeds passages and the Lens embeds queries with this same function.
 
-## Spectrum nudge: `lumen.nudge`
+## Spectrum nudge: `lumitrace.nudge`
 
 `nudge_indexer(settings, paths=(), *, timeout=2.0, client=None) -> bool` (never raises).
-Wire contract: `POST {LUMEN_INDEXER_NUDGE_URL}` with JSON `{"paths": [...]}`; Spectrum
+Wire contract: `POST {LUMITRACE_INDEXER_NUDGE_URL}` with JSON `{"paths": [...]}`; Spectrum
 answers `202 Accepted` and syncs soon.
 
 ## Entry points
 
 | Script | Target | Docker service |
 |---|---|---|
-| `lumen-prism` | `lumen.prism.__main__:main` (uvicorn on `lumen.prism.app:app`; `create_app(settings)`; `docs/prism.md`) | `prism` |
-| `lumen-spectrum` | `lumen.spectrum.__main__:main` (`run` \| `sync` \| `rebuild` \| `backup`; `docs/spectrum.md`) | `spectrum` |
-| `lumen-lens` | `lumen.lens.__main__:main` (`--transport stdio`, `reset-oauth`; `docs/lens.md`) | `lens` |
-| `lumen-drive-login` | `lumen.frames.storage.gdrive:login_main` (one-time Google Drive sign-in) | run by hand |
+| `lumitrace-prism` | `lumitrace.prism.__main__:main` (uvicorn on `lumitrace.prism.app:app`; `create_app(settings)`; `docs/prism.md`) | `prism` |
+| `lumitrace-spectrum` | `lumitrace.spectrum.__main__:main` (`run` \| `sync` \| `rebuild` \| `backup`; `docs/spectrum.md`) | `spectrum` |
+| `lumitrace-lens` | `lumitrace.lens.__main__:main` (`--transport stdio`, `reset-oauth`; `docs/lens.md`) | `lens` |
+| `lumitrace-drive-login` | `lumitrace.frames.storage.gdrive:login_main` (one-time Google Drive sign-in) | run by hand |
 
 ## Files under `_system/`
 
@@ -157,5 +158,5 @@ Everything here lives in the owner's storage, never in the repository. `classify
 | `_system/generated/YYYY/MM/YYYY-MM-DD.md` | Prism | exact day file as last written by the system (`generated_snapshot_path`); written right after every day-file write, same text and `generated_at` |
 | `_system/activity/YYYY/MM.jsonl` | Prism | activity records, one JSON line per processing attempt: models, prompt versions, per-step time/cost, errors; no journal content |
 | `_system/feedback/YYYY/MM/<UTC timestamp>-<id>.json` | Lens | copy of each `feedback` call (also a row in the index) |
-| `_system/index-backup/lumen.sqlite` | Spectrum | daily index backup (includes `feedback` and `edit_signals`) |
+| `_system/index-backup/lumitrace.sqlite` | Spectrum | daily index backup (includes `feedback` and `edit_signals`) |
 | `_system/reports/` | weekly report job (later) | self-improvement reports |

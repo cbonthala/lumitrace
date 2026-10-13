@@ -1,9 +1,9 @@
 # Spectrum (indexer)
 
 The Spectrum lays everything out in order: it keeps the SQLite index (`docs/index-schema.md`)
-in step with the Frames (the day files in storage). Command: `lumen-spectrum`; Docker service:
-`spectrum` (port 8001, never published). Code: `lumen/spectrum/`; the schema module stays
-shared in `lumen/index/schema.py`. Spectrum is the only writer of the derived tables and of
+in step with the Frames (the day files in storage). Command: `lumitrace-spectrum`; Docker service:
+`spectrum` (port 8001, never published). Code: `lumitrace/spectrum/`; the schema module stays
+shared in `lumitrace/index/schema.py`. Spectrum is the only writer of the derived tables and of
 `edit_signals`; the Lens (MCP server) reads them.
 
 | Module | What it does |
@@ -11,28 +11,28 @@ shared in `lumen/index/schema.py`. Spectrum is the only writer of the derived ta
 | `core.py` | `Indexer`: `sync`, `index_paths`, `rebuild`, `backup`; opening the index |
 | `passages.py` | splits a `DayFile` into passages |
 | `edits.py` | compares a day file with its generated snapshot, writes `edit_signals` |
-| `backup.py` | SQLite backup API → `_system/index-backup/lumen.sqlite` |
+| `backup.py` | SQLite backup API → `_system/index-backup/lumitrace.sqlite` |
 | `service.py` | `run`: worker thread + FastAPI app (`POST /nudge`, `GET /health`) |
-| `__main__.py` | the `lumen-spectrum` CLI |
+| `__main__.py` | the `lumitrace-spectrum` CLI |
 
 ## Commands
 
 ```bash
-uv run lumen-spectrum run          # default: HTTP server + poll loop + daily backup
-uv run lumen-spectrum sync         # one incremental sync, then exit
-uv run lumen-spectrum sync --full  # list every file instead of using the sync token
-uv run lumen-spectrum rebuild      # empty derived tables (keeps feedback, edit_signals), index all
-uv run lumen-spectrum backup       # copy the index to storage now
+uv run lumitrace-spectrum run          # default: HTTP server + poll loop + daily backup
+uv run lumitrace-spectrum sync         # one incremental sync, then exit
+uv run lumitrace-spectrum sync --full  # list every file instead of using the sync token
+uv run lumitrace-spectrum rebuild      # empty derived tables (keeps feedback, edit_signals), index all
+uv run lumitrace-spectrum backup       # copy the index to storage now
 ```
 
 `sync` and `rebuild` print a JSON summary such as
 `{"kind": "sync", "indexed": 1, "skipped": 0, "deleted": 0, "edit_signals": 0, "malformed": [],
 "failed": [], "seconds": 0.4}` and exit with status 1 if a file failed with a transient error
-(it is retried on the next sync). In Docker: `docker compose run --rm spectrum lumen-spectrum sync`.
+(it is retried on the next sync). In Docker: `docker compose run --rm spectrum lumitrace-spectrum sync`.
 
-Settings used: `LUMEN_INDEX_PATH`, `LUMEN_EMBEDDING_MODEL`, `LUMEN_EMBEDDING_DIMENSION`,
-`LUMEN_INDEXER_HOST`, `LUMEN_INDEXER_PORT`, `LUMEN_INDEXER_POLL_INTERVAL_SECONDS`,
-`LUMEN_INDEXER_BACKUP_INTERVAL_HOURS`, plus the storage settings.
+Settings used: `LUMITRACE_INDEX_PATH`, `LUMITRACE_EMBEDDING_MODEL`, `LUMITRACE_EMBEDDING_DIMENSION`,
+`LUMITRACE_INDEXER_HOST`, `LUMITRACE_INDEXER_PORT`, `LUMITRACE_INDEXER_POLL_INTERVAL_SECONDS`,
+`LUMITRACE_INDEXER_BACKUP_INTERVAL_HOURS`, plus the storage settings.
 
 ## HTTP interface (`run`)
 
@@ -54,8 +54,8 @@ One worker thread owns the index connection and does every write, one cycle at a
 2. `sync`: `storage.list_changes(meta.sync_token)`, then process the changes (below). Once every
    24 hours the cycle is a **full scan** instead (`list_changes(None)`), which also removes index
    entries for day files that no longer exist, so a missed deletion is repaired within a day.
-3. Back up if `LUMEN_INDEXER_BACKUP_INTERVAL_HOURS` have passed (see Backups).
-4. Sleep until the next poll (`LUMEN_INDEXER_POLL_INTERVAL_SECONDS`) or until a nudge arrives,
+3. Back up if `LUMITRACE_INDEXER_BACKUP_INTERVAL_HOURS` have passed (see Backups).
+4. Sleep until the next poll (`LUMITRACE_INDEXER_POLL_INTERVAL_SECONDS`) or until a nudge arrives,
    then wait one second so a burst of writes (day file, snapshot, activity record) is handled
    in one cycle.
 
@@ -84,7 +84,7 @@ Each day file is written in **one transaction**: `files` upsert, `days` and fact
 passages and vectors replaced, edit signals. The MCP server always sees a whole day, old or new.
 
 Facts come from the day file's "At a glance" section (`DayFile.facts`, parsed by
-`lumen.frames.dayfile`); Spectrum copies them and never re-derives facts from the text.
+`lumitrace.frames.dayfile`); Spectrum copies them and never re-derives facts from the text.
 `meals.meal_type` is one of `breakfast`, `lunch`, `dinner`, `snacks`, `drinks`, one `meals` row
 per item, `none` placeholders never become rows, one `places` row
 per place, one `family_facts` row per item of a family member's block (`category` = `mood`,
@@ -113,7 +113,7 @@ Long text is cut at paragraph, then sentence, then word boundaries (`chunk_text`
 The embedded text is `heading + "\n" + text` (or just `text`), and `passages.text_hash` is the
 sha256 of exactly that. When a day is re-indexed, vectors whose hash is unchanged are reused, so
 adding a quick note only embeds the new passages. New passages from up to 16 changed files are
-embedded together with `lumen.embeddings.embed_texts` (which batches API calls by 64).
+embedded together with `lumitrace.embeddings.embed_texts` (which batches API calls by 64).
 
 The FTS5 and vec rows follow `passages` through the schema triggers (and an explicit insert into
 `passages_vec` with the same rowid).
@@ -152,11 +152,11 @@ Signals stay in the index (and its backup) in the owner's storage; nothing goes 
 
 ## Backups
 
-Every `LUMEN_INDEXER_BACKUP_INTERVAL_HOURS` (default 24; `0` disables) the `run` loop copies
+Every `LUMITRACE_INDEXER_BACKUP_INTERVAL_HOURS` (default 24; `0` disables) the `run` loop copies
 the index with SQLite's online backup API to a temporary file, switches the copy to
 rollback-journal mode (one self-contained file), and writes it to
-`_system/index-backup/lumen.sqlite` (one file, overwritten; Drive keeps earlier revisions for
-a while). The time is stored in `meta.last_backup_at`. `lumen-spectrum backup` does it now.
+`_system/index-backup/lumitrace.sqlite` (one file, overwritten; Drive keeps earlier revisions for
+a while). The time is stored in `meta.last_backup_at`. `lumitrace-spectrum backup` does it now.
 The backup includes `feedback` and `edit_signals`, the only data that a rebuild can't restore.
 
 ## Meta keys written by Spectrum
@@ -174,5 +174,5 @@ The backup includes `feedback` and `edit_signals`, the only data that a rebuild 
   edits don't nudge the indexer.
 * Notes the owner creates in Obsidian (other `.md` files) are not indexed (open question in the
   plan; `drive.file` can't see them anyway).
-* The daily full scan on Google Drive lists every file in the `Lumen` folder; it only downloads
+* The daily full scan on Google Drive lists every file in the `Lumitrace` folder; it only downloads
   day files whose modification time changed.

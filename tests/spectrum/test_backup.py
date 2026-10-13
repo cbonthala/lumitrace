@@ -4,11 +4,11 @@ import datetime as dt
 import sqlite3
 from pathlib import Path
 
-from lumen.frames.storage.local import LocalStorage
-from lumen.index.schema import load_sqlite_vec
-from lumen.spectrum.backup import BACKUP_PATH
-from lumen.spectrum.core import Indexer
-from lumen.spectrum.service import IndexerService
+from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.index.schema import load_sqlite_vec
+from lumitrace.spectrum.backup import BACKUP_PATH
+from lumitrace.spectrum.core import Indexer
+from lumitrace.spectrum.service import IndexerService
 from tests.spectrum.conftest import make_day, write_day
 
 D1 = dt.date(2026, 10, 10)
@@ -22,7 +22,7 @@ def test_backup_writes_a_consistent_copy_to_storage(
 
     info = indexer.backup()
 
-    assert info.path == BACKUP_PATH == "_system/index-backup/lumen.sqlite"
+    assert info.path == BACKUP_PATH == "_system/index-backup/lumitrace.sqlite"
     copy = tmp_path / "restored.sqlite"
     copy.write_bytes(storage.read_bytes(BACKUP_PATH))
     conn = sqlite3.connect(copy)

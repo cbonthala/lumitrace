@@ -5,12 +5,12 @@ import datetime as dt
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from lumen.config import Settings
-from lumen.frames.dayfile import day_file_path, generated_snapshot_path, parse
-from lumen.frames.storage.local import LocalStorage
-from lumen.prism.app import create_app, format_location
-from lumen.prism.inbox import CaptureStatus, Inbox, status_path
-from lumen.prism.pipeline.processor import CaptureProcessor, CaptureRequest, UploadedFile
+from lumitrace.config import Settings
+from lumitrace.frames.dayfile import day_file_path, generated_snapshot_path, parse
+from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.prism.app import create_app, format_location
+from lumitrace.prism.inbox import CaptureStatus, Inbox, status_path
+from lumitrace.prism.pipeline.processor import CaptureProcessor, CaptureRequest, UploadedFile
 from tests.prism.conftest import AUTH, NudgeRecorder, image_bytes, poll_status, wait_idle
 
 OCT10 = dt.date(2026, 10, 10)

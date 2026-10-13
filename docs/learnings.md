@@ -46,6 +46,11 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
   copied from `.env.example` replaced `/secrets/...` and `/data/...` with relative paths that do
   not exist in the container (no Drive token, index outside the volume) → `.env.example` and
   the runbook say to delete the path lines from a Docker `.env`.
+- 2026-10-12 — Third rename (Lumen → Lumitrace, ADR 0042): a blanket text replace also rewrote
+  the compatibility lists, the compatibility test and the link to ADR 0009's file name → after
+  the replace, add the old name back to `MARKER_PREFIXES` / `LEGACY_FORMAT_KEYS` and the test,
+  and restore links to historical files. Lightsail cannot rename instances or static IPs, so an
+  "everywhere" rename means replacing the server.
 
 ## Prism (recording API)
 

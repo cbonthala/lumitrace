@@ -7,10 +7,10 @@ import json
 
 import pytest
 
-from lumen.config import Settings
-from lumen.frames.dayfile import day_file_path, generated_snapshot_path, parse, render
-from lumen.frames.storage.local import LocalStorage
-from lumen.prism.pipeline.processor import CaptureProcessor, CaptureRequest, UploadedFile
+from lumitrace.config import Settings
+from lumitrace.frames.dayfile import day_file_path, generated_snapshot_path, parse, render
+from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.prism.pipeline.processor import CaptureProcessor, CaptureRequest, UploadedFile
 from tests.prism.conftest import NudgeRecorder
 
 OCT10 = dt.date(2026, 10, 10)
@@ -189,7 +189,7 @@ def test_empty_transcript_skips_generation(
 ) -> None:
     class Silent:
         def transcribe(self, data: bytes, filename: str):
-            from lumen.prism.pipeline.stt import Transcript
+            from lumitrace.prism.pipeline.stt import Transcript
 
             return Transcript(text="", model="fake")
 

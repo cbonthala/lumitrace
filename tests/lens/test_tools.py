@@ -7,14 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from lumen.config import Settings
-from lumen.frames.storage.local import LocalStorage
-from lumen.index.schema import connect, reset_derived
-from lumen.lens import dates as D
-from lumen.lens import tools as T
-from lumen.lens.dates import DateArgumentError
-from lumen.lens.index import INDEX_MISSING_NOTE
-from lumen.lens.tools import LensTools, ToolInputError
+from lumitrace.config import Settings
+from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.index.schema import connect, reset_derived
+from lumitrace.lens import dates as D
+from lumitrace.lens import tools as T
+from lumitrace.lens.dates import DateArgumentError
+from lumitrace.lens.index import INDEX_MISSING_NOTE
+from lumitrace.lens.tools import LensTools, ToolInputError
 
 # --- dates ---------------------------------------------------------------------------------
 
@@ -70,7 +70,7 @@ def test_get_day_missing_day(tools: LensTools, populated: Path) -> None:
 
 
 def test_get_day_works_without_index(tools: LensTools, storage: LocalStorage, days) -> None:
-    from lumen.frames.dayfile import day_file_path, render
+    from lumitrace.frames.dayfile import day_file_path, render
 
     storage.write_text(day_file_path(days[0].date), render(days[0]))
     assert tools.get_day("2024-10-10")["found"] is True

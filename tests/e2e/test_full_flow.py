@@ -30,19 +30,19 @@ from fastapi.testclient import TestClient
 from mcp import Client
 from PIL import Image
 
-from lumen.config import Settings
-from lumen.frames.dayfile import FamilyMember, day_file_path, generated_snapshot_path, parse
-from lumen.frames.storage.local import LocalStorage
-from lumen.index.schema import connect
-from lumen.lens.server import build_server
-from lumen.nudge import nudge_indexer
-from lumen.prism.app import create_app as create_api_app
-from lumen.prism.pipeline.audio import AudioResult, compress_audio
-from lumen.prism.pipeline.llm import LLMClient
-from lumen.prism.pipeline.processor import CaptureProcessor
-from lumen.spectrum.core import Indexer
-from lumen.spectrum.service import IndexerService
-from lumen.spectrum.service import create_app as create_indexer_app
+from lumitrace.config import Settings
+from lumitrace.frames.dayfile import FamilyMember, day_file_path, generated_snapshot_path, parse
+from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.index.schema import connect
+from lumitrace.lens.server import build_server
+from lumitrace.nudge import nudge_indexer
+from lumitrace.prism.app import create_app as create_api_app
+from lumitrace.prism.pipeline.audio import AudioResult, compress_audio
+from lumitrace.prism.pipeline.llm import LLMClient
+from lumitrace.prism.pipeline.processor import CaptureProcessor
+from lumitrace.spectrum.core import Indexer
+from lumitrace.spectrum.service import IndexerService
+from lumitrace.spectrum.service import create_app as create_indexer_app
 
 ROOT = Path(__file__).resolve().parents[2]
 TOKEN = "e2e-token-0123456789abcdef"
@@ -258,7 +258,9 @@ def test_full_flow(stack: Stack) -> None:
     assert [c.id for c in day.captures] == ["e2e-note-1", "e2e-recording-1"]
     assert day.facts.mood == "content"
     assert day.facts.places == ["the lake"]
-    assert day.facts.family == [FamilyMember(name="Leo")], "only LUMEN_FAMILY members get a block"
+    assert day.facts.family == [FamilyMember(name="Leo")], (
+        "only LUMITRACE_FAMILY members get a block"
+    )
     text = storage.read_text(day_path)
     assert "### Places\n\n- the lake" in text
     assert "#### Leo\n\n- **Mood:** none\n- **Ate:** none\n" in text

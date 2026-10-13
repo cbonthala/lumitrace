@@ -6,12 +6,12 @@ import anyio
 import pytest
 from mcp import Client
 
-from lumen.config import Settings
-from lumen.frames.storage.local import LocalStorage
-from lumen.index.schema import connect
-from lumen.lens.__main__ import main
-from lumen.lens.oauth import oauth_state_path
-from lumen.lens.server import INSTRUCTIONS, build_server
+from lumitrace.config import Settings
+from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.index.schema import connect
+from lumitrace.lens.__main__ import main
+from lumitrace.lens.oauth import oauth_state_path
+from lumitrace.lens.server import INSTRUCTIONS, build_server
 
 TOOL_NAMES = {"search", "get_day", "query_facts", "on_this_day", "feedback"}
 
@@ -107,7 +107,7 @@ def test_reset_oauth_command(
     path = oauth_state_path(settings)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("{}")
-    monkeypatch.setattr("lumen.lens.__main__.get_settings", lambda: settings)
+    monkeypatch.setattr("lumitrace.lens.__main__.get_settings", lambda: settings)
     main(["reset-oauth"])
     assert not path.exists()
     assert "reconnect" in capsys.readouterr().out

@@ -5,10 +5,10 @@ import json
 
 import pytest
 
-from lumen.config import Settings
-from lumen.frames.storage.local import LocalStorage
-from lumen.spectrum.__main__ import main
-from lumen.spectrum.backup import BACKUP_PATH
+from lumitrace.config import Settings
+from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.spectrum.__main__ import main
+from lumitrace.spectrum.backup import BACKUP_PATH
 from tests.spectrum.conftest import make_day, write_day
 
 

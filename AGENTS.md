@@ -1,11 +1,11 @@
 # AGENTS.md
 
-Context for AI coding agents (and humans) working on Lumen. Read this first, then
+Context for AI coding agents (and humans) working on Lumitrace. Read this first, then
 `docs/architecture.md` and `docs/contracts.md`.
 
 ## What this is
 
-**Lumen** (formerly LifeLog, then Bookshelf): record your day on an iPhone; an API turns it into
+**Lumitrace** (formerly LifeLog, then Bookshelf, then Lumen): record your day on an iPhone; an API turns it into
 one Markdown journal file per day in Google Drive; read it in Obsidian; ask questions from any AI
 app through an MCP server. The story line: *a Flash captures the moment, the Prism splits it into
 its colors, each day becomes a Frame, the Spectrum lays everything out in order, and the Lens
@@ -13,27 +13,27 @@ lets you zoom into any day.*
 
 ### Name map
 
-Use these names in code, docs and commit messages (decision 0009, which supersedes 0008). The
+Use these names in code, docs and commit messages (decision 0042, which supersedes 0009). The
 plain descriptions (recording API, indexer, MCP server) are fine next to them.
 
 | Name | What it is | Code |
 |---|---|---|
-| Lumen | the project; one package, one Docker image | `lumen/` |
-| Flash | the iPhone Shortcuts (**Log My Day**, **Quick Note**, **Flash Config**, **Send pending**, **Send to Lumen**) | none in the repo; `docs/flash.md` |
-| Prism | recording API + processing pipeline: splits raw voice into facts, journal, mood, transcript | `lumen/prism/`, `lumen/prism/pipeline/`, `prompts/` |
-| Frames | the day files in storage (one Frame per day): format + storage layer | `lumen/frames/dayfile.py`, `lumen/frames/storage/` |
-| Spectrum | the indexer (SQLite index) | `lumen/spectrum/`; schema shared in `lumen/index/schema.py` |
-| Lens | the MCP server (shown to AI apps as "Lumen") | `lumen/lens/` |
+| Lumitrace | the project; one package, one Docker image | `lumitrace/` |
+| Flash | the iPhone Shortcuts (**Log My Day**, **Quick Note**, **Flash Config**, **Send pending**, **Send to Lumitrace**) | none in the repo; `docs/flash.md` |
+| Prism | recording API + processing pipeline: splits raw voice into facts, journal, mood, transcript | `lumitrace/prism/`, `lumitrace/prism/pipeline/`, `prompts/` |
+| Frames | the day files in storage (one Frame per day): format + storage layer | `lumitrace/frames/dayfile.py`, `lumitrace/frames/storage/` |
+| Spectrum | the indexer (SQLite index) | `lumitrace/spectrum/`; schema shared in `lumitrace/index/schema.py` |
+| Lens | the MCP server (shown to AI apps as "Lumitrace") | `lumitrace/lens/` |
 
 Three Python programs share the package and the image:
 
 | Program | Entry point | Docker service | Purpose | Status | Reference |
 |---|---|---|---|---|---|
-| Prism (recording API) | `lumen-prism` | `prism` | Receive audio/photos/notes, transcribe, extract facts, write the day file, nudge Spectrum | implemented (0.1.0) | `docs/prism.md`, `docs/flash.md` |
-| Spectrum (indexer) | `lumen-spectrum` | `spectrum` | Watch storage for changes, build the SQLite index, record edit signals, rebuild | implemented (0.1.0) | `docs/spectrum.md` |
-| Lens (MCP server) | `lumen-lens` | `lens` | Tools for AI apps: `search`, `get_day`, `query_facts`, `on_this_day`, `feedback` | implemented (0.1.0) | `docs/lens.md` |
+| Prism (recording API) | `lumitrace-prism` | `prism` | Receive audio/photos/notes, transcribe, extract facts, write the day file, nudge Spectrum | implemented (0.1.0) | `docs/prism.md`, `docs/flash.md` |
+| Spectrum (indexer) | `lumitrace-spectrum` | `spectrum` | Watch storage for changes, build the SQLite index, record edit signals, rebuild | implemented (0.1.0) | `docs/spectrum.md` |
+| Lens (MCP server) | `lumitrace-lens` | `lens` | Tools for AI apps: `search`, `get_day`, `query_facts`, `on_this_day`, `feedback` | implemented (0.1.0) | `docs/lens.md` |
 
-`lumen-drive-login` (in `lumen/frames/storage/gdrive.py`) is the one-time Google Drive
+`lumitrace-drive-login` (in `lumitrace/frames/storage/gdrive.py`) is the one-time Google Drive
 sign-in.
 
 Data flow: Flash → Prism → Frames (Drive) → Spectrum → SQLite index ← Lens ← AI
@@ -46,15 +46,15 @@ component docs).
 
 1. **The Markdown day files are the source of truth.** The index is disposable and can always be
    rebuilt (except the `feedback` and `edit_signals` tables, which `reset_derived` keeps).
-2. **Never overwrite the owner's edits.** Use `lumen.frames.dayfile` helpers: `merge_capture`,
+2. **Never overwrite the owner's edits.** Use `lumitrace.frames.dayfile` helpers: `merge_capture`,
    `apply_generation` (refuses on edits) and `merge_generation_additive`. Never write a day file
    by string manipulation.
 3. **Keep the raw transcript and the audio.**
-4. **Storage, speech-to-text and AI models are swappable through config** (`lumen/config.py`).
+4. **Storage, speech-to-text and AI models are swappable through config** (`lumitrace/config.py`).
    Never import a backend directly; use `get_storage(settings)` and LiteLLM model strings.
 5. **No personal content in the repository**: no real journal text, transcripts, names, photos,
    audio, tokens, or index files. Tests and docs use fictional data. Activity records, reports and
-   feedback live in the owner's storage under `Lumen/_system/`.
+   feedback live in the owner's storage under `Lumitrace/_system/`.
 6. **Update docs, decisions and changelog with every change, in the same commit**: the relevant
    `docs/*.md`, a new `docs/decisions/NNNN-*.md` for any non-obvious choice, `CHANGELOG.md`
    (under *Unreleased*, in your area's subsection), and `docs/learnings.md` when you learned
@@ -71,12 +71,12 @@ their docs, and the tests. Full summary in `docs/contracts.md`.
 
 | Module | Contract |
 |---|---|
-| `lumen/config.py` | `Settings` (env prefix `LUMEN_`), `get_settings()`; document every field in `.env.example` |
-| `lumen/frames/storage/` | `Storage` ABC, `FileInfo`, `Change`, `get_storage()`; `local.py`, `gdrive.py` |
-| `lumen/frames/dayfile.py` | Paths, `entry_date`, `DayFile` model, `parse`/`render`, merge helpers (`docs/frames-format.md`) |
-| `lumen/index/schema.py` | SQLite schema and `connect()` (`docs/index-schema.md`). Kept outside `lumen/spectrum/` because Spectrum writes the index and the Lens reads it |
-| `lumen/embeddings.py` | `embed_texts()`; Spectrum and the Lens must embed the same way |
-| `lumen/nudge.py` | `nudge_indexer()`; Spectrum serves `POST /nudge` |
+| `lumitrace/config.py` | `Settings` (env prefix `LUMITRACE_`), `get_settings()`; document every field in `.env.example` |
+| `lumitrace/frames/storage/` | `Storage` ABC, `FileInfo`, `Change`, `get_storage()`; `local.py`, `gdrive.py` |
+| `lumitrace/frames/dayfile.py` | Paths, `entry_date`, `DayFile` model, `parse`/`render`, merge helpers (`docs/frames-format.md`) |
+| `lumitrace/index/schema.py` | SQLite schema and `connect()` (`docs/index-schema.md`). Kept outside `lumitrace/spectrum/` because Spectrum writes the index and the Lens reads it |
+| `lumitrace/embeddings.py` | `embed_texts()`; Spectrum and the Lens must embed the same way |
+| `lumitrace/nudge.py` | `nudge_indexer()`; Spectrum serves `POST /nudge` |
 
 Cross-component rules that are not visible in any one module:
 
@@ -92,10 +92,10 @@ Cross-component rules that are not visible in any one module:
 
 | Area | Owns | Docs it maintains |
 |---|---|---|
-| foundation (incl. Frames) | shared contracts above (`lumen/config.py`, `lumen/frames/**`, `lumen/index/**`, `embeddings.py`, `nudge.py`, `logging_setup.py`), `pyproject.toml`, `uv.lock`, Docker files, `tests/conftest.py`, `tests/frames/**`, `tests/index/**`, `tests/test_*.py` | `AGENTS.md`, `README.md`, `docs/architecture.md`, `docs/contracts.md`, `docs/frames-format.md`, `docs/index-schema.md`, ADRs 0001–0009 |
-| prism | `lumen/prism/**` (incl. `pipeline/`: STT, LLM, audio, photos), `prompts/**`, `tests/prism/**` | `docs/prism.md`, `docs/flash.md`, ADRs 0010–0019 |
-| spectrum | `lumen/spectrum/**`, `tests/spectrum/**` | `docs/spectrum.md`, ADRs 0020–0029 |
-| lens | `lumen/lens/**`, `tests/lens/**` | `docs/lens.md`, ADRs 0030–0039 |
+| foundation (incl. Frames) | shared contracts above (`lumitrace/config.py`, `lumitrace/frames/**`, `lumitrace/index/**`, `embeddings.py`, `nudge.py`, `logging_setup.py`), `pyproject.toml`, `uv.lock`, Docker files, `tests/conftest.py`, `tests/frames/**`, `tests/index/**`, `tests/test_*.py` | `AGENTS.md`, `README.md`, `docs/architecture.md`, `docs/contracts.md`, `docs/frames-format.md`, `docs/index-schema.md`, ADRs 0001–0009 |
+| prism | `lumitrace/prism/**` (incl. `pipeline/`: STT, LLM, audio, photos), `prompts/**`, `tests/prism/**` | `docs/prism.md`, `docs/flash.md`, ADRs 0010–0019 |
+| spectrum | `lumitrace/spectrum/**`, `tests/spectrum/**` | `docs/spectrum.md`, ADRs 0020–0029 |
+| lens | `lumitrace/lens/**`, `tests/lens/**` | `docs/lens.md`, ADRs 0030–0039 |
 | integration | `tests/e2e/**` | `docs/architecture.md` (with foundation) |
 
 Shared files everyone edits (keep edits inside your own subsection to avoid merge conflicts):
@@ -107,7 +107,7 @@ or shared modules in parallel.
 
 * Python 3.12, type hints everywhere, `from __future__ import annotations`.
 * Pydantic v2 models for data crossing module boundaries.
-* Storage paths are relative to the Lumen root, POSIX style (`2026/10/2026-10-10/...`).
+* Storage paths are relative to the Lumitrace root, POSIX style (`2026/10/2026-10-10/...`).
 * Dates are `YYYY-MM-DD` strings in SQLite, `datetime.date` in Python. Timestamps are
   timezone-aware; store UTC ISO-8601 in SQLite.
 * Logging via `logging.getLogger(__name__)`; never log transcript or journal text at INFO or above.
@@ -133,13 +133,13 @@ export UV_PYTHON_INSTALL_DIR=$PWD/.tools/python UV_CACHE_DIR=$PWD/.tools/cache
 .tools/bin/uv run ruff check .      # lint
 .tools/bin/uv run ruff format .     # format
 
-cp .env.example .env                # then edit (every variable starts with LUMEN_)
-.tools/bin/uv run lumen-prism       # Prism: http://localhost:8000/health
-.tools/bin/uv run lumen-spectrum    # Spectrum: run | sync | rebuild | backup
-.tools/bin/uv run lumen-lens        # Lens: :8002/mcp (or --transport stdio)
+cp .env.example .env                # then edit (every variable starts with LUMITRACE_)
+.tools/bin/uv run lumitrace-prism       # Prism: http://localhost:8000/health
+.tools/bin/uv run lumitrace-spectrum    # Spectrum: run | sync | rebuild | backup
+.tools/bin/uv run lumitrace-lens        # Lens: :8002/mcp (or --transport stdio)
 docker compose up --build           # services prism, spectrum, lens; shared /data
 ```
 
-(`uv` may also be on your PATH; then plain `uv run ...` works.) The repository folder is being
-renamed to `lumen`; until then it may still be called `lifelog`. The folder name does not matter
-to the code.
+(`uv` may also be on your PATH; then plain `uv run ...` works.) The repository folder is
+`lumitrace` (older checkouts may still be called `lumen` or `lifelog`). The folder name does not
+matter to the code.

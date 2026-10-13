@@ -8,9 +8,9 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from lumen.config import Settings
-from lumen.embeddings import embed_texts
-from lumen.frames.dayfile import (
+from lumitrace.config import Settings
+from lumitrace.embeddings import embed_texts
+from lumitrace.frames.dayfile import (
     Activity,
     Capture,
     DayFacts,
@@ -22,8 +22,8 @@ from lumen.frames.dayfile import (
     merge_capture,
     render,
 )
-from lumen.frames.storage.local import LocalStorage
-from lumen.spectrum.core import Indexer
+from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.spectrum.core import Indexer
 
 TZ = ZoneInfo("America/Chicago")
 GENERATED_AT = dt.datetime(2026, 10, 11, 0, 41, tzinfo=TZ)

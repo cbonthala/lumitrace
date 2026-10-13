@@ -3,10 +3,10 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
-from lumen.config import Settings
-from lumen.prism.app import create_app
-from lumen.prism.auth import token_problem
-from lumen.prism.pipeline.processor import CaptureProcessor
+from lumitrace.config import Settings
+from lumitrace.prism.app import create_app
+from lumitrace.prism.auth import token_problem
+from lumitrace.prism.pipeline.processor import CaptureProcessor
 from tests.prism.conftest import AUTH, TOKEN
 
 

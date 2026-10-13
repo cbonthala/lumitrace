@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from lumen.frames.dayfile import parse
-from lumen.spectrum.passages import (
+from lumitrace.frames.dayfile import parse
+from lumitrace.spectrum.passages import (
     MAX_CHARS,
     build_passages,
     chunk_text,
@@ -50,7 +50,7 @@ def test_sample_day_passages(sample_day_markdown: str) -> None:
 
 
 def test_text_hash_covers_heading() -> None:
-    from lumen.spectrum.passages import Passage
+    from lumitrace.spectrum.passages import Passage
 
     a = Passage("journal", "Morning", None, 0, "Soup.")
     b = Passage("journal", "Evening", None, 0, "Soup.")
@@ -88,7 +88,7 @@ def test_split_by_headings_ignores_code_fences_and_keeps_heading_only_sections()
 def test_empty_day_has_title_only() -> None:
     import datetime as dt
 
-    from lumen.frames.dayfile import DayFile
+    from lumitrace.frames.dayfile import DayFile
 
     day = DayFile.new(dt.date(2026, 1, 2))
     passages = build_passages(day)

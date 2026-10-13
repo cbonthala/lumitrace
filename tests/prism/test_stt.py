@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
-from lumen.config import Settings
-from lumen.prism.pipeline.stt import (
+from lumitrace.config import Settings
+from lumitrace.prism.pipeline.stt import (
     AWSTranscribeTranscriber,
     FakeTranscriber,
     LiteLLMTranscriber,
@@ -100,7 +100,7 @@ def test_aws_transcribe_round_trip_and_cleanup(settings: Settings) -> None:
     assert result.model == "aws_transcribe"
     assert client.started["MediaFormat"] == "m4a"
     assert client.started["LanguageCode"] == "en-US"
-    assert client.started["Media"]["MediaFileUri"].startswith("s3://my-bucket/lumen-stt/")
+    assert client.started["Media"]["MediaFileUri"].startswith("s3://my-bucket/lumitrace-stt/")
     assert sorted(s3.deleted) == sorted(s3.objects)
 
 

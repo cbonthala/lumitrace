@@ -5,11 +5,11 @@ import time
 
 from fastapi.testclient import TestClient
 
-from lumen.config import Settings
-from lumen.frames.storage.local import LocalStorage
-from lumen.index.schema import connect
-from lumen.spectrum.core import Indexer
-from lumen.spectrum.service import IndexerService, create_app
+from lumitrace.config import Settings
+from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.index.schema import connect
+from lumitrace.spectrum.core import Indexer
+from lumitrace.spectrum.service import IndexerService, create_app
 from tests.spectrum.conftest import make_day, write_day
 
 D1 = dt.date(2026, 10, 10)

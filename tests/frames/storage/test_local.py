@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from lumen.config import Settings
-from lumen.frames.storage import InvalidPathError, get_storage, normalize_path
-from lumen.frames.storage.local import LocalStorage
+from lumitrace.config import Settings
+from lumitrace.frames.storage import InvalidPathError, get_storage, normalize_path
+from lumitrace.frames.storage.local import LocalStorage
 
 
 def test_write_read_roundtrip(storage: LocalStorage) -> None:
@@ -139,4 +139,4 @@ def test_share_link_is_file_uri(storage: LocalStorage) -> None:
 def test_get_storage_local(settings: Settings, tmp_path: Path) -> None:
     store = get_storage(settings)
     assert isinstance(store, LocalStorage)
-    assert store.root == (tmp_path / "Lumen").resolve()
+    assert store.root == (tmp_path / "Lumitrace").resolve()

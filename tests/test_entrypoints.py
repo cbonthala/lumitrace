@@ -7,11 +7,11 @@ import anyio
 import pytest
 from fastapi.testclient import TestClient
 
-from lumen.config import Settings
-from lumen.lens.server import build_server
-from lumen.prism.__main__ import main as prism_main
-from lumen.prism.app import create_app
-from lumen.spectrum.__main__ import main as spectrum_main
+from lumitrace.config import Settings
+from lumitrace.lens.server import build_server
+from lumitrace.prism.__main__ import main as prism_main
+from lumitrace.prism.app import create_app
+from lumitrace.spectrum.__main__ import main as spectrum_main
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -45,7 +45,7 @@ def test_prism_cli_help(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exc:
         prism_main(["--help"])
     assert exc.value.code == 0
-    assert "lumen-prism" in capsys.readouterr().out
+    assert "lumitrace-prism" in capsys.readouterr().out
 
 
 def test_console_scripts_resolve() -> None:
@@ -53,10 +53,10 @@ def test_console_scripts_resolve() -> None:
 
     scripts = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["scripts"]
     assert set(scripts) == {
-        "lumen-prism",
-        "lumen-spectrum",
-        "lumen-lens",
-        "lumen-drive-login",
+        "lumitrace-prism",
+        "lumitrace-spectrum",
+        "lumitrace-lens",
+        "lumitrace-drive-login",
     }
     for target in scripts.values():
         module, func = target.split(":")

@@ -7,6 +7,21 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- **Renamed the project from Lumen to Lumitrace** (decision 0042, supersedes 0009), everywhere;
+  the module names (Flash, Prism, Frames, Spectrum, Lens) are unchanged. Entries below this one
+  use the Lumen names.
+  - Package `lumen` → `lumitrace` (git mv); commands `lumitrace-prism`, `lumitrace-spectrum`,
+    `lumitrace-lens`, `lumitrace-drive-login`.
+  - Environment prefix `LUMEN_` → `LUMITRACE_`; Drive root folder `Lumitrace`, local root
+    `data/Lumitrace`, index `lumitrace.sqlite` (backup `_system/index-backup/lumitrace.sqlite`).
+  - Docker image `lumitrace`, volume `lumitrace-data`; Lightsail instance `lumitrace`, static IP
+    `lumitrace-ip`, key pair `lumitrace-key`, server folder `/opt/lumitrace`, Tailscale name
+    `lumitrace`.
+  - Day files are written with `lumitrace:` markers and `lumitrace_format`; `lumen:` files (and the
+    two older generations) are still read, and the compatibility test covers all three. Prompt
+    markers are `lumitrace-prompt:`; the OAuth scope is `lumitrace`; AI apps list "Lumitrace".
+  - Shortcut **Send to Lumen** → **Send to Lumitrace**. Upgrading: `docs/runbook.md` →
+    *Upgrading from LifeLog, Bookshelf or Lumen*.
 - `docs/tech-stack.md`: every language, library, tool, AI provider, service and client Lumen
   uses, grouped by module (shared, Flash, Prism, Frames, Spectrum, Lens, deployment,
   development), with versions, what each is for, and whether it is open source (license).

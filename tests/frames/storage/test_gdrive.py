@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from lumen.config import Settings
-from lumen.frames.storage import StorageError, get_storage
-from lumen.frames.storage.gdrive import GDriveStorage
+from lumitrace.config import Settings
+from lumitrace.frames.storage import StorageError, get_storage
+from lumitrace.frames.storage.gdrive import GDriveStorage
 from tests.frames.storage.fake_drive import FOLDER, FakeDrive
 
 
@@ -17,15 +17,15 @@ def drive() -> FakeDrive:
 
 @pytest.fixture
 def store(drive: FakeDrive) -> GDriveStorage:
-    return GDriveStorage("Lumen", service=drive)
+    return GDriveStorage("Lumitrace", service=drive)
 
 
 def test_root_folder_created_once_in_my_drive(store: GDriveStorage, drive: FakeDrive) -> None:
     root = store.root_id()
-    assert drive.items[root]["name"] == "Lumen"
+    assert drive.items[root]["name"] == "Lumitrace"
     assert drive.items[root]["parents"] == [drive.root_id]
     assert drive.items[root]["mimeType"] == FOLDER
-    again = GDriveStorage("Lumen", service=drive)
+    again = GDriveStorage("Lumitrace", service=drive)
     assert again.root_id() == root
 
 
@@ -34,7 +34,7 @@ def test_write_creates_folders_and_reads_back(store: GDriveStorage, drive: FakeD
     assert info.id and info.size == 5
     assert store.read_text("2026/10/2026-10-10/2026-10-10.md") == "# hi\n"
     folders = sorted(it["name"] for it in drive.items.values() if it["mimeType"] == FOLDER)
-    assert folders == ["10", "2026", "2026-10-10", "Lumen"]
+    assert folders == ["10", "2026", "2026-10-10", "Lumitrace"]
     assert drive.items[info.id]["mimeType"].startswith("text/markdown")
 
 
@@ -119,12 +119,12 @@ def test_list_changes_full_then_incremental(store: GDriveStorage, drive: FakeDri
 
 
 def test_changes_after_restart_map_deletions(drive: FakeDrive) -> None:
-    first = GDriveStorage("Lumen", service=drive)
+    first = GDriveStorage("Lumitrace", service=drive)
     first.write_text("a/x.md", "x")
     _, token = first.list_changes(None)
     first.delete("a/x.md")
 
-    restarted = GDriveStorage("Lumen", service=drive)
+    restarted = GDriveStorage("Lumitrace", service=drive)
     changes, _ = restarted.list_changes(token)
     assert [(c.path, c.kind) for c in changes] == [("a/x.md", "deleted")]
 
@@ -167,5 +167,5 @@ def test_get_storage_gdrive_without_token_errors(settings: Settings, tmp_path) -
     settings = settings.model_copy(
         update={"storage_backend": "gdrive", "gdrive_token_file": tmp_path / "missing.json"}
     )
-    with pytest.raises(StorageError, match="lumen-drive-login"):
+    with pytest.raises(StorageError, match="lumitrace-drive-login"):
         get_storage(settings)

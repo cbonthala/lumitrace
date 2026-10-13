@@ -1,12 +1,12 @@
 # Frames: day file format (format version 2)
 
 The Frames are the day files: one Markdown file per day, the source of truth. Code:
-`lumen/frames/dayfile.py` (format) and `lumen/frames/storage/` (where they live). Always use
+`lumitrace/frames/dayfile.py` (format) and `lumitrace/frames/storage/` (where they live). Always use
 `parse` / `render` and the merge helpers; never edit day files with string manipulation.
 
 ## Location and names
 
-All paths are relative to the `Lumen` root folder.
+All paths are relative to the `Lumitrace` root folder.
 
 | What | Path | Helper |
 |---|---|---|
@@ -32,7 +32,7 @@ All paths are relative to the `Lumen` root folder.
 
 ## At a glance
 
-<!-- lumen:facts:start (...) -->      DayFile.facts: always the same lines: mood, city,
+<!-- lumitrace:facts:start (...) -->      DayFile.facts: always the same lines: mood, city,
 - **Mood:** happy (4/5)                   weather, then "###" sections Food (five meal
 ### Food                                  lines), Places, People, Activities, Family
 - **Breakfast:** oatmeal, blueberries     (a "####" block of seven lines per family
@@ -40,36 +40,37 @@ All paths are relative to the `Lumen` root folder.
 ### Family
 #### Leo
 - **Ate:** pasta
-<!-- lumen:facts:end -->
+<!-- lumitrace:facts:end -->
 
-<!-- lumen:journal:start (...) -->    DayFile.journal: generated Markdown, "##" sections
+<!-- lumitrace:journal:start (...) -->    DayFile.journal: generated Markdown, "##" sections
 ## Summary                                Summary, Morning, Afternoon, Evening, Thoughts,
 ...                                       Later (fixed names and order)
-<!-- lumen:journal:end -->
+<!-- lumitrace:journal:end -->
 
 ## My notes
 
-<!-- lumen:notes:start (...) -->      DayFile.notes: the owner's own text
+<!-- lumitrace:notes:start (...) -->      DayFile.notes: the owner's own text
 ...
-<!-- lumen:notes:end -->
+<!-- lumitrace:notes:end -->
 
 ## Transcript
 
-<!-- lumen:transcript:start (...) --> DayFile.captures, oldest first
-<!-- lumen:capture {json} -->         one block per Capture
+<!-- lumitrace:transcript:start (...) --> DayFile.captures, oldest first
+<!-- lumitrace:capture {json} -->         one block per Capture
 ### HH:MM · Log My Day | Quick Note
 ![[audio.m4a]]                            embeds derived from the capture metadata
 ![[photo-01.jpg]]
 
 raw transcript or note text
-<!-- lumen:transcript:end -->
+<!-- lumitrace:transcript:end -->
 ```
 
 Markers are HTML comments, invisible in Obsidian's reading view. Parsing matches the marker name
-(`lumen:journal:start`, etc.), so the explanatory text inside the comment can change. Files
-written under the project's earlier names use `lifelog:` (LifeLog, 0.1.0) or `bookshelf:`
-(Bookshelf) markers and a `lifelog_format` or `bookshelf_format` key; `parse` still reads them
-and the next `render` writes the `lumen:` names (decisions 0008 and 0009).
+(`lumitrace:journal:start`, etc.), so the explanatory text inside the comment can change. Files
+written under the project's earlier names use `lifelog:` (LifeLog, 0.1.0), `bookshelf:`
+(Bookshelf) or `lumen:` (Lumen) markers and a `lifelog_format`, `bookshelf_format` or
+`lumen_format` key; `parse` still reads them and the next `render` writes the `lumitrace:` names
+(decisions 0008, 0009 and 0042).
 
 ### Front matter fields
 
@@ -83,7 +84,7 @@ The front matter holds only the date, the media and provenance. The facts are in
 | `models_used` | map task → model | e.g. `stt`, `extract_facts`, `write_journal` |
 | `generated_at` | ISO-8601 datetime or null | last generation |
 | `generated_hash` | string or null | edit detection, see below |
-| `lumen_format` | int | `2` (read from `bookshelf_format` or `lifelog_format` in files written under the earlier names) |
+| `lumitrace_format` | int | `2` (read from `lumen_format`, `bookshelf_format` or `lifelog_format` in files written under the earlier names) |
 | *anything else* | | preserved as is (e.g. Obsidian `tags`) |
 
 ### "At a glance": the facts (`DayFacts`)
@@ -108,7 +109,7 @@ member, all seven labelled lines. Anything empty is written as `none` (`- **Snac
 | `### Family` | `family`: list of `FamilyMember`, see below | one `#### name` block per member |
 | `### Highlights` | `highlights`: list of strings | one bullet each |
 
-**Family.** Every family member named in `LUMEN_FAMILY` gets a `#### name` block under
+**Family.** Every family member named in `LUMITRACE_FAMILY` gets a `#### name` block under
 `### Family` on every generated day, in the configured order and spelling, even if the day says
 nothing about them (the Prism drops anyone else; the owner may add other names by hand). With
 no family configured, Family holds `- none`. A block always has these seven lines:
@@ -165,7 +166,7 @@ but not read as facts.
 
 ### Capture metadata
 
-The `<!-- lumen:capture {...} -->` comment holds JSON: `id` (unique within the day; merging an
+The `<!-- lumitrace:capture {...} -->` comment holds JSON: `id` (unique within the day; merging an
 existing id is a no-op, so retries from the offline inbox are safe), `kind` (`recording` or
 `note`), `captured_at` (ISO-8601 with offset), `audio`, `photos`, `location`. The heading and
 embed lines are regenerated from it; the text below them is the transcript and may be edited.
@@ -210,14 +211,14 @@ models_used:
   write_journal: openai/gpt-4o
 generated_at: '2026-10-11T00:41:00-05:00'
 generated_hash: 2c4980bf67ca8a30
-lumen_format: 2
+lumitrace_format: 2
 ---
 
 # Saturday, October 10, 2026 · First tooth
 
 ## At a glance
 
-<!-- lumen:facts:start (found by Lumen; if you edit them, your edits are kept) -->
+<!-- lumitrace:facts:start (found by Lumitrace; if you edit them, your edits are kept) -->
 - **Mood:** happy (4/5)
 - **City:** Austin
 - **Weather:** sunny, 24°C
@@ -272,9 +273,9 @@ lumen_format: 2
 
 - Leo lost his first tooth
 - Finished a book
-<!-- lumen:facts:end -->
+<!-- lumitrace:facts:end -->
 
-<!-- lumen:journal:start (written by Lumen; if you edit it, your edits are kept) -->
+<!-- lumitrace:journal:start (written by Lumitrace; if you edit it, your edits are kept) -->
 ## Summary
 
 A full, happy Saturday that started with a run by the river and ended with a family milestone.
@@ -290,23 +291,23 @@ Fish tacos and a horchata from the taco truck with Maya.
 ## Evening
 
 Pasta at home. Leo lost his first tooth and was very proud. Late at night you finished the book you had been reading.
-<!-- lumen:journal:end -->
+<!-- lumitrace:journal:end -->
 
 ## My notes
 
-<!-- lumen:notes:start (your own notes; Lumen never changes this section) -->
+<!-- lumitrace:notes:start (your own notes; Lumitrace never changes this section) -->
 Remember to put the tooth under the pillow tomorrow too.
-<!-- lumen:notes:end -->
+<!-- lumitrace:notes:end -->
 
 ## Transcript
 
-<!-- lumen:transcript:start (raw transcripts, added by Lumen) -->
-<!-- lumen:capture {"id": "20261010T130500-note", "kind": "note", "captured_at": "2026-10-10T13:05:00-05:00", "audio": null, "photos": [], "location": "Austin, TX"} -->
+<!-- lumitrace:transcript:start (raw transcripts, added by Lumitrace) -->
+<!-- lumitrace:capture {"id": "20261010T130500-note", "kind": "note", "captured_at": "2026-10-10T13:05:00-05:00", "audio": null, "photos": [], "location": "Austin, TX"} -->
 ### 13:05 · Quick Note
 
 Lunch at the taco truck with Maya. Fish tacos and a horchata.
 
-<!-- lumen:capture {"id": "20261010T213000-recording", "kind": "recording", "captured_at": "2026-10-10T21:30:00-05:00", "audio": "2026-10-10-2130.m4a", "photos": ["photo-01.jpg", "photo-02.jpg"], "location": "Austin, TX"} -->
+<!-- lumitrace:capture {"id": "20261010T213000-recording", "kind": "recording", "captured_at": "2026-10-10T21:30:00-05:00", "audio": "2026-10-10-2130.m4a", "photos": ["photo-01.jpg", "photo-02.jpg"], "location": "Austin, TX"} -->
 ### 21:30 · Log My Day
 ![[2026-10-10-2130.m4a]]
 ![[photo-01.jpg]]
@@ -314,11 +315,11 @@ Lunch at the taco truck with Maya. Fish tacos and a horchata.
 
 Long day. Morning run, about forty minutes along the river. Oatmeal with blueberries for breakfast. Leo lost his first tooth tonight, he was so proud. Dinner was pasta at home.
 
-<!-- lumen:capture {"id": "20261011T004000-note", "kind": "note", "captured_at": "2026-10-11T00:40:00-05:00", "audio": null, "photos": [], "location": null} -->
+<!-- lumitrace:capture {"id": "20261011T004000-note", "kind": "note", "captured_at": "2026-10-11T00:40:00-05:00", "audio": null, "photos": [], "location": null} -->
 ### 00:40 · Quick Note
 
 Forgot to say: finished the book I was reading.
-<!-- lumen:transcript:end -->
+<!-- lumitrace:transcript:end -->
 ```
 
 ## Typical write sequence (Prism)

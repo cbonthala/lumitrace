@@ -12,11 +12,11 @@ import anyio
 import httpx
 import pytest
 
-from lumen.config import Settings
-from lumen.lens import oauth as O
-from lumen.lens.auth import AuthConfigError, build_auth
-from lumen.lens.oauth import OwnerOAuthProvider, oauth_state_path
-from lumen.lens.server import build_server
+from lumitrace.config import Settings
+from lumitrace.lens import oauth as O
+from lumitrace.lens.auth import AuthConfigError, build_auth
+from lumitrace.lens.oauth import OwnerOAuthProvider, oauth_state_path
+from lumitrace.lens.server import build_server
 
 TOKEN = "t" * 40
 PASSWORD = "correct horse battery staple"
@@ -75,7 +75,7 @@ def test_oauth_mode_validation(settings: Settings) -> None:
     with pytest.raises(AuthConfigError, match="https"):
         build_auth(_settings(settings, **oauth, mcp_public_url="http://journal.example.com"))
     with pytest.raises(AuthConfigError, match="without a path"):
-        build_auth(_settings(settings, **oauth, mcp_public_url="https://example.com/lumen"))
+        build_auth(_settings(settings, **oauth, mcp_public_url="https://example.com/lumitrace"))
     setup = build_auth(_settings(settings, **oauth, mcp_public_url="https://journal.example.com/"))
     assert setup.provider is not None
     assert str(setup.settings.resource_server_url) == "https://journal.example.com/mcp"
@@ -104,7 +104,7 @@ def test_token_mode_rejects_missing_and_wrong_tokens(settings: Settings) -> None
             assert (await _initialize(client, "wrong-token")).status_code == 401
             ok = await _initialize(client, TOKEN)
             assert ok.status_code == 200
-            assert "Lumen" in ok.text
+            assert "Lumitrace" in ok.text
             health = await client.get("/health")
             assert health.status_code == 200 and health.json()["auth_mode"] == "token"
 
@@ -161,7 +161,7 @@ async def _start_login(
             "code_challenge": challenge,
             "code_challenge_method": "S256",
             "state": "st4te",
-            "scope": "lumen",
+            "scope": "lumitrace",
             "resource": resource,
         },
     )

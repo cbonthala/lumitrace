@@ -5,15 +5,15 @@ import json
 
 from pydantic import BaseModel, ValidationError
 
-from lumen.config import Settings
-from lumen.frames.storage.local import LocalStorage
-from lumen.prism.pipeline.activity import (
+from lumitrace.config import Settings
+from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.prism.pipeline.activity import (
     ActivityLog,
     ActivityRecord,
     activity_path,
     safe_error,
 )
-from lumen.prism.pipeline.processor import CaptureProcessor, CaptureRequest, UploadedFile
+from lumitrace.prism.pipeline.processor import CaptureProcessor, CaptureRequest, UploadedFile
 
 SECRET_WORDS = "Maya said the secret password is pineapple"
 

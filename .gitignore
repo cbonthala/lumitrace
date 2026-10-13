@@ -20,8 +20,8 @@ dist/
 secrets/
 
 # Personal data: vault, index, audio, photos (never commit).
-# The local storage root defaults to data/Lumen. Don't add a "Lumen/" pattern: git on
-# case-insensitive filesystems would also ignore the lumen/ package.
+# The local storage root defaults to data/Lumitrace. Don't add a "Lumitrace/" pattern: git on
+# case-insensitive filesystems would also ignore the lumitrace/ package.
 data/
 vault/
 *.sqlite

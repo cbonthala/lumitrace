@@ -4,7 +4,7 @@ import datetime as dt
 import json
 import sqlite3
 
-from lumen.frames.dayfile import (
+from lumitrace.frames.dayfile import (
     Capture,
     DayFile,
     day_file_path,
@@ -13,10 +13,10 @@ from lumen.frames.dayfile import (
     parse,
     render,
 )
-from lumen.frames.storage.local import LocalStorage
-from lumen.index.schema import reset_derived
-from lumen.spectrum.core import Indexer
-from lumen.spectrum.edits import compare_day, text_diff
+from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.index.schema import reset_derived
+from lumitrace.spectrum.core import Indexer
+from lumitrace.spectrum.edits import compare_day, text_diff
 from tests.spectrum.conftest import TZ, make_day, write_day
 
 D1 = dt.date(2026, 10, 10)

@@ -12,7 +12,7 @@ You will build five Flash shortcuts and one automation:
 | **Log My Day** | record audio + location + today's photos → `POST /recordings` |
 | **Quick Note** | dictate a sentence (or a short clip) → `POST /notes` |
 | **Send pending** | uploads anything left in the offline inbox |
-| **Send to Lumen** | share sheet: send a Voice Memo or photos |
+| **Send to Lumitrace** | share sheet: send a Voice Memo or photos |
 | *Nightly reminder* | automation at about 9 p.m. that starts Log My Day |
 
 > Variable names below in *italics* are the names you give with **Rename** (long-press an
@@ -39,7 +39,7 @@ so never use plain HTTP outside your home network). Two options:
 **B. Public HTTPS**
 
 Put a reverse proxy with automatic certificates in front of port 8000, for example Caddy with a
-`Caddyfile` of `lumen.example.com { reverse_proxy localhost:8000 }`, and point the DNS name at
+`Caddyfile` of `lumitrace.example.com { reverse_proxy localhost:8000 }`, and point the DNS name at
 the server. Only `POST /recordings`, `POST /notes`, `GET /captures/*` and `GET /health` need to be
 reachable. Every request without the token is refused.
 
@@ -47,7 +47,7 @@ Check it from Safari on the phone: `https://<address>/health` should show `{"sta
 
 ## 2. Token handling
 
-* Generate the token on the server: `openssl rand -hex 32`, set `LUMEN_API_TOKEN` in `.env`,
+* Generate the token on the server: `openssl rand -hex 32`, set `LUMITRACE_API_TOKEN` in `.env`,
   restart the Prism (`docker compose up -d prism`).
 * Put it **only** in the Flash Config shortcut below. All other shortcuts read it from there, so
   rotating the token is one edit (`docs/runbook.md` → Rotating tokens).
@@ -200,9 +200,9 @@ are deleted from the inbox, and anything re-sent is recognised by its `capture_i
 Tip: add a personal automation **When Wi-Fi joins** (your home network) → *Run Immediately* →
 **Run Shortcut** *Send pending*, so the inbox empties itself.
 
-## 8. Send to Lumen (share sheet, Voice Memos)
+## 8. Send to Lumitrace (share sheet, Voice Memos)
 
-New shortcut **Send to Lumen**; in details (ⓘ) turn on **Show in Share Sheet**, and in the
+New shortcut **Send to Lumitrace**; in details (ⓘ) turn on **Show in Share Sheet**, and in the
 first block "Receive *Media, Files, Images* from *Share Sheet*", If there's no input: *Stop and
 Respond*.
 
@@ -219,8 +219,8 @@ Respond*.
    `captured_at`, `capture_id`. **End If**.
 5. Show the `message` from the response as a notification.
 
-In Voice Memos: tap a memo → ••• → Share → **Send to Lumen**. Long memos are fine; the API
-accepts up to `LUMEN_API_MAX_UPLOAD_MB` (200 MB by default).
+In Voice Memos: tap a memo → ••• → Share → **Send to Lumitrace**. Long memos are fine; the API
+accepts up to `LUMITRACE_API_MAX_UPLOAD_MB` (200 MB by default).
 
 ## 9. Nightly reminder (about 9 p.m.)
 
@@ -251,7 +251,7 @@ audio needs the phone unlocked, which is why this runs after confirmation instea
   Photos, which are not available on watchOS, so start it from the phone (or via Siri on the
   phone). Unverified on every watchOS version: if Quick Note fails on the watch, remove the
   inbox-saving steps from a watch-only copy.
-* **Share sheet:** *Send to Lumen* from Voice Memos, Photos or Files (section 8).
+* **Share sheet:** *Send to Lumitrace* from Voice Memos, Photos or Files (section 8).
 * **Home Screen:** long-press a shortcut in the Shortcuts app → Share → *Add to Home Screen*.
 
 ## 11. Checking that it worked
@@ -268,9 +268,9 @@ audio needs the phone unlocked, which is why this runs after confirmation instea
 | Symptom | Fix |
 |---|---|
 | "Could not connect to the server" | No signal or Tailscale off: the capture is in Flash Inbox; run Send pending later. |
-| `401` / "missing or invalid bearer token" | Token in Flash Config differs from `LUMEN_API_TOKEN`; check the space after `Bearer`. |
-| `503` "API token is not configured" | `LUMEN_API_TOKEN` is empty on the server. |
+| `401` / "missing or invalid bearer token" | Token in Flash Config differs from `LUMITRACE_API_TOKEN`; check the space after `Bearer`. |
+| `503` "API token is not configured" | `LUMITRACE_API_TOKEN` is empty on the server. |
 | `413` | Upload too large: lower the photo limit or resize photos (step 7). |
 | `422` with `capture_id` | Use only letters, digits, `.`, `_`, `-` in the id. |
 | Photos missing | Check Photos permission for the shortcut and the *Find Photos* filters. |
-| Wrong day | Before 4 a.m. counts as the previous day (by design). Otherwise check `LUMEN_TIMEZONE`. |
+| Wrong day | Before 4 a.m. counts as the previous day (by design). Otherwise check `LUMITRACE_TIMEZONE`. |

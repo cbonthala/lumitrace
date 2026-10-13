@@ -1,36 +1,36 @@
-# Lumen: three programs, one image, one shared data volume (local storage root + SQLite
+# Lumitrace: three programs, one image, one shared data volume (local storage root + SQLite
 # index). Copy .env.example to .env first. Put Google OAuth files in ./secrets (git-ignored).
-x-lumen: &lumen
+x-lumitrace: &lumitrace
   build: .
-  image: lumen:latest
+  image: lumitrace:latest
   env_file: .env
   environment:
-    LUMEN_INDEXER_NUDGE_URL: http://spectrum:8001/nudge
+    LUMITRACE_INDEXER_NUDGE_URL: http://spectrum:8001/nudge
   volumes:
-    - lumen-data:/data
+    - lumitrace-data:/data
     - ./secrets:/secrets
   restart: unless-stopped
 
 services:
   prism:
-    <<: *lumen
-    command: ["lumen-prism"]
+    <<: *lumitrace
+    command: ["lumitrace-prism"]
     ports:
       - "8000:8000"
 
   spectrum:
-    <<: *lumen
-    command: ["lumen-spectrum", "run"]
+    <<: *lumitrace
+    command: ["lumitrace-spectrum", "run"]
     # Internal only: POST /nudge has no auth. Never add `ports:` here; the prism service
     # reaches it as http://spectrum:8001 on the Compose network.
     expose:
       - "8001"
 
   lens:
-    <<: *lumen
-    command: ["lumen-lens"]
+    <<: *lumitrace
+    command: ["lumitrace-lens"]
     ports:
       - "8002:8002"
 
 volumes:
-  lumen-data:
+  lumitrace-data:

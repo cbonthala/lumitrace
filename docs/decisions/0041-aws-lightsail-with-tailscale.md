@@ -19,8 +19,8 @@ the Prism; the Claude and ChatGPT web connectors need a public HTTPS root URL fo
   through Funnel on `:443` (root URL, as the OAuth issuer requires). No domain or certificates
   to manage.
 - Provisioning and deploys are scripts using the AWS CLI (`deploy/lightsail/`); deploys copy the
-  committed `HEAD` over SSH and build on the server. Secrets live only in `/opt/lumen/.env` and
-  `/opt/lumen/secrets/`, never in user data or the repository.
+  committed `HEAD` over SSH and build on the server. Secrets live only in `/opt/lumitrace/.env` and
+  `/opt/lumitrace/secrets/`, never in user data or the repository.
 
 ## Consequences
 

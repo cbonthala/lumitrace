@@ -10,28 +10,28 @@ and never paste real tokens or personal content here.
    (In production)**: in Testing mode refresh tokens expire after 7 days. `drive.file` is a
    non-sensitive scope, so no verification is needed. Create an OAuth client of type **Desktop
    app** and save its JSON as `secrets/gdrive_client_secret.json`.
-2. **Drive login:** set `LUMEN_STORAGE_BACKEND=gdrive` in `.env`, then on a machine with a
-   browser run `uv run lumen-drive-login` (`--no-browser` prints the URL). It writes
+2. **Drive login:** set `LUMITRACE_STORAGE_BACKEND=gdrive` in `.env`, then on a machine with a
+   browser run `uv run lumitrace-drive-login` (`--no-browser` prints the URL). It writes
    `secrets/gdrive_token.json`; copy `secrets/` to the server.
-3. **Strong secrets:** `openssl rand -hex 32` for `LUMEN_API_TOKEN` and
-   `LUMEN_MCP_AUTH_TOKEN`, and a long passphrase for `LUMEN_MCP_OWNER_PASSWORD` (oauth mode).
+3. **Strong secrets:** `openssl rand -hex 32` for `LUMITRACE_API_TOKEN` and
+   `LUMITRACE_MCP_AUTH_TOKEN`, and a long passphrase for `LUMITRACE_MCP_OWNER_PASSWORD` (oauth mode).
    With `change-me` or anything under 16 characters the Prism answers `503` and the Lens refuses to start.
-4. **Providers:** pick `LUMEN_STT_PROVIDER` / `LUMEN_STT_MODEL`, the `LUMEN_LLM_*` models
-   and `LUMEN_EMBEDDING_MODEL` / `LUMEN_EMBEDDING_DIMENSION`, and put the provider keys in
+4. **Providers:** pick `LUMITRACE_STT_PROVIDER` / `LUMITRACE_STT_MODEL`, the `LUMITRACE_LLM_*` models
+   and `LUMITRACE_EMBEDDING_MODEL` / `LUMITRACE_EMBEDDING_DIMENSION`, and put the provider keys in
    `.env`. **Turn on the training opt-outs:** OpenAI API data is not used for training by default
    (check the organisation's data controls); for Amazon Transcribe / Bedrock enable the AWS
    Organizations **AI services opt-out policy**; for other providers check their API data terms.
    To try everything first without any provider, use `fake` for all of them.
-   Set `LUMEN_FAMILY` to the family members who should get their own block under Family in each
+   Set `LUMITRACE_FAMILY` to the family members who should get their own block under Family in each
    day file (`Maya, Leo`); others only appear under People.
 5. **Deploy:** on AWS, follow *Deploying on AWS Lightsail* below; elsewhere
    `docker compose up -d --build`. Check `curl localhost:8000/health` and
    `curl localhost:8002/health`; Spectrum has no published port (`docker compose logs
    spectrum`). Put HTTPS in front of the Prism (Tailscale or a reverse proxy,
    `docs/flash.md`) and of the Lens (`docs/lens.md`); in oauth mode set
-   `LUMEN_MCP_PUBLIC_URL` to the Lens's public `https://` root.
+   `LUMITRACE_MCP_PUBLIC_URL` to the Lens's public `https://` root.
 6. **Flash (iPhone Shortcuts):** build Flash Config, Log My Day, Quick Note, Send pending, Send to
-   Lumen and the nightly reminder (`docs/flash.md`). Send a test Quick Note and
+   Lumitrace and the nightly reminder (`docs/flash.md`). Send a test Quick Note and
    check that the day file appears in Drive (and in Obsidian).
 7. **Connect the AI app:** add the Lens as a connector in Claude or ChatGPT (oauth), or in
    Cursor / Claude Desktop (`docs/lens.md`). Turn off "use my chats for training" in that
@@ -39,20 +39,20 @@ and never paste real tokens or personal content here.
 
 ## Rotating tokens
 
-* **Prism token:** generate (`openssl rand -hex 32`), set `LUMEN_API_TOKEN` in `.env`,
+* **Prism token:** generate (`openssl rand -hex 32`), set `LUMITRACE_API_TOKEN` in `.env`,
   restart `prism` (`docker compose up -d prism`), then update `token` in the **Flash Config**
   shortcut on the iPhone (the other shortcuts read it from there; `docs/flash.md`).
   Captures waiting in the phone's Flash Inbox are sent with the new token by Send pending.
-* **Lens token / owner password:** set `LUMEN_MCP_AUTH_TOKEN` or `LUMEN_MCP_OWNER_PASSWORD`,
+* **Lens token / owner password:** set `LUMITRACE_MCP_AUTH_TOKEN` or `LUMITRACE_MCP_OWNER_PASSWORD`,
   restart `lens`, reconnect the AI apps. Both must be 16+ characters (`openssl rand -hex 32`) or
   the server refuses to start.
   * A new **static token** takes effect on restart; update Cursor / `mcp-remote` configs.
   * A new **owner password** does *not* end existing OAuth sessions (apps hold refresh tokens).
     To disconnect every app (lost phone, suspected leak):
-    `docker compose run --rm lens lumen-lens reset-oauth`, then
+    `docker compose run --rm lens lumitrace-lens reset-oauth`, then
     `docker compose restart lens`,
-    then reconnect each app (Claude: Settings → Connectors → Lumen → Connect; ChatGPT:
-    Settings → Apps & Connectors → Lumen). This deletes `mcp-oauth-state.json` next to the
+    then reconnect each app (Claude: Settings → Connectors → Lumitrace → Connect; ChatGPT:
+    Settings → Apps & Connectors → Lumitrace). This deletes `mcp-oauth-state.json` next to the
     index; the journal and index are untouched.
 * **Provider API keys:** update `OPENAI_API_KEY` / AWS credentials in `.env`, restart all services.
 
@@ -61,30 +61,30 @@ and never paste real tokens or personal content here.
 * Symptom: storage errors mentioning an invalid or expired token.
 * Make sure the OAuth consent screen is **In production** (Testing-mode refresh tokens expire
   after 7 days). `drive.file` is a non-sensitive scope, so no verification is needed.
-* On a machine with a browser: `uv run lumen-drive-login` (or `--no-browser` and open the
-  printed URL). It writes `LUMEN_GDRIVE_TOKEN_FILE` with mode 0600.
+* On a machine with a browser: `uv run lumitrace-drive-login` (or `--no-browser` and open the
+  printed URL). It writes `LUMITRACE_GDRIVE_TOKEN_FILE` with mode 0600.
 * Copy the token file to the server's `./secrets/` folder and restart the services. On
   Lightsail, run `SECRETS_DIR=secrets deploy/lightsail/deploy.sh`, which also gives the files to
   the container user (uid 10001).
 * The app must keep using the **same OAuth client**; with `drive.file`, a different client cannot
-  see the existing `Lumen` folder.
+  see the existing `Lumitrace` folder.
 
 ## Rebuilding the index (Spectrum)
 
-* When: after changing `LUMEN_EMBEDDING_MODEL` / `LUMEN_EMBEDDING_DIMENSION`, after a schema
+* When: after changing `LUMITRACE_EMBEDDING_MODEL` / `LUMITRACE_EMBEDDING_DIMENSION`, after a schema
   version bump, or if the index looks wrong.
-* `docker compose run --rm spectrum lumen-spectrum rebuild` (the running `spectrum` can stay up;
-  SQLite serialises the writers). Locally: `uv run lumen-spectrum rebuild`.
+* `docker compose run --rm spectrum lumitrace-spectrum rebuild` (the running `spectrum` can stay up;
+  SQLite serialises the writers). Locally: `uv run lumitrace-spectrum rebuild`.
 * Keeps `feedback` and `edit_signals`; everything else is re-read from storage. Expect roughly
   one storage download per day file plus one embedding call per 16 days; with the `fake`
   embedding model a year of days takes seconds. Search is incomplete while it runs.
 * Verify: the command prints `{"kind": "rebuild", "indexed": N, ..., "malformed": [...],
   "failed": [...]}`. `indexed` should equal the number of day files; fix any `malformed` file in
-  Obsidian (the log names it) and run `lumen-spectrum sync`. Exit status 1 means some files
+  Obsidian (the log names it) and run `lumitrace-spectrum sync`. Exit status 1 means some files
   failed transiently; run `sync` again. `curl http://localhost:8001/health` inside the Docker
   network shows the last result of the running Spectrum service.
 
-* After upgrading Lumen to a version with a new index schema (for example day file format 2,
+* After upgrading Lumitrace to a version with a new index schema (for example day file format 2,
   which added places and family facts), no manual step is needed: Spectrum sees the old
   `schema_version` on start, logs "rebuilding the index" and rebuilds. Existing format 1 day
   files are read as they are and rewritten in format 2 the next time the Prism writes that day.
@@ -93,7 +93,7 @@ and never paste real tokens or personal content here.
 
 1. Stop `spectrum` and `lens` (`docker compose stop spectrum lens`).
 2. Either restore the backup (see *Restoring backups*) or delete the index file
-   (`LUMEN_INDEX_PATH`, plus any `-wal`/`-shm` files next to it).
+   (`LUMITRACE_INDEX_PATH`, plus any `-wal`/`-shm` files next to it).
 3. Start `spectrum`. Without a file it indexes everything from storage on its first cycle; with a
    restored backup it catches up from the backup's sync token. Then start `lens`.
 4. Deleting the file without a backup loses `feedback` and `edit_signals` (the rest is rebuilt).
@@ -102,7 +102,7 @@ and never paste real tokens or personal content here.
 
 ### Changing the embedding model
 
-1. Set `LUMEN_EMBEDDING_MODEL` and `LUMEN_EMBEDDING_DIMENSION` (the model's vector size) in
+1. Set `LUMITRACE_EMBEDDING_MODEL` and `LUMITRACE_EMBEDDING_DIMENSION` (the model's vector size) in
    `.env`, with the provider's API key.
 2. `docker compose up -d spectrum` first. On start it sees the change, logs "rebuilding the
    index", and rebuilds automatically (feedback and edit signals stay).
@@ -120,44 +120,44 @@ speech providers stay external (their keys only in the server's `.env`).
    `deploy/lightsail/iam-policy.json`, then on your computer `aws configure sso` (or
    `aws configure`) and `export AWS_PROFILE=<profile>`. Never paste keys into chats or the repo.
 2. **Create the server:** `deploy/lightsail/provision.sh`. It creates (if missing) the SSH key
-   `~/.ssh/lumen-lightsail`, the instance `lumen` (Ubuntu 24.04, daily automatic snapshots), the
-   static IP `lumen-ip`, and a firewall that only allows SSH from your current IP. Re-run it if
+   `~/.ssh/lumitrace-lightsail`, the instance `lumitrace` (Ubuntu 24.04, daily automatic snapshots), the
+   static IP `lumitrace-ip`, and a firewall that only allows SSH from your current IP. Re-run it if
    your IP changes. First boot installs Docker, Tailscale and a swap file (a few minutes). If
-   `/var/lib/lumen-bootstrap-done` is still missing after ~10 minutes (`sudo cloud-init status
+   `/var/lib/lumitrace-bootstrap-done` is still missing after ~10 minutes (`sudo cloud-init status
    --long` on the server), run it by hand:
-   `ssh -i ~/.ssh/lumen-lightsail ubuntu@<ip> 'sudo sh -s' < deploy/lightsail/cloud-init.sh`.
+   `ssh -i ~/.ssh/lumitrace-lightsail ubuntu@<ip> 'sudo sh -s' < deploy/lightsail/cloud-init.sh`.
 3. **Production settings:** write a local `.env.production` (git-ignored) from `.env.example`:
-   real providers, `LUMEN_API_TOKEN`, `LUMEN_MCP_AUTH_TOKEN` and `LUMEN_MCP_OWNER_PASSWORD`,
-   `LUMEN_STORAGE_BACKEND=gdrive`, `LUMEN_FAMILY`, and `LUMEN_MCP_AUTH_MODE=oauth` (the public URL
-   comes in step 5). Delete the `LUMEN_PROMPTS_DIR`, `LUMEN_LOCAL_ROOT`, `LUMEN_INDEX_PATH`
-   and `LUMEN_GDRIVE_*_FILE` lines: the image sets the container paths (`/secrets/...`,
+   real providers, `LUMITRACE_API_TOKEN`, `LUMITRACE_MCP_AUTH_TOKEN` and `LUMITRACE_MCP_OWNER_PASSWORD`,
+   `LUMITRACE_STORAGE_BACKEND=gdrive`, `LUMITRACE_FAMILY`, and `LUMITRACE_MCP_AUTH_MODE=oauth` (the public URL
+   comes in step 5). Delete the `LUMITRACE_PROMPTS_DIR`, `LUMITRACE_LOCAL_ROOT`, `LUMITRACE_INDEX_PATH`
+   and `LUMITRACE_GDRIVE_*_FILE` lines: the image sets the container paths (`/secrets/...`,
    `/data/...`) and the env file would override them with paths that do not exist there. Put
    the Google Drive files in `secrets/` (see *First-run checklist*).
 4. **Deploy:** `ENV_FILE=.env.production SECRETS_DIR=secrets deploy/lightsail/deploy.sh`. It
-   uploads both, copies the committed code (git `HEAD`) to `/opt/lumen/app`, and starts the
+   uploads both, copies the committed code (git `HEAD`) to `/opt/lumitrace/app`, and starts the
    services with `deploy/lightsail/compose.lightsail.yml` (ports on `127.0.0.1` only). Later
    deploys: commit, then `deploy/lightsail/deploy.sh` (add `ENV_FILE=...` when settings change).
-5. **Tailscale (once):** `ssh -i ~/.ssh/lumen-lightsail ubuntu@<ip>`, then
-   `sudo /opt/lumen/app/deploy/lightsail/tailscale.sh`. Open the sign-in link it prints (and the
+5. **Tailscale (once):** `ssh -i ~/.ssh/lumitrace-lightsail ubuntu@<ip>`, then
+   `sudo /opt/lumitrace/app/deploy/lightsail/tailscale.sh`. Open the sign-in link it prints (and the
    Funnel link if asked; MagicDNS and HTTPS certificates must be on in the Tailscale admin
    console). It prints the two addresses:
-   * Prism, tailnet only: `https://lumen.<tailnet>.ts.net:8443`; use it in Flash Config. The
+   * Prism, tailnet only: `https://lumitrace.<tailnet>.ts.net:8443`; use it in Flash Config. The
      iPhone needs the Tailscale app with VPN On Demand (`docs/flash.md`).
-   * Lens, public through Funnel: `https://lumen.<tailnet>.ts.net/mcp`; set
-     `LUMEN_MCP_PUBLIC_URL=https://lumen.<tailnet>.ts.net` in `.env.production` and redeploy
+   * Lens, public through Funnel: `https://lumitrace.<tailnet>.ts.net/mcp`; set
+     `LUMITRACE_MCP_PUBLIC_URL=https://lumitrace.<tailnet>.ts.net` in `.env.production` and redeploy
      with `ENV_FILE=.env.production`.
-6. **Optional:** with Tailscale SSH working (`ssh ubuntu@lumen`), remove the SSH rule in the
+6. **Optional:** with Tailscale SSH working (`ssh ubuntu@lumitrace`), remove the SSH rule in the
    Lightsail console (Networking tab) so no port is open to the internet.
-7. **Check:** `https://lumen.<tailnet>.ts.net:8443/health` from Safari on the phone,
-   `curl https://lumen.<tailnet>.ts.net/health` from anywhere, then a test Quick Note.
+7. **Check:** `https://lumitrace.<tailnet>.ts.net:8443/health` from Safari on the phone,
+   `curl https://lumitrace.<tailnet>.ts.net/health` from anywhere, then a test Quick Note.
 
-Logs: `ssh ... 'cd /opt/lumen/app && docker compose -p lumen logs -f'`. The data volume is
-`lumen_lumen-data`; the daily Lightsail snapshot covers it, `.env` and `secrets/`. Cost: the
+Logs: `ssh ... 'cd /opt/lumitrace/app && docker compose -p lumitrace logs -f'`. The data volume is
+`lumitrace_lumitrace-data`; the daily Lightsail snapshot covers it, `.env` and `secrets/`. Cost: the
 bundle price (about $12 a month for 2 GB) plus snapshot storage.
 
 ## Switching AI or speech providers
 
-1. Change the `LUMEN_LLM_*`, `LUMEN_STT_*` or `LUMEN_EMBEDDING_*` settings and provider
+1. Change the `LUMITRACE_LLM_*`, `LUMITRACE_STT_*` or `LUMITRACE_EMBEDDING_*` settings and provider
    keys in `.env`.
 2. Run the answer-quality check (once it exists) and compare with the previous run.
 3. Restart the services. For embedding changes, rebuild the index.
@@ -166,7 +166,7 @@ bundle price (about $12 a month for 2 GB) plus snapshot storage.
 ## Moving servers
 
 1. Stop the services on the old server.
-2. Copy `.env`, `secrets/` and (optionally) the `lumen-data` volume. The index can instead be
+2. Copy `.env`, `secrets/` and (optionally) the `lumitrace-data` volume. The index can instead be
    rebuilt from storage.
 3. `docker compose up -d --build` on the new server, update DNS / HTTPS proxy, and point the
    Flash shortcuts and MCP clients at the new URLs if they changed.
@@ -174,16 +174,16 @@ bundle price (about $12 a month for 2 GB) plus snapshot storage.
 
 ## Restoring backups
 
-* **Index:** stop `spectrum` and `lens`, copy `_system/index-backup/lumen.sqlite` from Drive to
-  `LUMEN_INDEX_PATH`, start them; Spectrum catches up from its sync token. Or just rebuild.
-* **Journal files:** restore the `Lumen` folder from the off-site backup (not built yet; first
+* **Index:** stop `spectrum` and `lens`, copy `_system/index-backup/lumitrace.sqlite` from Drive to
+  `LUMITRACE_INDEX_PATH`, start them; Spectrum catches up from its sync token. Or just rebuild.
+* **Journal files:** restore the `Lumitrace` folder from the off-site backup (not built yet; first
   item after version one), then rebuild the index.
 * Test a restore at least once a quarter.
 
 ## Checking health
 
 * `GET /health` on the Prism; container logs (`docker compose logs -f`).
-* Activity records in `Lumen/_system/activity/YYYY/MM.jsonl` show per-step errors, timing and
+* Activity records in `Lumitrace/_system/activity/YYYY/MM.jsonl` show per-step errors, timing and
   cost (one line per capture attempt).
 
 ## Prism (recording API)
@@ -194,11 +194,11 @@ logged).
 * **A capture's status:** `curl -H "Authorization: Bearer $TOKEN" $API/captures/<id>`. `done` with
   `errors` means the transcript is saved but an AI step failed (see the activity record);
   `queued` with `retry_at` means an automatic retry is scheduled.
-* **Failed captures:** they stay in `Lumen/_system/inbox/<id>/` with status `failed`. Fix the
+* **Failed captures:** they stay in `Lumitrace/_system/inbox/<id>/` with status `failed`. Fix the
   cause (provider key, quota, a day file whose front matter was broken in Obsidian), then
   `curl -X POST -H "Authorization: Bearer $TOKEN" $API/captures/<id>/retry`. Or just re-send from
   the phone with the same `capture_id`.
-* **Find stuck captures:** list `Lumen/_system/inbox/`; each folder is one capture not yet
+* **Find stuck captures:** list `Lumitrace/_system/inbox/`; each folder is one capture not yet
   `done`. Restarting the Prism (`docker compose restart prism`) re-queues all of them except
   `failed` ones.
 * **Audio not compressed** (warning "audio kept uncompressed" in the log / activity record): the
@@ -206,13 +206,13 @@ logged).
   kept and embedded, so nothing is lost; to compress it later, convert with
   `ffmpeg -i in -ac 1 -c:a aac -b:a 32k out.m4a` and fix the name in the day file's `audio` list
   and capture block.
-* **Switching speech to Amazon Transcribe:** set `LUMEN_STT_PROVIDER=aws_transcribe`,
-  `LUMEN_AWS_REGION`, `LUMEN_AWS_TRANSCRIBE_BUCKET` (a private bucket; the Prism deletes its
-  objects under `lumen-stt/` after each job), AWS credentials with `s3:PutObject/GetObject/
+* **Switching speech to Amazon Transcribe:** set `LUMITRACE_STT_PROVIDER=aws_transcribe`,
+  `LUMITRACE_AWS_REGION`, `LUMITRACE_AWS_TRANSCRIBE_BUCKET` (a private bucket; the Prism deletes its
+  objects under `lumitrace-stt/` after each job), AWS credentials with `s3:PutObject/GetObject/
   DeleteObject` on that prefix and `transcribe:StartTranscriptionJob/GetTranscriptionJob/
   DeleteTranscriptionJob`. Enable the AWS Organizations **AI services opt-out policy** for
   Amazon Transcribe. Restart `prism`.
-* **Trying it offline:** `LUMEN_STT_PROVIDER=fake` and all three `LUMEN_LLM_*_MODEL=fake`;
+* **Trying it offline:** `LUMITRACE_STT_PROVIDER=fake` and all three `LUMITRACE_LLM_*_MODEL=fake`;
   then `curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json'
   -d '{"text": "Test note"}' localhost:8000/notes`.
 * **Costs:** sum `cost_usd` from the month's activity file, e.g.
@@ -225,63 +225,70 @@ Setup and client configs: `docs/lens.md`.
 * **Health:** `curl https://journal.example.com/health` → `status`, `auth_mode`,
   `index_present`. Logs: `docker compose logs -f lens` (no journal text is logged).
 * **Server won't start, "configuration error":** the token or password is empty, a placeholder
-  or too short; or in `oauth` mode `LUMEN_MCP_PUBLIC_URL` is not `https://` or has a path.
-* **AI app says "unauthorized" / keeps asking to sign in:** check `LUMEN_MCP_PUBLIC_URL`
+  or too short; or in `oauth` mode `LUMITRACE_MCP_PUBLIC_URL` is not `https://` or has a path.
+* **AI app says "unauthorized" / keeps asking to sign in:** check `LUMITRACE_MCP_PUBLIC_URL`
   matches the URL the app uses (scheme and host), and that the proxy forwards
   `/.well-known/*`, `/register`, `/authorize`, `/token`, `/revoke` and `/oauth/login` as well as
   `/mcp`. Then reconnect the app.
 * **"Too many wrong passwords":** wait 15 minutes (the lockout is in memory; restarting
   `lens` also clears it).
 * **Answers say the index has not been built / is empty:** check Spectrum
-  (`docker compose logs spectrum`, `lumen-spectrum sync`). `get_day` still works from storage.
+  (`docker compose logs spectrum`, `lumitrace-spectrum sync`). `get_day` still works from storage.
 * **"index uses dimension N":** the Lens and Spectrum settings disagree on
-  `LUMEN_EMBEDDING_DIMENSION`; fix `.env` and rebuild the index.
-* **Feedback:** each `feedback` call is in `Lumen/_system/feedback/YYYY/MM/*.json` and in the
+  `LUMITRACE_EMBEDDING_DIMENSION`; fix `.env` and rebuild the index.
+* **Feedback:** each `feedback` call is in `Lumitrace/_system/feedback/YYYY/MM/*.json` and in the
   index's `feedback` table (kept across rebuilds).
 
-## Upgrading from LifeLog or Bookshelf
+## Upgrading from LifeLog, Bookshelf or Lumen
 
-The project was renamed twice: LifeLog (0.1.0) → Bookshelf (decision 0008) → Lumen (decision
-0009). A deployment set up under either old name needs these one-time steps; nothing in the
-journal itself has to change. Below, *OLD* is `LIFELOG` / `LifeLog` / `lifelog` or `BOOKSHELF` /
-`Bookshelf` / `bookshelf`, whichever your setup uses.
+The project was renamed three times: LifeLog (0.1.0) → Bookshelf (decision 0008) → Lumen
+(decision 0009) → Lumitrace (decision 0042). A deployment set up under any old name needs these
+one-time steps; nothing in the journal itself has to change.
 
-| | LifeLog (0.1.0) | Bookshelf | Lumen (now) |
-|---|---|---|---|
-| Env prefix | `LIFELOG_` | `BOOKSHELF_` | `LUMEN_` |
-| Drive root / local root | `LifeLog` / `data/LifeLog` | `Bookshelf` / `data/Bookshelf` | `Lumen` / `data/Lumen` |
-| Index file | `data/index/lifelog.sqlite` | `data/index/bookshelf.sqlite` | `data/index/lumen.sqlite` |
-| Commands | `lifelog-api`, `lifelog-indexer`, `lifelog-mcp`, `lifelog-gdrive-login` | `bookshelf-typewriter`, `bookshelf-bookmarks`, `bookshelf-reading-lamp`, `bookshelf-drive-login` | `lumen-prism`, `lumen-spectrum`, `lumen-lens`, `lumen-drive-login` |
-| Docker services / volume | `api`, `indexer`, `mcp` / `lifelog-data` | `typewriter`, `bookmarks`, `reading-lamp` / `bookshelf-data` | `prism`, `spectrum`, `lens` / `lumen-data` |
-| Shortcuts | LifeLog Config, LifeLog Inbox, Send to LifeLog | Notepad Config, Notepad Inbox, Send to Bookshelf | Flash Config, Flash Inbox, Send to Lumen |
-| OAuth scope / name in AI apps | `lifelog` / LifeLog | `bookshelf` / Bookshelf | `lumen` / Lumen |
+| | LifeLog (0.1.0) | Bookshelf | Lumen | Lumitrace (now) |
+|---|---|---|---|---|
+| Env prefix | `LIFELOG_` | `BOOKSHELF_` | `LUMEN_` | `LUMITRACE_` |
+| Drive root / local root | `LifeLog` / `data/LifeLog` | `Bookshelf` / `data/Bookshelf` | `Lumen` / `data/Lumen` | `Lumitrace` / `data/Lumitrace` |
+| Index file | `data/index/lifelog.sqlite` | `data/index/bookshelf.sqlite` | `data/index/lumen.sqlite` | `data/index/lumitrace.sqlite` |
+| Commands | `lifelog-api`, `lifelog-indexer`, `lifelog-mcp`, `lifelog-gdrive-login` | `bookshelf-typewriter`, `bookshelf-bookmarks`, `bookshelf-reading-lamp`, `bookshelf-drive-login` | `lumen-prism`, `lumen-spectrum`, `lumen-lens`, `lumen-drive-login` | `lumitrace-prism`, `lumitrace-spectrum`, `lumitrace-lens`, `lumitrace-drive-login` |
+| Docker services / volume | `api`, `indexer`, `mcp` / `lifelog-data` | `typewriter`, `bookmarks`, `reading-lamp` / `bookshelf-data` | `prism`, `spectrum`, `lens` / `lumen-data` | `prism`, `spectrum`, `lens` / `lumitrace-data` |
+| Shortcuts | LifeLog Config, LifeLog Inbox, Send to LifeLog | Notepad Config, Notepad Inbox, Send to Bookshelf | Flash Config, Flash Inbox, Send to Lumen | Flash Config, Flash Inbox, Send to Lumitrace |
+| OAuth scope / name in AI apps | `lifelog` / LifeLog | `bookshelf` / Bookshelf | `lumen` / Lumen | `lumitrace` / Lumitrace |
 
-1. **`.env`:** rename every old-prefix variable to `LUMEN_` (for example
-   `sed -i.bak -E 's/^(LIFELOG|BOOKSHELF)_/LUMEN_/' .env`). Unrenamed variables are silently
+1. **`.env`:** rename every old-prefix variable to `LUMITRACE_` (for example
+   `sed -i.bak -E 's/^(LIFELOG|BOOKSHELF|LUMEN)_/LUMITRACE_/' .env`). Unrenamed variables are silently
    ignored.
-2. **Drive folder:** the default root folder is now `Lumen`. Either rename the existing
-   `LifeLog` or `Bookshelf` folder in Drive to `Lumen` (the app finds it again because it created
-   it), or keep the old name with `LUMEN_GDRIVE_ROOT_FOLDER=Bookshelf` (or `LifeLog`). For local
-   storage, move `data/LifeLog` or `data/Bookshelf` to `data/Lumen`, or set `LUMEN_LOCAL_ROOT`.
-3. **Index:** move the old index file (`data/index/lifelog.sqlite` or
-   `data/index/bookshelf.sqlite`, plus `-wal`/`-shm`) to `data/index/lumen.sqlite`, or set
-   `LUMEN_INDEX_PATH` to the old file, so `feedback` and `edit_signals` are kept. New backups go
-   to `_system/index-backup/lumen.sqlite`.
-4. **Docker:** services are now `prism`, `spectrum` and `lens`, and the volume is `lumen-data`.
+2. **Drive folder:** the default root folder is now `Lumitrace`. Either rename the existing
+   `LifeLog`, `Bookshelf` or `Lumen` folder in Drive to `Lumitrace` (the app finds it again because
+   it created it), or keep the old name with `LUMITRACE_GDRIVE_ROOT_FOLDER=Lumen` (or the older
+   name). For local storage, move the old `data/` folder to `data/Lumitrace`, or set
+   `LUMITRACE_LOCAL_ROOT`.
+3. **Index:** move the old index file (`data/index/lifelog.sqlite`, `bookshelf.sqlite` or
+   `lumen.sqlite`, plus `-wal`/`-shm`) to `data/index/lumitrace.sqlite`, or set
+   `LUMITRACE_INDEX_PATH` to the old file, so `feedback` and `edit_signals` are kept. New backups go
+   to `_system/index-backup/lumitrace.sqlite`.
+4. **Docker:** services are now `prism`, `spectrum` and `lens`, and the volume is `lumitrace-data`.
    Run `docker compose down` *before* pulling the new compose file, then copy the old volume
-   (`lifelog-data` or `bookshelf-data`) into `lumen-data`, or rebuild the index from storage.
+   (`lifelog-data`, `bookshelf-data` or `lumen-data`) into `lumitrace-data`, or rebuild the index from storage.
    Compose prefixes volume names with the project (folder) name, so after the repository folder
-   is renamed to `lumen` look for the old volume with `docker volume ls`.
-5. **Commands:** the old commands (see the table) are now `lumen-prism`, `lumen-spectrum`,
-   `lumen-lens` and `lumen-drive-login`. Update Claude Desktop / Cursor MCP configs
+   is renamed to `lumitrace` look for the old volume with `docker volume ls`.
+5. **Commands:** the old commands (see the table) are now `lumitrace-prism`, `lumitrace-spectrum`,
+   `lumitrace-lens` and `lumitrace-drive-login`. Update Claude Desktop / Cursor MCP configs
    (`docs/lens.md`).
-6. **OAuth:** the scope is now `lumen` and AI apps list the connector as **Lumen**; run
-   `lumen-lens reset-oauth` and reconnect each AI app.
-7. **iPhone (Flash):** rename the helper shortcuts to **Flash Config** and **Send to Lumen**,
+6. **OAuth:** the scope is now `lumitrace` and AI apps list the connector as **Lumitrace**; run
+   `lumitrace-lens reset-oauth` and reconnect each AI app.
+7. **iPhone (Flash):** rename the helper shortcuts to **Flash Config** and **Send to Lumitrace**,
    and the Files folder iCloud Drive → Shortcuts → old inbox folder to **Flash Inbox**; then
    update the `Run Shortcut` step and the inbox paths in Log My Day, Quick Note and Send pending
    (`docs/flash.md`). Send pending first if the old inbox still holds captures. Log My Day,
    Quick Note and Send pending keep their names.
-8. **Day files:** nothing to do. Files with the old `lifelog:` or `bookshelf:` markers and
-   `lifelog_format` or `bookshelf_format` key are still read, and are rewritten with the new
-   names the next time the Prism writes that day.
+8. **Day files:** nothing to do. Files with the old `lifelog:`, `bookshelf:` or `lumen:` markers
+   and `lifelog_format`, `bookshelf_format` or `lumen_format` key are still read, and are
+   rewritten with the new names the next time the Prism writes that day.
+9. **Lightsail and Tailscale (from Lumen):** the scripts now default to the instance
+   `lumitrace`, `/opt/lumitrace` and the Tailscale name `lumitrace`. Lightsail cannot rename an
+   instance, so create a new one (*Deploying on AWS Lightsail*), deploy, join Tailscale, then
+   delete the old instance, its static IP and key pair, and remove the old machine in the
+   Tailscale admin console. Update the address in Flash Config
+   (`https://lumitrace.<tailnet>.ts.net:8443`) and the AI-app connectors
+   (`https://lumitrace.<tailnet>.ts.net/mcp`), and set `LUMITRACE_MCP_PUBLIC_URL`.

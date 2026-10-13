@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import datetime as dt
 
-from lumen.config import Settings
-from lumen.frames.dayfile import day_file_path
-from lumen.frames.storage.local import LocalStorage
-from lumen.index.schema import (
+from lumitrace.config import Settings
+from lumitrace.frames.dayfile import day_file_path
+from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.index.schema import (
     META_EMBEDDING_DIMENSION,
     META_EMBEDDING_MODEL,
     META_LAST_REBUILD_AT,
@@ -17,7 +17,7 @@ from lumen.index.schema import (
     serialize_embedding,
     set_meta,
 )
-from lumen.spectrum.core import Indexer
+from lumitrace.spectrum.core import Indexer
 from tests.spectrum.conftest import make_day, write_day
 
 D1 = dt.date(2026, 10, 10)

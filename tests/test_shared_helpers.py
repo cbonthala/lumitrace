@@ -5,9 +5,9 @@ import math
 
 import httpx
 
-from lumen.config import Settings
-from lumen.embeddings import embed_texts, fake_embedding
-from lumen.nudge import nudge_indexer
+from lumitrace.config import Settings
+from lumitrace.embeddings import embed_texts, fake_embedding
+from lumitrace.nudge import nudge_indexer
 
 
 def test_fake_embeddings_are_deterministic_unit_vectors(settings: Settings) -> None:

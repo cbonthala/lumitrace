@@ -1,7 +1,7 @@
 [project]
-name = "lumen"
+name = "lumitrace"
 version = "0.1.0"
-description = "Lumen voice journal: record your day, get a Markdown journal in Google Drive, ask questions through MCP."
+description = "Lumitrace voice journal: record your day, get a Markdown journal in Google Drive, ask questions through MCP."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Proprietary" }
@@ -26,10 +26,10 @@ dependencies = [
 ]
 
 [project.scripts]
-lumen-prism = "lumen.prism.__main__:main"
-lumen-spectrum = "lumen.spectrum.__main__:main"
-lumen-lens = "lumen.lens.__main__:main"
-lumen-drive-login = "lumen.frames.storage.gdrive:login_main"
+lumitrace-prism = "lumitrace.prism.__main__:main"
+lumitrace-spectrum = "lumitrace.spectrum.__main__:main"
+lumitrace-lens = "lumitrace.lens.__main__:main"
+lumitrace-drive-login = "lumitrace.frames.storage.gdrive:login_main"
 
 [dependency-groups]
 dev = [
@@ -42,7 +42,7 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["lumen"]
+packages = ["lumitrace"]
 
 [tool.ruff]
 line-length = 100

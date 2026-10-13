@@ -5,13 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from lumen.config import Settings
-from lumen.embeddings import embed_texts
-from lumen.index.schema import META_EMBEDDING_MODEL, connect, set_meta
-from lumen.lens import search as S
-from lumen.lens.dates import DateArgumentError
-from lumen.lens.index import INDEX_EMPTY_NOTE, INDEX_MISSING_NOTE
-from lumen.lens.tools import LensTools, ToolInputError
+from lumitrace.config import Settings
+from lumitrace.embeddings import embed_texts
+from lumitrace.index.schema import META_EMBEDDING_MODEL, connect, set_meta
+from lumitrace.lens import search as S
+from lumitrace.lens.dates import DateArgumentError
+from lumitrace.lens.index import INDEX_EMPTY_NOTE, INDEX_MISSING_NOTE
+from lumitrace.lens.tools import LensTools, ToolInputError
 
 # --- query building ------------------------------------------------------------------------
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create the Lumen server on AWS Lightsail (docs/runbook.md -> Deploying on AWS Lightsail).
+# Create the Lumitrace server on AWS Lightsail (docs/runbook.md -> Deploying on AWS Lightsail).
 #
 # Creates, if missing: an SSH key pair, a 2 GB Ubuntu 24.04 instance with daily automatic
 # snapshots, a static IP, and a firewall that only lets SSH in from this computer's current IP
@@ -7,13 +7,13 @@
 # and the firewall is reset to SSH from the current IP.
 #
 # Settings (environment variables): AWS_PROFILE, REGION (us-east-2), ZONE (<region>a),
-# NAME (lumen), KEY_FILE (~/.ssh/lumen-lightsail), SNAPSHOT_TIME (09:00 UTC).
+# NAME (lumitrace), KEY_FILE (~/.ssh/lumitrace-lightsail), SNAPSHOT_TIME (09:00 UTC).
 set -euo pipefail
 
 REGION="${REGION:-us-east-2}"
 ZONE="${ZONE:-${REGION}a}"
-NAME="${NAME:-lumen}"
-KEY_FILE="${KEY_FILE:-$HOME/.ssh/lumen-lightsail}"
+NAME="${NAME:-lumitrace}"
+KEY_FILE="${KEY_FILE:-$HOME/.ssh/lumitrace-lightsail}"
 SNAPSHOT_TIME="${SNAPSHOT_TIME:-09:00}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ls_() { aws lightsail --region "$REGION" "$@"; }
@@ -22,7 +22,7 @@ account="$(aws sts get-caller-identity --query Account --output text)"
 echo "AWS account $account, region $REGION, instance '$NAME'"
 
 if [ ! -f "$KEY_FILE" ]; then
-  ssh-keygen -t ed25519 -N "" -C "lumen-lightsail" -f "$KEY_FILE"
+  ssh-keygen -t ed25519 -N "" -C "lumitrace-lightsail" -f "$KEY_FILE"
 fi
 # Lightsail names must be unique across resource types, so the key pair can't be "$NAME".
 KEY_PAIR="$NAME-key"
@@ -42,7 +42,7 @@ if ! ls_ get-instance --instance-name "$NAME" >/dev/null 2>&1; then
     --blueprint-id ubuntu_24_04 --bundle-id "$bundle" --key-pair-name "$KEY_PAIR" \
     --user-data "file://$HERE/cloud-init.sh" \
     --add-ons "addOnType=AutoSnapshot,autoSnapshotAddOnRequest={snapshotTimeOfDay=$SNAPSHOT_TIME}" \
-    --tags key=project,value=lumen >/dev/null
+    --tags key=project,value=lumitrace >/dev/null
 fi
 
 printf "Waiting for the instance to run"

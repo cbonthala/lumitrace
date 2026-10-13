@@ -36,7 +36,7 @@ Template:
 | [0006](0006-proton-drive-e2e-later.md) | Proton Drive / end-to-end encryption later |
 | [0007](0007-plain-english-test-catalog.md) | Plain-English test catalog, kept complete by a test |
 | [0008](0008-project-and-module-names.md) | Project and module names: Bookshelf, Notepad, Typewriter, Books, Bookmarks, Reading Lamp (superseded by 0009) |
-| [0009](0009-rename-to-lumen.md) | Rename to Lumen: Flash, Prism, Frames, Spectrum, Lens |
+| [0009](0009-rename-to-lumen.md) | Rename to Lumen: Flash, Prism, Frames, Spectrum, Lens (superseded by 0042) |
 | [0010](0010-durable-inbox-and-background-worker.md) | Recording API: durable inbox in storage, one worker, client capture ids |
 | [0011](0011-save-transcript-first-then-generate.md) | Recording API: save transcript first, full vs additive generation, re-check edits |
 | [0012](0012-activity-records-monthly-jsonl.md) | Recording API: activity records as monthly JSONL without content |
@@ -51,5 +51,6 @@ Template:
 | [0031](0031-mcp-auth-modes.md) | MCP: auth modes none / token / oauth, strict startup checks |
 | [0032](0032-single-owner-oauth.md) | MCP: built-in single-owner OAuth with a password page |
 | [0033](0033-mcp-reads-and-feedback-writes.md) | MCP: per-call read-only index, `get_day` from storage, dual feedback write |
-| [0040](0040-facts-in-day-file-body-and-family-sections.md) | Day file format 2: facts in an "At a glance" section, places, a block per family member (`LUMEN_FAMILY`) |
+| [0040](0040-facts-in-day-file-body-and-family-sections.md) | Day file format 2: facts in an "At a glance" section, places, a block per family member (`LUMITRACE_FAMILY`) |
 | [0041](0041-aws-lightsail-with-tailscale.md) | Hosting: one AWS Lightsail instance, Prism on the tailnet, Lens public through Tailscale Funnel |
+| [0042](0042-rename-to-lumitrace.md) | Rename Lumen to Lumitrace everywhere; module names unchanged |

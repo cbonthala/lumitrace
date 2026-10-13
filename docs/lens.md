@@ -1,15 +1,15 @@
 # Lens (MCP server)
 
-The Lens lets you zoom into any day: `lumen-lens` (`lumen/lens/`; Docker service `lens`) lets
-AI apps (Claude, ChatGPT, Cursor, ...) read the journal. AI apps see it as **Lumen**. It reads
+The Lens lets you zoom into any day: `lumitrace-lens` (`lumitrace/lens/`; Docker service `lens`) lets
+AI apps (Claude, ChatGPT, Cursor, ...) read the journal. AI apps see it as **Lumitrace**. It reads
 the SQLite index built by the Spectrum (the indexer) and the
 Frames (day files) in storage, and it writes only the `feedback` table plus a JSON copy under
 `_system/feedback/`.
 
 ```bash
-uv run lumen-lens                         # LUMEN_MCP_TRANSPORT (default streamable-http on :8002/mcp)
-uv run lumen-lens --transport stdio       # for Claude Desktop / Cursor running it locally
-uv run lumen-lens reset-oauth             # forget all OAuth clients and tokens
+uv run lumitrace-lens                         # LUMITRACE_MCP_TRANSPORT (default streamable-http on :8002/mcp)
+uv run lumitrace-lens --transport stdio       # for Claude Desktop / Cursor running it locally
+uv run lumitrace-lens reset-oauth             # forget all OAuth clients and tokens
 ```
 
 | Module | What it does |
@@ -32,7 +32,7 @@ for what, and to call `feedback` when the owner says an answer was wrong.
 ## Tools
 
 All dates are `YYYY-MM-DD` strings. Date arguments also accept `today` and `yesterday`
-(resolved in `LUMEN_TIMEZONE` with the 4 a.m. rollover). Natural-language phrases are the AI
+(resolved in `LUMITRACE_TIMEZONE` with the 4 a.m. rollover). Natural-language phrases are the AI
 client's job; the tool descriptions say so. Bad arguments return an MCP tool error with a
 message that explains the accepted format. All read tools are annotated `readOnlyHint`.
 
@@ -117,25 +117,25 @@ are created if missing. Returns `saved`, `id`, `dates`, `storage_path`.
 | Transport | Used by | Auth |
 |---|---|---|
 | `stdio` | Claude Desktop, Cursor (server runs on the same machine) | none (local process) |
-| `streamable-http` (`LUMEN_MCP_HOST`:`LUMEN_MCP_PORT``LUMEN_MCP_PATH`) | remote and phone apps | `LUMEN_MCP_AUTH_MODE` |
+| `streamable-http` (`LUMITRACE_MCP_HOST`:`LUMITRACE_MCP_PORT``LUMITRACE_MCP_PATH`) | remote and phone apps | `LUMITRACE_MCP_AUTH_MODE` |
 
-`LUMEN_MCP_AUTH_MODE`:
+`LUMITRACE_MCP_AUTH_MODE`:
 
 * `none`: no auth. Only for a server bound to `127.0.0.1` (a warning is logged otherwise).
-* `token` (default): `Authorization: Bearer <LUMEN_MCP_AUTH_TOKEN>`. The token must be at
+* `token` (default): `Authorization: Bearer <LUMITRACE_MCP_AUTH_TOKEN>`. The token must be at
   least 16 characters and not a placeholder (`openssl rand -hex 32`), or the server refuses to
   start. Missing or wrong token → `401` with `WWW-Authenticate: Bearer`.
 * `oauth`: a minimal single-owner OAuth 2.1 authorization server for Claude and ChatGPT
-  connectors (decision 0032). Needs `LUMEN_MCP_OWNER_PASSWORD` (16+ characters) and
-  `LUMEN_MCP_PUBLIC_URL` = the public **https** root URL of the server (no path; it is the
-  OAuth issuer, and the protected resource is `<public URL><LUMEN_MCP_PATH>`). If
-  `LUMEN_MCP_AUTH_TOKEN` is also set, that static token keeps working (handy for Cursor).
+  connectors (decision 0032). Needs `LUMITRACE_MCP_OWNER_PASSWORD` (16+ characters) and
+  `LUMITRACE_MCP_PUBLIC_URL` = the public **https** root URL of the server (no path; it is the
+  OAuth issuer, and the protected resource is `<public URL><LUMITRACE_MCP_PATH>`). If
+  `LUMITRACE_MCP_AUTH_TOKEN` is also set, that static token keeps working (handy for Cursor).
 
 `GET /health` is always unauthenticated: `{"status", "version", "auth_mode", "index_present"}`.
 
 ### OAuth details
 
-Endpoints (served by the MCP SDK's auth support; Lumen supplies storage and the login step):
+Endpoints (served by the MCP SDK's auth support; Lumitrace supplies storage and the login step):
 
 | Endpoint | Purpose |
 |---|---|
@@ -152,17 +152,17 @@ Endpoints (served by the MCP SDK's auth support; Lumen supplies storage and the 
   `/authorize` rejects other `resource` values with `invalid_target`.
 * After 5 wrong passwords in 15 minutes the page refuses all attempts until the window passes.
 * Clients and tokens persist in `mcp-oauth-state.json` next to the index
-  (`LUMEN_INDEX_PATH`'s folder, mode 0600, tokens stored only as SHA-256 hashes), so a
+  (`LUMITRACE_INDEX_PATH`'s folder, mode 0600, tokens stored only as SHA-256 hashes), so a
   restart does not disconnect the apps. Pending sign-ins and codes are in memory: run **one**
   MCP server process.
-* Scope: `lumen` (the only one).
+* Scope: `lumitrace` (the only one).
 
 ## Connecting AI apps
 
-Replace `/path/to/lumen` (the folder you cloned the repository into, whatever it is called)
+Replace `/path/to/lumitrace` (the folder you cloned the repository into, whatever it is called)
 and `journal.example.com` with your own values. Never commit the token or password. The server
-key `"lumen"` and the connector name `Lumen` are just labels; the server itself reports
-the title **Lumen**.
+key `"lumitrace"` and the connector name `Lumitrace` are just labels; the server itself reports
+the title **Lumitrace**.
 
 ### Public HTTPS (needed for phone apps and claude.ai / ChatGPT)
 
@@ -177,11 +177,11 @@ journal.example.com {
 `.env` on the server:
 
 ```bash
-LUMEN_MCP_TRANSPORT=streamable-http
-LUMEN_MCP_PUBLIC_URL=https://journal.example.com
-LUMEN_MCP_AUTH_MODE=oauth
-LUMEN_MCP_OWNER_PASSWORD=<long passphrase>
-LUMEN_MCP_AUTH_TOKEN=<openssl rand -hex 32>   # optional, for Cursor / scripts
+LUMITRACE_MCP_TRANSPORT=streamable-http
+LUMITRACE_MCP_PUBLIC_URL=https://journal.example.com
+LUMITRACE_MCP_AUTH_MODE=oauth
+LUMITRACE_MCP_OWNER_PASSWORD=<long passphrase>
+LUMITRACE_MCP_AUTH_TOKEN=<openssl rand -hex 32>   # optional, for Cursor / scripts
 ```
 
 Check: `curl https://journal.example.com/health` and
@@ -189,10 +189,10 @@ Check: `curl https://journal.example.com/health` and
 
 ### Claude (web, iPhone, Android) and Claude Desktop as a connector
 
-1. On claude.ai: **Settings → Connectors → Add custom connector**. Name `Lumen`, URL
+1. On claude.ai: **Settings → Connectors → Add custom connector**. Name `Lumitrace`, URL
    `https://journal.example.com/mcp`. (Custom connectors need a paid plan; on Team/Enterprise an
    owner adds them.)
-2. Click **Connect**. Claude registers itself, then opens the Lumen sign-in page: type the
+2. Click **Connect**. Claude registers itself, then opens the Lumitrace sign-in page: type the
    owner password and press **Allow**.
 3. The connector syncs to the Claude mobile apps and Claude Desktop. Enable it per chat from the
    tools menu.
@@ -201,8 +201,8 @@ Check: `curl https://journal.example.com/health` and
 
 1. **Settings → Apps & Connectors → Advanced settings**: turn on **Developer mode** (available
    on paid plans).
-2. **Settings → Apps & Connectors → Create**: name `Lumen`, MCP server URL
-   `https://journal.example.com/mcp`, authentication **OAuth**. Sign in on the Lumen page.
+2. **Settings → Apps & Connectors → Create**: name `Lumitrace`, MCP server URL
+   `https://journal.example.com/mcp`, authentication **OAuth**. Sign in on the Lumitrace page.
 3. Choose the connector in a chat (developer mode) and ask. The ChatGPT UI changes often; check
    OpenAI's current docs if the menu names differ.
 
@@ -214,19 +214,19 @@ Drive token). `~/Library/Application Support/Claude/claude_desktop_config.json` 
 ```json
 {
   "mcpServers": {
-    "lumen": {
-      "command": "/path/to/lumen/.tools/bin/uv",
-      "args": ["--directory", "/path/to/lumen", "run", "lumen-lens", "--transport", "stdio"],
+    "lumitrace": {
+      "command": "/path/to/lumitrace/.tools/bin/uv",
+      "args": ["--directory", "/path/to/lumitrace", "run", "lumitrace-lens", "--transport", "stdio"],
       "env": {
-        "UV_PYTHON_INSTALL_DIR": "/path/to/lumen/.tools/python",
-        "UV_CACHE_DIR": "/path/to/lumen/.tools/cache"
+        "UV_PYTHON_INSTALL_DIR": "/path/to/lumitrace/.tools/python",
+        "UV_CACHE_DIR": "/path/to/lumitrace/.tools/cache"
       }
     }
   }
 }
 ```
 
-`--directory` makes the server read `/path/to/lumen/.env`. Restart Claude Desktop after
+`--directory` makes the server read `/path/to/lumitrace/.env`. Restart Claude Desktop after
 editing. Logs go to stderr (Claude Desktop shows them in its MCP log files).
 
 To use the remote server from Claude Desktop instead, add it as a connector (above), or with a
@@ -235,11 +235,11 @@ static token through the `mcp-remote` bridge:
 ```json
 {
   "mcpServers": {
-    "lumen": {
+    "lumitrace": {
       "command": "npx",
       "args": ["-y", "mcp-remote", "https://journal.example.com/mcp",
-               "--header", "Authorization: Bearer ${LUMEN_MCP_AUTH_TOKEN}"],
-      "env": { "LUMEN_MCP_AUTH_TOKEN": "<token>" }
+               "--header", "Authorization: Bearer ${LUMITRACE_MCP_AUTH_TOKEN}"],
+      "env": { "LUMITRACE_MCP_AUTH_TOKEN": "<token>" }
     }
   }
 }
@@ -252,23 +252,23 @@ static token through the `mcp-remote` bridge:
 ```json
 {
   "mcpServers": {
-    "lumen": {
-      "command": "/path/to/lumen/.tools/bin/uv",
-      "args": ["--directory", "/path/to/lumen", "run", "lumen-lens", "--transport", "stdio"]
+    "lumitrace": {
+      "command": "/path/to/lumitrace/.tools/bin/uv",
+      "args": ["--directory", "/path/to/lumitrace", "run", "lumitrace-lens", "--transport", "stdio"]
     }
   }
 }
 ```
 
 Remote with the static token (works in `token` mode, and in `oauth` mode when
-`LUMEN_MCP_AUTH_TOKEN` is set):
+`LUMITRACE_MCP_AUTH_TOKEN` is set):
 
 ```json
 {
   "mcpServers": {
-    "lumen": {
+    "lumitrace": {
       "url": "https://journal.example.com/mcp",
-      "headers": { "Authorization": "Bearer ${env:LUMEN_MCP_AUTH_TOKEN}" }
+      "headers": { "Authorization": "Bearer ${env:LUMITRACE_MCP_AUTH_TOKEN}" }
     }
   }
 }
@@ -298,5 +298,5 @@ Or leave out `headers` in `oauth` mode and Cursor runs the OAuth sign-in itself.
   clients registering with `token_endpoint_auth_method: none` are still accepted.
 * Single process only (pending sign-ins and codes are in memory). Password only, no second
   factor. No per-tool consent screen.
-* ChatGPT "deep research" expects `search`/`fetch` tools with a fixed shape; Lumen's tools are
+* ChatGPT "deep research" expects `search`/`fetch` tools with a fixed shape; Lumitrace's tools are
   for developer-mode connectors and are not shaped for deep research.

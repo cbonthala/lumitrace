@@ -4,10 +4,10 @@ import datetime as dt
 import json
 import sqlite3
 
-from lumen.frames.dayfile import day_file_path, parse, render, system_path
-from lumen.frames.storage.local import LocalStorage
-from lumen.index.schema import META_SYNC_TOKEN, get_meta
-from lumen.spectrum.core import META_RETRY_PATHS, Indexer
+from lumitrace.frames.dayfile import day_file_path, parse, render, system_path
+from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.index.schema import META_SYNC_TOKEN, get_meta
+from lumitrace.spectrum.core import META_RETRY_PATHS, Indexer
 from tests.spectrum.conftest import RecordingEmbedder, make_day, write_day
 
 D1 = dt.date(2026, 10, 10)
@@ -259,7 +259,7 @@ def test_index_paths_handles_nudged_paths(indexer: Indexer, storage: LocalStorag
 
 def test_bad_sync_token_falls_back_to_full_scan(indexer: Indexer, storage: LocalStorage) -> None:
     write_day(storage, make_day(D1))
-    from lumen.index.schema import set_meta
+    from lumitrace.index.schema import set_meta
 
     with indexer.conn:
         set_meta(indexer.conn, META_SYNC_TOKEN, "gdrive-token-from-another-backend")

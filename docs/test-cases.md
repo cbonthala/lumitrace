@@ -6,7 +6,7 @@ is the test's name, so you can find it in the file listed under the section head
 
 ## What the tests cover
 
-The tests check the three Lumen programs and the shared pieces they rely on:
+The tests check the three Lumitrace programs and the shared pieces they rely on:
 
 * the **Prism** (recording API), which receives recordings, notes and photos from the
   Flash shortcuts on the iPhone and writes the day's journal file;
@@ -37,7 +37,7 @@ export UV_PYTHON_INSTALL_DIR=$PWD/.tools/python UV_CACHE_DIR=$PWD/.tools/cache
 Two tests skip themselves when the computer lacks a tool: the real audio compression test
 (needs ffmpeg or afconvert able to make AAC audio) and the HEIC photo test (needs a HEIC
 encoder). Tests marked `network`, which would need real credentials, are skipped unless
-`LUMEN_RUN_NETWORK_TESTS=1` is set. There are none at the moment.
+`LUMITRACE_RUN_NETWORK_TESTS=1` is set. There are none at the moment.
 
 **Keeping this up to date.** `tests/test_docs_test_cases.py` fails if a test exists that is not
 described here (or a test described here no longer exists). When you add or change a test,
@@ -52,7 +52,7 @@ add or update its line in the right section.
   member, highlights), the journal, your own **My notes** section, and the raw **transcript**
   of each capture.
 * **Entry date**: the day a capture belongs to. Anything before 4 a.m. counts as the day before.
-* **Snapshot**: an exact copy of the day file as Lumen last wrote it, kept in
+* **Snapshot**: an exact copy of the day file as Lumitrace last wrote it, kept in
   `_system/generated/`. Comparing it with the live file shows what you edited.
 * **Index**: a SQLite database Spectrum builds from the day files so they can be searched.
   It can always be rebuilt from the day files.
@@ -62,9 +62,9 @@ add or update its line in the right section.
   meaning" in addition to keyword search.
 * **Nudge**: a small message from the Prism telling Spectrum "these files just
   changed, index them now".
-* **Edit signal**: a record that you changed something Lumen wrote (for example the mood or a
-  journal sentence), used to improve Lumen later.
-* **MCP**: the protocol AI apps use to call Lumen's tools (`search`, `get_day`,
+* **Edit signal**: a record that you changed something Lumitrace wrote (for example the mood or a
+  journal sentence), used to improve Lumitrace later.
+* **MCP**: the protocol AI apps use to call Lumitrace's tools (`search`, `get_day`,
   `query_facts`, `on_this_day`, `feedback`).
 
 ## Contents
@@ -76,7 +76,7 @@ add or update its line in the right section.
 | [Spectrum](#spectrum-the-indexer) | Incremental and full sync, passages, edit signals, rebuilds, backups, the nudge service, the command line | Real Google Drive change feed, real embedding providers, long-running polling over days |
 | [Lens](#lens-the-mcp-server) | All five tools, hybrid search, dates, feedback, token and OAuth logins | The real Claude, ChatGPT and Cursor connectors; answer quality of a real AI app |
 | [Frames: day files](#frames-day-files) | Paths, the 4 a.m. rule, reading and writing without losing anything, spotting your edits, merge rules | Opening the files in Obsidian |
-| [Frames: storage](#frames-storage) | Local folder storage and Google Drive storage against an in-memory imitation | The real Google Drive API, the `lumen-drive-login` sign-in |
+| [Frames: storage](#frames-storage) | Local folder storage and Google Drive storage against an in-memory imitation | The real Google Drive API, the `lumitrace-drive-login` sign-in |
 | [Index schema](#index-schema) | Tables, keyword and vector search, clean-up rules, what survives a reset | Index size and speed with years of entries |
 | [Config and shared helpers](#config-and-shared-helpers) | Settings, `.env.example`, fake embeddings, nudges, this catalog's completeness | Real embedding providers |
 | [Entry points](#entry-points) | The programs start and their commands exist | Running them in Docker |
@@ -96,7 +96,7 @@ All three programs run inside the test, sharing one temporary storage folder. Sp
 is the fake one (the uploaded bytes are the "spoken" words), fact extraction is a scripted
 stand-in, the journal is written by the built-in `fake` model, and audio compression behaves as
 on a computer without audio tools (the original file is kept). Only Leo is listed as family
-(`LUMEN_FAMILY`). The story:
+(`LUMITRACE_FAMILY`). The story:
 
 1. **Capture.** At 9:30 p.m. on Saturday, October 10, 2026, a *Log My Day* recording about a
    morning run with Maya arrives with a photo and a location (Austin). Then a quick note about
@@ -225,7 +225,7 @@ File: `tests/prism/test_pipeline.py`
 
 - Checks that processing the same capture again (for example after a crash) does not add a second entry or audio file; it only regenerates the journal and says so in a warning. <sub>`test_reprocessing_a_saved_capture_does_not_duplicate_it`</sub>
 - Checks that when a recording contains no words, the AI steps are skipped entirely. <sub>`test_empty_transcript_skips_generation`</sub>
-- Checks that the built-in `fake` AI model writes a simple journal (the note's text under "Summary") without any provider, so Lumen can be tried offline. <sub>`test_fake_llm_model_runs_offline`</sub>
+- Checks that the built-in `fake` AI model writes a simple journal (the note's text under "Summary") without any provider, so Lumitrace can be tried offline. <sub>`test_fake_llm_model_runs_offline`</sub>
 
 ### Activity records
 
@@ -326,10 +326,10 @@ File: `tests/spectrum/test_passages.py`
 
 File: `tests/spectrum/test_edit_signals.py`
 
-- Checks that nothing is recorded when the day file matches what Lumen last wrote. <sub>`test_no_signals_when_file_matches_snapshot`</sub>
+- Checks that nothing is recorded when the day file matches what Lumitrace last wrote. <sub>`test_no_signals_when_file_matches_snapshot`</sub>
 - Checks that your changes to the mood, people, journal, notes, title and a transcript are each recorded separately with the before and after values (plus a line-by-line comparison for longer text) and the prompt and model versions that wrote the original, and that the day is marked as edited. <sub>`test_owner_edits_become_signals`</sub>
 - Checks that saving the same edit again doesn't record it twice, a further edit to the same part replaces the earlier record, and undoing the edit removes it. <sub>`test_signals_are_deduplicated_and_superseded`</sub>
-- Checks that a new entry added by Lumen (before its snapshot is updated) is not mistaken for your edit. <sub>`test_new_capture_is_not_an_edit`</sub>
+- Checks that a new entry added by Lumitrace (before its snapshot is updated) is not mistaken for your edit. <sub>`test_new_capture_is_not_an_edit`</sub>
 - Checks that edits are not worked out against an out-of-date snapshot from an earlier generation. <sub>`test_stale_snapshot_is_not_compared`</sub>
 - Checks that when only the snapshot changes, the edit records are worked out again without re-indexing the day. <sub>`test_snapshot_change_alone_refreshes_signals`</sub>
 - Checks that rebuilding the index, or wiping its rebuildable parts, keeps the recorded edits without duplicating them. <sub>`test_rebuild_keeps_signals_without_duplicates`</sub>
@@ -343,7 +343,7 @@ File: `tests/spectrum/test_rebuild.py`
 - Checks that a rebuild repairs a damaged index (missing passages) by indexing every day again, while keeping feedback and edit records and noting when the rebuild happened. <sub>`test_rebuild_reindexes_everything_and_keeps_signals`</sub>
 - Checks that changing the embedding size triggers an automatic rebuild on the next sync, after which search by meaning works at the new size, feedback is kept, and the MCP server can open the index with the new setting. <sub>`test_dimension_change_triggers_rebuild`</sub>
 - Checks that switching to a different embedding model triggers an automatic rebuild and records the new model. <sub>`test_model_change_triggers_rebuild`</sub>
-- Checks that an index made by an older Lumen (schema version 1) is rebuilt automatically on the next sync, fills in what the old version left out, records the new schema version, keeps feedback, and is not rebuilt again after that. <sub>`test_older_schema_version_triggers_rebuild`</sub>
+- Checks that an index made by an older Lumitrace (schema version 1) is rebuilt automatically on the next sync, fills in what the old version left out, records the new schema version, keeps feedback, and is not rebuilt again after that. <sub>`test_older_schema_version_triggers_rebuild`</sub>
 - Checks that a rebuild with no day files works and records the embedding model. <sub>`test_rebuild_on_empty_storage`</sub>
 
 ### Backups
@@ -525,7 +525,7 @@ File: `tests/frames/test_dayfile.py`
 
 - Checks the folder and file names: `2026/10/2026-10-10/2026-10-10.md`, audio named by date and time (a 1:30 a.m. recording goes in the previous day's folder), photos `photo-01.jpg` (with three digits when needed, starting at 1), and the snapshot and system paths. <sub>`test_path_conventions`</sub>
 - Checks that new photos continue after the highest existing number, and that a file name already taken gets `-2`, `-3` and so on. <sub>`test_next_photo_names_and_unique_names`</sub>
-- Checks that only correctly placed day files count as day files (the month folder, day folder and file name must agree, the date must exist, and the path must start at the Lumen folder), and that files are sorted into day files, audio, photos, system files and others. <sub>`test_parse_day_file_path_and_classify`</sub>
+- Checks that only correctly placed day files count as day files (the month folder, day folder and file name must agree, the date must exist, and the path must start at the Lumitrace folder), and that files are sorted into day files, audio, photos, system files and others. <sub>`test_parse_day_file_path_and_classify`</sub>
 
 ### Which day an entry belongs to
 
@@ -546,7 +546,7 @@ File: `tests/frames/test_dayfile.py`
 File: `tests/frames/test_dayfile.py`
 
 - Checks that the sample day file is read correctly (facts, title, journal, notes, three entries with audio and photos) and written back exactly the same, character for character. <sub>`test_sample_fixture_roundtrips`</sub>
-- Checks that a day file written under an earlier project name (LifeLog's `lifelog:` markers and `lifelog_format` key, or Bookshelf's `bookshelf:` markers and `bookshelf_format` key; run once for each) is read exactly like a new one, and is written back with the new Lumen names. <sub>`test_parses_files_written_before_the_rename`</sub>
+- Checks that a day file written under an earlier project name (LifeLog's `lifelog:` markers and `lifelog_format` key, Bookshelf's `bookshelf:` markers and `bookshelf_format` key, or Lumen's `lumen:` markers and `lumen_format` key; run once for each) is read exactly like a new one, and is written back with the new Lumitrace names. <sub>`test_parses_files_written_before_the_rename`</sub>
 - Checks that tricky content survives reading and writing unchanged: apostrophes and accents, values that look special ("null", "a: b"), comment arrows (`-->`), headings in notes, picture embeds, empty entries, and extra fields of your own such as tags. <sub>`test_roundtrip_model_equality_with_tricky_content`</sub>
 - Checks that the example in `docs/frames-format.md` is identical to the sample file the tests use. <sub>`test_docs_example_matches_fixture`</sub>
 - Checks that a day file's parts are written in the documented order: front matter, title, "At a glance" facts (Food, Places, People, Activities, Family, Highlights), journal, My notes, Transcript. <sub>`test_render_layout_markers_in_order`</sub>
@@ -571,7 +571,7 @@ File: `tests/frames/test_dayfile.py`
 File: `tests/frames/test_dayfile.py`
 
 - Checks (5 cases) that changing the mood, adding a meal item, deleting a place, changing the title, or rewording the journal marks the day as edited by you. <sub>`test_edits_to_facts_title_or_journal_are_detected`</sub>
-- Checks that changing your own notes, or the record of which prompt was used, does not count as editing what Lumen wrote. <sub>`test_edits_to_notes_or_provenance_are_not_user_edits`</sub>
+- Checks that changing your own notes, or the record of which prompt was used, does not count as editing what Lumitrace wrote. <sub>`test_edits_to_notes_or_provenance_are_not_user_edits`</sub>
 
 ### Adding an entry to a day
 
@@ -597,7 +597,7 @@ File: `tests/frames/test_dayfile.py`
 
 **Covered:** the local folder backend and the Google Drive backend, the latter against an
 in-memory imitation of Drive. **Not covered:** the real Google Drive service and the
-`lumen-drive-login` sign-in.
+`lumitrace-drive-login` sign-in.
 
 ### Local folder storage
 
@@ -610,7 +610,7 @@ File: `tests/frames/storage/test_local.py`
 - Checks that "exists" is true only for files (not folders) and that the size is reported. <sub>`test_exists_and_stat`</sub>
 - Checks that listing includes subfolders, is sorted, and that a folder filter matches whole folder names (`2026/10` doesn't include `2026/100`). <sub>`test_list_is_recursive_sorted_and_prefix_is_a_folder`</sub>
 - Checks that hidden files and folders (such as `.obsidian` and `.DS_Store`) are ignored in listings and changes. <sub>`test_hidden_files_are_ignored`</sub>
-- Checks that deleting the last file in a folder removes the empty folders, but never the Lumen folder itself. <sub>`test_delete_removes_empty_folders`</sub>
+- Checks that deleting the last file in a folder removes the empty folders, but never the Lumitrace folder itself. <sub>`test_delete_removes_empty_folders`</sub>
 - Checks (5 cases) that unsafe or invalid paths are refused: absolute paths, paths that climb out with `..`, empty paths and backslashes. <sub>`test_invalid_paths_rejected`</sub>
 - Checks that paths are tidied (double slashes, `./`, a trailing slash). <sub>`test_normalize_path`</sub>
 - Checks that writing a file leaves no temporary files behind. <sub>`test_atomic_write_leaves_no_temp_files`</sub>
@@ -623,7 +623,7 @@ File: `tests/frames/storage/test_local.py`
 
 File: `tests/frames/storage/test_gdrive.py`
 
-- Checks that the Lumen folder is created once in My Drive and reused afterwards. <sub>`test_root_folder_created_once_in_my_drive`</sub>
+- Checks that the Lumitrace folder is created once in My Drive and reused afterwards. <sub>`test_root_folder_created_once_in_my_drive`</sub>
 - Checks that writing a day file creates the year, month and day folders, saves it as Markdown, and reads back. <sub>`test_write_creates_folders_and_reads_back`</sub>
 - Checks that writing again updates the same Drive file instead of making a copy. <sub>`test_overwrite_updates_same_file`</sub>
 - Checks that "exists" is true only for files, sizes are reported, and missing files give "not found". <sub>`test_exists_stat_missing`</sub>
@@ -635,8 +635,8 @@ File: `tests/frames/storage/test_gdrive.py`
 - Checks that after a restart, a deletion is still reported under the file's path. <sub>`test_changes_after_restart_map_deletions`</sub>
 - Checks that renaming a file in Drive is reported as the old name deleted and the new name added. <sub>`test_rename_by_owner_is_delete_plus_upsert`</sub>
 - Checks that renaming a folder reports every file inside it as moved. <sub>`test_folder_rename_moves_children`</sub>
-- Checks that changes outside the Lumen folder, and hidden files, are ignored. <sub>`test_changes_outside_root_are_ignored`</sub>
-- Checks that choosing Google Drive before signing in gives an error telling you to run `lumen-drive-login`. <sub>`test_get_storage_gdrive_without_token_errors`</sub>
+- Checks that changes outside the Lumitrace folder, and hidden files, are ignored. <sub>`test_changes_outside_root_are_ignored`</sub>
+- Checks that choosing Google Drive before signing in gives an error telling you to run `lumitrace-drive-login`. <sub>`test_get_storage_gdrive_without_token_errors`</sub>
 
 ---
 
@@ -669,11 +669,11 @@ completeness of this catalog. **Not covered:** real embedding providers.
 
 File: `tests/test_config.py`
 
-- Checks the defaults with no environment variables: Chicago time, 4 a.m. switch-over, local storage, a Drive folder named "Lumen", and embedding size 1536. <sub>`test_defaults_without_env`</sub>
-- Checks that `LUMEN_*` environment variables override the defaults and that the API token is hidden when settings are printed. <sub>`test_env_overrides`</sub>
+- Checks the defaults with no environment variables: Chicago time, 4 a.m. switch-over, local storage, a Drive folder named "Lumitrace", and embedding size 1536. <sub>`test_defaults_without_env`</sub>
+- Checks that `LUMITRACE_*` environment variables override the defaults and that the API token is hidden when settings are printed. <sub>`test_env_overrides`</sub>
 - Checks that an unknown timezone, a switch-over hour of 24, or an unsupported storage type are refused. <sub>`test_validation`</sub>
 - Checks that `.env.example` lists every setting, and nothing that doesn't exist. <sub>`test_env_example_documents_every_setting`</sub>
-- Checks that `LUMEN_FAMILY` is read as a list of names: spaces trimmed, empty entries and repeats (ignoring case) dropped, and an empty setting means no family. <sub>`test_family_members_from_a_comma_separated_list`</sub>
+- Checks that `LUMITRACE_FAMILY` is read as a list of names: spaces trimmed, empty entries and repeats (ignoring case) dropped, and an empty setting means no family. <sub>`test_family_members_from_a_comma_separated_list`</sub>
 
 ### Embeddings and nudges
 
@@ -704,5 +704,5 @@ File: `tests/test_entrypoints.py`
 - Checks that the Prism (recording API) starts and its health page answers "ok". <sub>`test_prism_health`</sub>
 - Checks that the Lens (MCP server) starts and offers exactly the five tools. <sub>`test_lens_lists_tools`</sub>
 - Checks that the Spectrum (indexer) command line shows its help and exits normally. <sub>`test_spectrum_cli_help`</sub>
-- Checks that the Prism command line shows its help (`lumen-prism --help`) and exits without starting the server. <sub>`test_prism_cli_help`</sub>
-- Checks that the four installed commands (`lumen-prism`, `lumen-spectrum`, `lumen-lens`, `lumen-drive-login`) point to real functions. <sub>`test_console_scripts_resolve`</sub>
+- Checks that the Prism command line shows its help (`lumitrace-prism --help`) and exits without starting the server. <sub>`test_prism_cli_help`</sub>
+- Checks that the four installed commands (`lumitrace-prism`, `lumitrace-spectrum`, `lumitrace-lens`, `lumitrace-drive-login`) point to real functions. <sub>`test_console_scripts_resolve`</sub>

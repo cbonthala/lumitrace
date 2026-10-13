@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from lumen.frames import dayfile as D
+from lumitrace.frames import dayfile as D
 
 TZ = ZoneInfo("America/Chicago")
 DAY = dt.date(2026, 10, 10)
@@ -52,7 +52,7 @@ def test_parse_day_file_path_and_classify() -> None:
     assert D.parse_day_file_path("2026/11/2026-10-10/2026-10-10.md") is None
     assert D.parse_day_file_path("2026/10/2026-10-10/2026-10-11.md") is None
     assert D.parse_day_file_path("2026/02/2026-02-30/2026-02-30.md") is None
-    assert D.parse_day_file_path("Lumen/2026/10/2026-10-10/2026-10-10.md") is None
+    assert D.parse_day_file_path("Lumitrace/2026/10/2026-10-10/2026-10-10.md") is None
     assert D.date_of_path("2026/10/2026-10-10/photo-01.jpg") == DAY
     assert D.classify_path("2026/10/2026-10-10/2026-10-10.md") == "day"
     assert D.classify_path("2026/10/2026-10-10/2026-10-10-2130.m4a") == "audio"
@@ -93,7 +93,7 @@ def test_entry_date_converts_timezones_and_naive() -> None:
 def test_new_day_defaults() -> None:
     day = D.DayFile.new(DAY)
     assert day.title == "Saturday, October 10, 2026"
-    assert day.meta.lumen_format == D.FORMAT_VERSION
+    assert day.meta.lumitrace_format == D.FORMAT_VERSION
     assert day.meta.generated_hash is None
     assert not day.is_user_edited()
 
@@ -136,12 +136,12 @@ def test_sample_fixture_roundtrips(sample_day_markdown: str) -> None:
     assert D.render(day) == sample_day_markdown
 
 
-@pytest.mark.parametrize("old_name", ["lifelog", "bookshelf"])
+@pytest.mark.parametrize("old_name", ["lifelog", "bookshelf", "lumen"])
 def test_parses_files_written_before_the_rename(sample_day_markdown: str, old_name: str) -> None:
-    legacy = sample_day_markdown.replace("<!-- lumen:", f"<!-- {old_name}:").replace(
-        "lumen_format:", f"{old_name}_format:"
+    legacy = sample_day_markdown.replace("<!-- lumitrace:", f"<!-- {old_name}:").replace(
+        "lumitrace_format:", f"{old_name}_format:"
     )
-    assert "lumen" not in legacy
+    assert "lumitrace" not in legacy
     day = D.parse(legacy)
     assert day == D.parse(sample_day_markdown)
     assert day.meta.model_extra == {}
@@ -156,12 +156,12 @@ def test_reads_format_1_files_and_writes_format_2(
     assert old.facts == new.facts.model_copy(update={"places": [], "family": []})
     assert old.facts.highlights == ["Leo lost his first tooth", "Finished a book"]
     assert old.meta.model_extra == {}
-    assert old.meta.lumen_format == D.FORMAT_VERSION
+    assert old.meta.lumitrace_format == D.FORMAT_VERSION
     assert not old.is_user_edited()  # matched the format 1 hash, so it was re-stamped
     rendered = D.render(old)
     front = rendered.split("\n---\n", 1)[0]
     assert "mood" not in front and "meals" not in front
-    assert "lumen_format: 2" in front
+    assert "lumitrace_format: 2" in front
     assert "- **Mood:** happy (4/5)" in rendered
     assert D.parse(rendered) == old
 
@@ -169,7 +169,7 @@ def test_reads_format_1_files_and_writes_format_2(
 def test_facts_section_tolerates_hand_edits() -> None:
     md = (
         "---\ndate: 2026-10-10\n---\n\n# Title\n\n## At a glance\n\n"
-        "<!-- lumen:facts:start -->\n"
+        "<!-- lumitrace:facts:start -->\n"
         "Mood: great\n"
         "* **City**: Austin\n"
         "- Sleep: 8 hours\n\n"
@@ -177,7 +177,7 @@ def test_facts_section_tolerates_hand_edits() -> None:
         "#### places visited\nthe library\n\n"
         "### Activities\n- swim (25 minutes)\n- yoga (1 hour)\n\n"
         "### Dreams\n- flying over the lake\n"
-        "<!-- lumen:facts:end -->\n"
+        "<!-- lumitrace:facts:end -->\n"
     )
     day = D.parse(md)
     facts = day.facts
@@ -199,7 +199,7 @@ def test_facts_section_tolerates_hand_edits() -> None:
 def test_family_blocks_tolerate_hand_edits() -> None:
     md = (
         "---\ndate: 2026-10-10\n---\n\n# Title\n\n## At a glance\n\n"
-        "<!-- lumen:facts:start -->\n"
+        "<!-- lumitrace:facts:start -->\n"
         "### Family events\n"
         "- typed before any name\n\n"
         "#### Leo\n"
@@ -214,7 +214,7 @@ def test_family_blocks_tolerate_hand_edits() -> None:
         "Mood: grumpy\n\n"
         "#### Nobody\n\n"
         "### Highlights\n- a good day\n"
-        "<!-- lumen:facts:end -->\n"
+        "<!-- lumitrace:facts:end -->\n"
     )
     day = D.parse(md)
     leo, sam, nobody = day.facts.family
@@ -346,7 +346,7 @@ def test_generated_journal_gets_the_fixed_headings() -> None:
 def test_fact_keys_in_the_front_matter_of_a_format_2_file_are_kept(
     sample_day_markdown: str,
 ) -> None:
-    md = sample_day_markdown.replace("lumen_format: 2", "lumen_format: 2\nmood: sleepy")
+    md = sample_day_markdown.replace("lumitrace_format: 2", "lumitrace_format: 2\nmood: sleepy")
     day = D.parse(md)
     assert day.facts.mood == "happy"
     assert day.meta.model_extra == {"mood": "sleepy"}

@@ -16,12 +16,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from lumen.config import Settings
-from lumen.frames.storage.local import LocalStorage
-from lumen.prism.app import create_app
-from lumen.prism.pipeline.audio import AudioResult
-from lumen.prism.pipeline.llm import LLMClient
-from lumen.prism.pipeline.processor import CaptureProcessor
+from lumitrace.config import Settings
+from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.prism.app import create_app
+from lumitrace.prism.pipeline.audio import AudioResult
+from lumitrace.prism.pipeline.llm import LLMClient
+from lumitrace.prism.pipeline.processor import CaptureProcessor
 
 ROOT = Path(__file__).resolve().parents[2]
 TOKEN = "test-token-0123456789"
