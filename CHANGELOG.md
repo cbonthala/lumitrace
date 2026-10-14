@@ -142,6 +142,10 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
   retry). Phone layout with Capture/History/Settings tabs; two columns from 900 px. Captures
   are kept in the browser (IndexedDB) until the Prism confirms them, and a service worker lets
   the app open offline. Plain HTML/CSS/JS in `lumitrace/prism/web/`, no build step.
+- **Flash web app: Design page**: a new **Design** tab (the **How it works** button in the
+  header on a laptop) with an animated diagram (`flow.svg`) of Flash → Prism → Frames →
+  Spectrum → Lens and a short card per module. Layout clean-up: phone in landscape uses two columns,
+  600–899 px widths are centred, side margins respect the notch, and the tab bar is centred.
 - **Username/password sign-in** for the web app: `POST /login`, `POST /logout`, `GET /session`.
   New settings `LUMITRACE_FLASH_USERNAME`, `LUMITRACE_FLASH_PASSWORD` (at least 10 characters),
   `LUMITRACE_FLASH_SESSION_DAYS` (90). A signed, HttpOnly, `SameSite=Strict` cookie works on

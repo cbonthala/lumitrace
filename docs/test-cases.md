@@ -160,6 +160,7 @@ File: `tests/prism/test_auth.py`
 File: `tests/prism/test_flash.py`
 
 - Checks that the web app page opens without signing in, has its Home Screen icon and app manifest, sends a security policy that stops other sites from framing it, that `/flash` and `/` lead to it, and that its script, styles, offline helper and icons are served. <sub>`test_web_app_is_served_without_a_login`</sub>
+- Checks that the app has a Design page and a button that opens it, that the page shows the "How it works" diagram once, and that the diagram is served as an image naming the Flash, Prism, Frames, Spectrum and Lens, with no script inside. <sub>`test_how_it_works_diagram_and_design_page`</sub>
 - Checks that signing in is refused (503, naming the settings to fill in) while no username and password are configured, and that the app is told sign-in is not available. <sub>`test_sign_in_is_off_until_configured`</sub>
 - Checks that the right username and password set a session cookie that scripts cannot read, is only sent to this site and over HTTPS, and lasts 90 days; and that with it the app can send a note, follow its status, read the weekly summary and list recent captures, just like with the token. <sub>`test_sign_in_sets_a_session_cookie_that_works_like_the_token`</sub>
 - Checks that a wrong username or password is refused without a cookie, and that after five wrong attempts even the right password is refused for a while (429). <sub>`test_wrong_password_and_lockout`</sub>

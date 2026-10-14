@@ -40,10 +40,14 @@ You can use both; captures from either land in the same day file.
 | **Filing under** | choose another day (the `date` field); leave it on today otherwise |
 | **This week** | days logged in the last 7 days, entries in them, and your streak (`GET /summary`) |
 | **Recent captures** / History | each capture's status from the last 7 days: Waiting to send, Queued, Writing journal…, In journal, or Failed (tap to retry) (`GET /captures`) |
+| **Design** (tab on a phone, **How it works** button on a laptop) | an animated diagram of the Flash → Prism → Frames → Spectrum → Lens flow and one short card per module: what it does and where you see it in the app |
 | **Settings** | place name and location switch (saved on the device only), sign out |
 
-On a phone the screen has three tabs (Capture, History, Settings); on a laptop (900 px and
-wider) the capture cards and the history list sit side by side.
+On a phone the screen has four tabs (Capture, History, Design, Settings). Turned sideways, the
+Capture page uses two columns (record next to the note) so the record button stays on the first
+screen. From 600 to 899 px the single column is centred at 640 px. On a laptop (900 px and
+wider) the capture cards and the history list sit side by side, and the **How it works** button
+in the header opens the Design page.
 
 **Offline:** every capture is saved in the browser (IndexedDB) before it is uploaded and removed
 only after the Prism confirms it. Without a connection the app still opens (a service worker

@@ -22,6 +22,7 @@
     <div class="brand"><div class="logo" aria-hidden="true"></div>Lumitrace <span class="muted">Flash</span></div>
     <div class="top-right">
       <div class="conn" id="conn"><span class="dot"></span><span id="conn-text">Connecting…</span></div>
+      <button class="pill-btn wide-only only-signed-in" type="button" data-go="design">△ How it works</button>
       <button class="icon-btn only-signed-in" id="gear" type="button" aria-label="Settings">⚙︎</button>
     </div>
   </header>
@@ -106,6 +107,50 @@
       <p class="empty muted" id="captures-empty" hidden>Nothing yet. Record your day or send a note.</p>
     </section>
 
+    <section class="design" data-tab="design">
+      <div class="title">
+        <div class="day">Design</div><h1>How it works</h1>
+        <button class="link-btn wide-only" type="button" data-go="capture">‹ Back to capture</button>
+      </div>
+      <section class="card">
+        <img class="flow-big" src="flow.svg" alt="A capture travels from the Flash through the Prism, Frames and Spectrum to the Lens." width="600" height="150">
+        <p class="muted small">A Flash captures the moment, the Prism splits it into its colors, each day
+          becomes a Frame, the Spectrum lays everything out in order, and the Lens lets you zoom into any day.</p>
+      </section>
+      <div class="modules">
+        <article class="card mod">
+          <div class="mod-head"><i class="swatch flash"></i><b>Flash</b><span>capture</span></div>
+          <p>This app and your iPhone Shortcuts. Sends your voice, notes, photos and place.
+            Offline captures wait on the device until you're back.</p>
+          <p class="here">Here: the Capture tab.</p>
+        </article>
+        <article class="card mod">
+          <div class="mod-head"><i class="swatch prism"></i><b>Prism</b><span>split</span></div>
+          <p>Turns a recording into a transcript, then facts, mood and a journal entry.
+            The audio and raw transcript are always kept.</p>
+          <p class="here">Here: “Writing journal…” → “In journal” in History.</p>
+        </article>
+        <article class="card mod">
+          <div class="mod-head"><i class="swatch frames"></i><b>Frames</b><span>day files</span></div>
+          <p>One Markdown file per day in Google Drive, readable in Obsidian. The source of truth;
+            your own edits are never overwritten.</p>
+          <p class="here">Here: “This week” counts them.</p>
+        </article>
+        <article class="card mod">
+          <div class="mod-head"><i class="swatch spectrum"></i><b>Spectrum</b><span>index</span></div>
+          <p>Watches the Frames and builds a search index by meaning and date. It can always be
+            rebuilt from the Frames.</p>
+          <p class="here">Runs on the server.</p>
+        </article>
+        <article class="card mod">
+          <div class="mod-head"><i class="swatch lens"></i><b>Lens</b><span>ask AI</span></div>
+          <p>The connector Claude and ChatGPT use to search your days. Answers come only from
+            your entries, with dates.</p>
+          <p class="here">In Claude or ChatGPT.</p>
+        </article>
+      </div>
+    </section>
+
     <section class="settings" data-tab="settings">
       <div class="title"><div class="day">This device</div><h1>Settings</h1></div>
       <section class="card">
@@ -134,6 +179,7 @@
   <nav class="tabs only-signed-in" aria-label="Sections">
     <button type="button" data-go="capture"><span>●</span>Capture</button>
     <button type="button" data-go="history"><span>☰</span>History</button>
+    <button type="button" data-go="design"><span>△</span>Design</button>
     <button type="button" data-go="settings"><span>⚙︎</span>Settings</button>
   </nav>
 </div>

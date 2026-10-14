@@ -89,6 +89,18 @@ def test_web_app_is_served_without_a_login(client: TestClient) -> None:
         assert client.get(f"/flash/{asset}").status_code == 200, asset
 
 
+def test_how_it_works_diagram_and_design_page(client: TestClient) -> None:
+    page = client.get("/flash/").text
+    assert 'data-go="design"' in page and 'data-tab="design"' in page
+    assert page.count('src="flow.svg"') == 1
+    diagram = client.get("/flash/flow.svg")
+    assert diagram.status_code == 200
+    assert diagram.headers["content-type"].startswith("image/svg+xml")
+    for name in ("Flash", "Prism", "Frames", "Spectrum", "Lens"):
+        assert f">{name}</text>" in diagram.text
+    assert "<script" not in diagram.text
+
+
 def test_sign_in_is_off_until_configured(client: TestClient) -> None:
     resp = client.post("/login", json={"username": USERNAME, "password": PASSWORD})
     assert resp.status_code == 503
