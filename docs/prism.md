@@ -1,6 +1,6 @@
 # Prism (recording API)
 
-The Prism takes what a Flash (the iPhone Shortcuts) captures and splits that one beam of raw
+The Prism takes what a Flash (the web app or the iPhone Shortcuts) captures and splits that one beam of raw
 voice into its colors: facts, journal, mood and transcript, written into the day's Frame (the
 day file). Command: `lumitrace-prism`; Docker service: `prism`. Owned by the
 prism work stream. Code: `lumitrace/prism/` (HTTP, inbox, worker) and
@@ -20,10 +20,13 @@ flowchart LR
 
 ## Endpoints
 
-All endpoints except `/health` need `Authorization: Bearer <LUMITRACE_API_TOKEN>`. A missing or
-wrong token gets `401` (with `WWW-Authenticate: Bearer`). If the server's token is missing, still
-`change-me` or shorter than 16 characters, it refuses everything with `503` (fails closed) and
-logs an error at start-up. The token is compared in constant time.
+All endpoints except `/health`, the Flash web app's files and its sign-in endpoints need
+`Authorization: Bearer <LUMITRACE_API_TOKEN>` **or** the Flash web app's session cookie (see
+*Flash web app endpoints*). A missing or wrong token gets `401` (with
+`WWW-Authenticate: Bearer`). If the server's token is missing, still `change-me` or shorter than
+16 characters, it refuses everything with `503` (fails closed) and logs an error at start-up. The
+token is compared in constant time. When an `Authorization` header is sent, only the token is
+checked (the cookie is ignored).
 
 ### `POST /recordings` (Log My Day)
 
@@ -101,6 +104,37 @@ Re-queues a `failed` capture whose upload is still in the inbox. `409` if it is 
 ### `GET /health`
 
 `{"status": "ok", "service": "api", "version": "0.1.0"}`, no token.
+
+### Flash web app endpoints
+
+Code: `lumitrace/prism/flash.py` (routes, summary), `lumitrace/prism/auth.py` (sessions), the
+app itself in `lumitrace/prism/web/` (ADR 0019; user guide: `docs/flash.md` → section 0).
+
+| Endpoint | Auth | What it does |
+|---|---|---|
+| `GET /flash/` | none | the web app (HTML, CSS, JS, service worker, manifest, icons); `GET /` and `GET /flash` redirect here. Sent with a strict `Content-Security-Policy` (same-origin only, no framing) |
+| `POST /login` | none | JSON `{"username": "...", "password": "..."}`. Right: `200` with `{"signed_in": true, "username", "sign_in_available", "version"}` and a session cookie. Wrong: `401` after 0.5 s. Five wrong attempts in 15 minutes: `429` until the window passes. Sign-in not set up: `503`. From another site (`Sec-Fetch-Site: cross-site`): `403` |
+| `POST /logout` | none | `204`; deletes the cookie |
+| `GET /session` | none | `{"signed_in", "username", "sign_in_available", "version"}` for the cookie sent (never an error) |
+| `GET /captures?days=7&limit=30` | token or cookie | the capture statuses (same shape as `GET /captures/{id}`) changed in the last `days` (1–60), newest capture first, at most `limit` (1–200). No journal content |
+| `GET /summary` | token or cookie | `{"today", "days": 7, "days_logged", "logged_dates", "captures", "streak"}` |
+
+**Sign-in** is on when `LUMITRACE_FLASH_USERNAME` is set, `LUMITRACE_FLASH_PASSWORD` is at least
+10 characters (not `change-me`) and `LUMITRACE_API_TOKEN` is valid; otherwise `POST /login`
+answers `503` and the start-up log says why (INFO). Both fields are compared in constant time.
+
+**Session cookie** `lumitrace_flash` = `v1.<expiry unix seconds>.<HMAC-SHA256 hex>`, keyed by a
+hash of the API token, username and password: changing any of them signs every browser out. No
+session is stored on the server. Attributes: `HttpOnly`, `SameSite=Strict`, `Path=/`,
+`Max-Age` = `LUMITRACE_FLASH_SESSION_DAYS` days, and `Secure` unless the request is plain HTTP to
+`localhost`/`127.0.0.1`. A request authenticated by the cookie that is not `GET`/`HEAD`/`OPTIONS`
+and carries `Sec-Fetch-Site: cross-site` is refused with `403`.
+
+**Summary:** `today` is the current journal day (timezone and rollover hour as for captures).
+`days_logged` and `logged_dates` are the days in the last 7 (today included) that have a day file;
+`captures` counts the transcript entries in those files; `streak` is the number of days in a row
+with a day file, ending today, or yesterday while today has none yet (looked up month by month,
+at most 24 months back).
 
 ### Errors
 
@@ -341,6 +375,7 @@ One JSON line per processing attempt, appended to the file for the month the att
 | Setting | Use here |
 |---|---|
 | `LUMITRACE_API_TOKEN` | bearer token; at least 16 characters (`openssl rand -hex 32`); if it is missing, `change-me` or short, every request except `/health` gets `503` |
+| `LUMITRACE_FLASH_USERNAME`, `LUMITRACE_FLASH_PASSWORD`, `LUMITRACE_FLASH_SESSION_DAYS` | Flash web app sign-in (password at least 10 characters) and how long it lasts (90 days) |
 | `LUMITRACE_API_HOST`, `LUMITRACE_API_PORT` | where uvicorn listens |
 | `LUMITRACE_API_MAX_UPLOAD_MB` | total size of one request (`413` above it) |
 | `LUMITRACE_AUDIO_BITRATE_KBPS` | AAC bitrate of the stored audio |

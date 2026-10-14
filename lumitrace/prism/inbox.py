@@ -129,6 +129,23 @@ class Inbox:
             self._cache[capture_id] = status
         return status.model_copy(deep=True)
 
+    def recent_statuses(self, since: dt.datetime, limit: int) -> list[CaptureStatus]:
+        """Statuses changed since ``since`` (by file time), newest capture first."""
+        found: list[CaptureStatus] = []
+        for info in self.storage.list(system_path(STATUS_DIR)):
+            name = info.path.rsplit("/", 1)[-1]
+            if info.modified < since or not name.endswith(".json"):
+                continue
+            try:
+                status = self.get_status(name.removesuffix(".json"))
+            except ValueError:
+                log.warning("unreadable capture status %s", info.path)
+                continue
+            if status is not None:
+                found.append(status)
+        found.sort(key=lambda s: s.captured_at, reverse=True)
+        return found[:limit]
+
     def put_status(self, status: CaptureStatus) -> None:
         status.updated_at = now_utc()
         self.storage.write_text(

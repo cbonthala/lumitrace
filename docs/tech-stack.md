@@ -24,6 +24,7 @@ The foundation every program uses (`lumitrace/config.py`, `lumitrace/logging_set
 
 | What | Version | Used for | Open source? |
 |---|---|---|---|
+| Flash web app (HTML, CSS, JavaScript) | | A page the Prism serves at `/flash/` for capturing from any browser and the iPhone Home Screen. No framework and no build step. Browser features it relies on: **MediaRecorder** and **getUserMedia** (record audio), **IndexedDB** (keep captures until the Prism confirms them), a **service worker** (open offline), **Screen Wake Lock** (keep the screen on while recording), **Geolocation** (optional location) and a web app manifest (Home Screen icon). Guide: `docs/flash.md` → section 0. | Yes (part of Lumitrace) |
 | Apple Shortcuts | | The iPhone side of Lumitrace, with no app to install. Example: **Log My Day** records your voice and uploads it to the Prism; **Quick Note** sends a typed note; **Send pending** retries uploads that failed offline. Build guide: `docs/flash.md`. | No (Apple) |
 | Tailscale iOS app | | Puts the iPhone on your private network so the shortcuts can reach the Prism at `https://lumitrace.<tailnet>.ts.net:8443`. With VPN On Demand it connects automatically. | Yes (BSD-3-Clause client) |
 

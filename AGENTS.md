@@ -19,7 +19,7 @@ plain descriptions (recording API, indexer, MCP server) are fine next to them.
 | Name | What it is | Code |
 |---|---|---|
 | Lumitrace | the project; one package, one Docker image | `lumitrace/` |
-| Flash | the iPhone Shortcuts (**Log My Day**, **Quick Note**, **Flash Config**, **Send pending**, **Send to Lumitrace**) | none in the repo; `docs/flash.md` |
+| Flash | the capture clients: the web app the Prism serves at `/flash/` (username/password sign-in, ADR 0019) and the iPhone Shortcuts (**Log My Day**, **Quick Note**, **Flash Config**, **Send pending**, **Send to Lumitrace**) | web app: `lumitrace/prism/web/`, `lumitrace/prism/flash.py` (owned by prism); Shortcuts: none in the repo; `docs/flash.md` |
 | Prism | recording API + processing pipeline: splits raw voice into facts, journal, mood, transcript | `lumitrace/prism/`, `lumitrace/prism/pipeline/`, `prompts/` |
 | Frames | the day files in storage (one Frame per day): format + storage layer | `lumitrace/frames/dayfile.py`, `lumitrace/frames/storage/` |
 | Spectrum | the indexer (SQLite index) | `lumitrace/spectrum/`; schema shared in `lumitrace/index/schema.py` |

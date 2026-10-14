@@ -137,10 +137,11 @@ on a computer without audio tools (the original file is kept). Only Leo is liste
 
 ## Prism: recording API and processing pipeline
 
-**Covered:** logging in, sending recordings and notes, entry dates, retries and recovery, never
+**Covered:** logging in, the Flash web app's sign-in and summary, sending recordings and notes, entry dates, retries and recovery, never
 overwriting your edits, AI fallbacks, audio and photo handling, speech-to-text options, prompts
 and activity records. **Not covered:** real speech and AI providers, real AWS, real iPhone
-Shortcuts and HEIC photos straight from a phone.
+Shortcuts and HEIC photos straight from a phone, and the web app's JavaScript (recording,
+offline queue) in a real browser.
 
 ### Logging in to the API
 
@@ -153,6 +154,22 @@ File: `tests/prism/test_auth.py`
 - Checks that if the server has no token configured, every request is refused with 503 ("not set up") instead of being let through. <sub>`test_unconfigured_token_fails_closed`</sub>
 - Checks that a placeholder token (`change-me`) or one that is too short also makes every request fail with 503, while the health page keeps working. <sub>`test_placeholder_or_short_token_fails_closed`</sub>
 - Checks that the token rule flags an empty, placeholder or short token and accepts a long random one. <sub>`test_token_problem`</sub>
+
+### The Flash web app
+
+File: `tests/prism/test_flash.py`
+
+- Checks that the web app page opens without signing in, has its Home Screen icon and app manifest, sends a security policy that stops other sites from framing it, that `/flash` and `/` lead to it, and that its script, styles, offline helper and icons are served. <sub>`test_web_app_is_served_without_a_login`</sub>
+- Checks that signing in is refused (503, naming the settings to fill in) while no username and password are configured, and that the app is told sign-in is not available. <sub>`test_sign_in_is_off_until_configured`</sub>
+- Checks that the right username and password set a session cookie that scripts cannot read, is only sent to this site and over HTTPS, and lasts 90 days; and that with it the app can send a note, follow its status, read the weekly summary and list recent captures, just like with the token. <sub>`test_sign_in_sets_a_session_cookie_that_works_like_the_token`</sub>
+- Checks that a wrong username or password is refused without a cookie, and that after five wrong attempts even the right password is refused for a while (429). <sub>`test_wrong_password_and_lockout`</sub>
+- Checks that an expired, altered, made-up or empty session cookie is refused, and that changing the password signs out every browser that signed in with the old one. <sub>`test_bad_or_old_sessions_are_refused`</sub>
+- Checks that another website cannot use the owner's signed-in browser to send something (403), while reading still works, the app itself can send, the token keeps working, and signing in from another site is refused. <sub>`test_cross_site_requests_with_a_session_are_refused`</sub>
+- Checks that signing out tells the browser to delete the session cookie. <sub>`test_logout_clears_the_cookie`</sub>
+- Checks that sign-in counts as not set up when the username is blank, the password is a placeholder or too short, or the API token is too short, and that a session cannot be valid while sign-in is off. <sub>`test_login_problem`</sub>
+- Checks that the recent-captures list needs a login, shows the newest capture first with its status and no journal text, and respects the limit and the allowed number of days. <sub>`test_recent_captures_newest_first`</sub>
+- Checks that the weekly summary counts the days with a day file in the last seven days, the entries in them, and the streak of days in a row up to today. <sub>`test_week_summary_counts_days_captures_and_streak`</sub>
+- Checks that the streak still counts while today has no entry yet, carries across the end of a month, drops to zero after a missed day, and that an empty journal gives all zeros. <sub>`test_streak_waits_for_today_and_crosses_months`</sub>
 
 ### Sending a recording
 

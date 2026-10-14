@@ -135,6 +135,21 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Prism (recording API)
 
+- **Flash web app** (ADR 0019) at `/flash/` (`/` redirects there): capture from any browser on
+  a phone or laptop and add it to the iPhone Home Screen. Record your day (with picked photos,
+  a place name and optional location), send quick notes, choose another day, see this week's
+  days logged, entries and streak, and follow each capture's status (tap a failed one to
+  retry). Phone layout with Capture/History/Settings tabs; two columns from 900 px. Captures
+  are kept in the browser (IndexedDB) until the Prism confirms them, and a service worker lets
+  the app open offline. Plain HTML/CSS/JS in `lumitrace/prism/web/`, no build step.
+- **Username/password sign-in** for the web app: `POST /login`, `POST /logout`, `GET /session`.
+  New settings `LUMITRACE_FLASH_USERNAME`, `LUMITRACE_FLASH_PASSWORD` (at least 10 characters),
+  `LUMITRACE_FLASH_SESSION_DAYS` (90). A signed, HttpOnly, `SameSite=Strict` cookie works on
+  every endpoint alongside the bearer token (`require_token` is now `require_auth`); changing
+  the password, username or API token signs every browser out. Five wrong passwords in 15
+  minutes lock sign-in; cookie requests from other sites that change something get `403`.
+- `GET /captures` (recent capture statuses, newest first) and `GET /summary` (days logged in
+  the last 7 days, captures in them, streak), for the web app.
 - **Prompts `extract_facts` v4, `write_journal` v3, `journal_addendum` v3** (ADR 0018): follow
   the original transcript when the machine translation disagrees (instead of dropping the
   detail), understand parents talking about themselves as "Dad"/"Nanna", always fill the

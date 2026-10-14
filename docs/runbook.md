@@ -32,9 +32,11 @@ and never paste real tokens or personal content here.
    spectrum`). Put HTTPS in front of the Prism (Tailscale or a reverse proxy,
    `docs/flash.md`) and of the Lens (`docs/lens.md`); in oauth mode set
    `LUMITRACE_MCP_PUBLIC_URL` to the Lens's public `https://` root.
-6. **Flash (iPhone Shortcuts):** build Flash Config, Log My Day, Quick Note, Send pending, Send to
-   Lumitrace and the nightly reminder (`docs/flash.md`). Send a test Quick Note and
-   check that the day file appears in Drive (and in Obsidian).
+6. **Flash:** set `LUMITRACE_FLASH_USERNAME` and `LUMITRACE_FLASH_PASSWORD` (10+ characters),
+   restart `prism`, open `https://<prism address>/flash/`, sign in and add it to the Home
+   Screen. Optionally build the Shortcuts too: Flash Config, Log My Day, Quick Note, Send
+   pending, Send to Lumitrace and the nightly reminder (`docs/flash.md`). Send a test Quick
+   Note and check that the day file appears in Drive (and in Obsidian).
 7. **Connect the AI app:** add the Lens as a connector in Claude or ChatGPT (oauth), or in
    Cursor / Claude Desktop (`docs/lens.md`). Turn off "use my chats for training" in that
    app. Ask about the test note and check that the answer cites its date.
@@ -45,6 +47,11 @@ and never paste real tokens or personal content here.
   restart `prism` (`docker compose up -d prism`), then update `token` in the **Flash Config**
   shortcut on the iPhone (the other shortcuts read it from there; `docs/flash.md`).
   Captures waiting in the phone's Flash Inbox are sent with the new token by Send pending.
+  Changing the token also signs every Flash web app browser out (sessions are signed with it).
+* **Flash web app password:** set `LUMITRACE_FLASH_PASSWORD` (and/or `LUMITRACE_FLASH_USERNAME`)
+  and restart `prism`. Every signed-in browser is signed out and asks for the new password;
+  captures waiting in a browser stay there and are sent after signing in again. After five wrong
+  passwords sign-in is locked for 15 minutes (restarting `prism` clears the lock).
 * **Lens token / owner password:** set `LUMITRACE_MCP_AUTH_TOKEN` or `LUMITRACE_MCP_OWNER_PASSWORD`,
   restart `lens`, reconnect the AI apps. Both must be 16+ characters (`openssl rand -hex 32`) or
   the server refuses to start.

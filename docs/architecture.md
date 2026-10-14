@@ -6,7 +6,7 @@ any day. (Why these names: decision 0042.)
 
 ```mermaid
 flowchart LR
-    Phone["Flash: iPhone Shortcuts"] -->|"POST /recordings, /notes"| Prism["Prism: recording API"]
+    Phone["Flash: web app or iPhone Shortcuts"] -->|"POST /recordings, /notes"| Prism["Prism: recording API"]
     Prism -->|"day file, snapshot, audio, photos, _system records"| Frames["Frames: Google Drive (or local)"]
     Prism -.->|"POST /nudge"| Spectrum["Spectrum: indexer"]
     Frames --> Obsidian["Obsidian"]
@@ -26,7 +26,7 @@ because `POST /nudge` has no authentication.
 
 | Name | Program | Code | Reference |
 |---|---|---|---|
-| Flash | iPhone Shortcuts (not in the repo) | none | `docs/flash.md` |
+| Flash | web app served by the Prism at `/flash/`, and iPhone Shortcuts (not in the repo) | `lumitrace/prism/web/`, `lumitrace/prism/flash.py` | `docs/flash.md` |
 | Prism | recording API, `lumitrace-prism` | `lumitrace/prism/`, `lumitrace/prism/pipeline/`, `prompts/` | `docs/prism.md` |
 | Spectrum | indexer, `lumitrace-spectrum` | `lumitrace/spectrum/` | `docs/spectrum.md` |
 | Lens | MCP server, `lumitrace-lens` | `lumitrace/lens/` | `docs/lens.md` |

@@ -8,6 +8,8 @@ Endpoints (details and examples: ``docs/prism.md``):
   optional fields.
 * ``GET /captures/{id}``, ``POST /captures/{id}/retry``: status of a capture / retry a failed one.
 * ``GET /health``: unauthenticated liveness check.
+* The Flash web app and its sign-in, recent-captures and summary endpoints:
+  :mod:`lumitrace.prism.flash`.
 
 Uploads are saved to the inbox in storage first and answered with ``202 Accepted``; a background
 worker does the slow work (``lumitrace.prism.worker``).
@@ -37,7 +39,8 @@ from lumitrace import __version__
 from lumitrace.config import Settings, get_settings
 from lumitrace.frames.dayfile import Capture, CaptureKind
 from lumitrace.frames.storage import Storage, get_storage
-from lumitrace.prism.auth import require_token, token_problem
+from lumitrace.prism.auth import login_problem, require_auth, token_problem
+from lumitrace.prism.flash import register_flash
 from lumitrace.prism.inbox import CAPTURE_ID_RE, CaptureStatus, Inbox, inbox_dir, now_utc
 from lumitrace.prism.pipeline.processor import CaptureProcessor, CaptureRequest, UploadedFile
 from lumitrace.prism.worker import DEFAULT_RETRY_DELAYS, CaptureWorker
@@ -363,6 +366,9 @@ def create_app(
                 "(generate one with `openssl rand -hex 32`)",
                 problem,
             )
+        sign_in = login_problem(settings)
+        if sign_in:
+            log.info("Flash web app sign-in is off: %s", sign_in)
         built = await anyio.to_thread.run_sync(services)
         await anyio.to_thread.run_sync(built.worker.resume)
         try:
@@ -375,7 +381,7 @@ def create_app(
     app.state.settings = settings
     app.state.services = None
     app.state.get_services = services
-    auth = [Depends(require_token)]
+    auth = [Depends(require_auth)]
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -428,6 +434,7 @@ def create_app(
         built.worker.submit(capture_id)
         return found
 
+    register_flash(app, settings, services, auth)
     return app
 
 

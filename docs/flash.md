@@ -1,8 +1,71 @@
-# Flash (iPhone Shortcuts)
+# Flash (web app and iPhone Shortcuts)
 
-A Flash captures the moment: a set of Apple Shortcuts, no app needed. They send everything to
-the Prism (the recording API; reference: `docs/prism.md`). Written for iOS 18 (most steps work
-on iOS 17; noted where not). Action names are as they appear in the Shortcuts action search.
+A Flash captures the moment. There are two ways to do it, and both send everything to the Prism
+(the recording API; reference: `docs/prism.md`):
+
+* **The Flash web app** (section 0): a page the Prism serves at `/flash/`. Open it in any
+  browser on your phone or laptop, sign in with a username and password, and add it to the
+  iPhone Home Screen. Nothing to build.
+* **Apple Shortcuts** (sections 1 to 11): for Siri, the Action Button, the share sheet,
+  today's photos picked automatically, and recording with the screen locked.
+
+You can use both; captures from either land in the same day file.
+
+## 0. The Flash web app
+
+**Set up (once, on the server):**
+
+1. In `.env` set `LUMITRACE_FLASH_USERNAME` and `LUMITRACE_FLASH_PASSWORD` (at least 10
+   characters; a passphrase is easiest to type on a phone). `LUMITRACE_API_TOKEN` must be set
+   too: it signs the sign-in sessions.
+2. Restart the Prism: `docker compose up -d prism`.
+3. Make the Prism reachable over HTTPS (section 1). Browsers only allow the microphone on HTTPS
+   (or `http://localhost`).
+
+**On the phone or laptop:**
+
+1. Open `https://<your address>/flash/` (on the Tailscale setup:
+   `https://<machine>.<tailnet>.ts.net:8443/flash/`) and sign in. iCloud Keychain or your
+   password manager can save the password.
+2. iPhone: Safari → **Share** → **Add to Home Screen**. It opens full screen like an app and
+   stays signed in for `LUMITRACE_FLASH_SESSION_DAYS` (90 days by default). On a laptop, use the
+   browser's **Install** or **Add to Dock** option, or a bookmark.
+
+**What it does:**
+
+| Part | What it does |
+|---|---|
+| **Log My Day** (big red button) | records audio; tap again to stop and send it to `POST /recordings` with the photos you picked, the place name and (if turned on) your location |
+| **Quick note** | type or dictate with the keyboard's microphone, add photos, send to `POST /notes` |
+| **Filing under** | choose another day (the `date` field); leave it on today otherwise |
+| **This week** | days logged in the last 7 days, entries in them, and your streak (`GET /summary`) |
+| **Recent captures** / History | each capture's status from the last 7 days: Waiting to send, Queued, Writing journal…, In journal, or Failed (tap to retry) (`GET /captures`) |
+| **Settings** | place name and location switch (saved on the device only), sign out |
+
+On a phone the screen has three tabs (Capture, History, Settings); on a laptop (900 px and
+wider) the capture cards and the history list sit side by side.
+
+**Offline:** every capture is saved in the browser (IndexedDB) before it is uploaded and removed
+only after the Prism confirms it. Without a connection the app still opens (a service worker
+keeps a copy), records, and shows "waiting to send"; it sends by itself when you're back online,
+when you reopen the app, every minute, or when you tap **Send now**. A capture the Prism refuses
+(for example too large) is marked "Not accepted"; tap it to remove it.
+
+**Limits of a web app on iPhone:**
+
+* Recording stops if the screen locks or you switch apps. The app asks iOS to keep the screen
+  on while recording; keep it in front.
+* No Siri, Action Button, Back Tap, share sheet or automations; use the Shortcuts for those.
+* Photos are picked by hand (the browser cannot read today's photos by itself).
+* Location is latitude and longitude only, with the place name you set in Settings; there is
+  no reverse geocoding.
+
+Sign-in details: `docs/prism.md` → Flash web app endpoints; decision: ADR 0019.
+
+---
+
+The rest of this guide is the Shortcuts. Written for iOS 18 (most steps work on iOS 17; noted
+where not). Action names are as they appear in the Shortcuts action search.
 
 You will build five Flash shortcuts and one automation:
 
@@ -40,8 +103,9 @@ so never use plain HTTP outside your home network). Two options:
 
 Put a reverse proxy with automatic certificates in front of port 8000, for example Caddy with a
 `Caddyfile` of `lumitrace.example.com { reverse_proxy localhost:8000 }`, and point the DNS name at
-the server. Only `POST /recordings`, `POST /notes`, `GET /captures/*` and `GET /health` need to be
-reachable. Every request without the token is refused.
+the server. The Shortcuts only need `POST /recordings`, `POST /notes`, `GET /captures/*` and
+`GET /health`; the web app also needs `/flash/*`, `/login`, `/logout`, `/session`, `/captures`
+and `/summary`. Every request without the token or a signed-in session is refused.
 
 Check it from Safari on the phone: `https://<address>/health` should show `{"status":"ok",...}`.
 

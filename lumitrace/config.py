@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     audio_bitrate_kbps: int = 32
     photo_max_dimension: int = 2048
     photo_jpeg_quality: int = Field(default=85, ge=1, le=95)
+    flash_username: str = ""
+    """Username for the Flash web app sign-in (``/flash/``); empty = sign-in turned off."""
+    flash_password: SecretStr = SecretStr("")
+    flash_session_days: int = Field(default=90, ge=1, le=400)
+    """How long a Flash web app sign-in lasts before the password is asked again."""
 
     # --- Storage -------------------------------------------------------------------------
     storage_backend: Literal["local", "gdrive"] = "local"

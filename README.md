@@ -17,7 +17,7 @@ Drive, which you read in Obsidian and can ask questions about from an AI app lik
 | Name | What it is | Where the code lives |
 |---|---|---|
 | **Lumitrace** | the whole project: one Python package, one Docker image | `lumitrace/` |
-| **Flash** | the iPhone Shortcuts you capture with (**Log My Day**, **Quick Note**, ...) | on your phone; build guide `docs/flash.md` |
+| **Flash** | what you capture with: the web app at `/flash/` (phone or laptop, add it to the Home Screen) and the iPhone Shortcuts (**Log My Day**, **Quick Note**, ...) | `lumitrace/prism/web/`; Shortcuts on your phone; guide `docs/flash.md` |
 | **Prism** | the recording API and processing pipeline: splits one beam of raw voice into its colors (facts, journal, mood, transcript) | `lumitrace/prism/` (pipeline in `lumitrace/prism/pipeline/`), `prompts/` |
 | **Frames** | the day files in Google Drive (one Markdown file per day, one Frame per day), their format and the storage layer | `lumitrace/frames/dayfile.py`, `lumitrace/frames/storage/` |
 | **Spectrum** | the indexer: keeps a SQLite search index of the Frames | `lumitrace/spectrum/` (schema shared in `lumitrace/index/`) |
@@ -25,8 +25,8 @@ Drive, which you read in Obsidian and can ask questions about from an AI app lik
 
 ## How it works
 
-1. **Capture (Flash):** an iPhone Shortcut sends your voice note, location and today's photos to
-   the Prism (`POST /recordings`, or `POST /notes` for quick notes).
+1. **Capture (Flash):** the Flash web app or an iPhone Shortcut sends your voice note, location
+   and photos to the Prism (`POST /recordings`, or `POST /notes` for quick notes).
 2. **Split (Prism):** it transcribes the audio, extracts facts (meals, people, activities,
    mood), writes the day's Markdown file and stores a compressed copy of the audio and photos in
    `Lumitrace/YYYY/MM/YYYY-MM-DD/` in Google Drive. Anything before 4 a.m. counts as the previous
@@ -96,9 +96,11 @@ Try it: `curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/js
 Exact configs: `docs/lens.md`. Turn off "use my chats for training" in the app you
 connect.
 
-### 5. Flash (iPhone Shortcuts)
+### 5. Flash (web app and iPhone Shortcuts)
 
-Build **Flash Config**, **Log My Day**, **Quick Note**, **Send pending**, **Send to Lumitrace**
+Quickest: set `LUMITRACE_FLASH_USERNAME` and `LUMITRACE_FLASH_PASSWORD`, open
+`https://<prism address>/flash/`, sign in and add it to the Home Screen (`docs/flash.md` →
+section 0). For Siri, the Action Button and the share sheet, also build **Flash Config**, **Log My Day**, **Quick Note**, **Send pending**, **Send to Lumitrace**
 and the nightly reminder automation, and reach the Prism over HTTPS (Tailscale or a reverse
 proxy): `docs/flash.md`.
 
@@ -106,6 +108,7 @@ proxy): `docs/flash.md`.
 
 * **Log My Day** Shortcut at night (the nightly reminder starts it), **Quick Note** during the day.
 * No signal? The Shortcut saves to a "Flash Inbox" folder in Files; "Send pending" uploads later.
+  The web app keeps captures in the browser and sends them when you're back online.
 * Edit any day in Obsidian. Your edits are kept: Lumitrace never overwrites them, and it never
   touches the **My notes** section. Later captures for an edited day are added, not rewritten.
 * Ask your AI app about your days; answers cite the dates they come from. If an answer is wrong,

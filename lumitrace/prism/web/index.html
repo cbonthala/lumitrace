@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d17">
+<meta name="color-scheme" content="dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lumitrace">
+<title>Lumitrace Flash</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="app.css">
+<script src="app.js" defer></script>
+</head>
+<body data-tab="capture" data-auth="loading">
+<div class="app">
+  <header class="top">
+    <div class="brand"><div class="logo" aria-hidden="true"></div>Lumitrace <span class="muted">Flash</span></div>
+    <div class="top-right">
+      <div class="conn" id="conn"><span class="dot"></span><span id="conn-text">Connecting…</span></div>
+      <button class="icon-btn only-signed-in" id="gear" type="button" aria-label="Settings">⚙︎</button>
+    </div>
+  </header>
+
+  <!-- Sign in -->
+  <main class="login" id="login-view">
+    <div class="title"><div class="day">Welcome back</div><h1>Sign in</h1></div>
+    <form class="card" id="login-form" autocomplete="on">
+      <div class="field"><label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></div>
+      <div class="field"><label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required></div>
+      <button class="btn primary wide" id="login-btn" type="submit">Sign in</button>
+      <p class="form-msg" id="login-msg" role="alert"></p>
+    </form>
+    <section class="card hint">
+      <b>Add to Home Screen</b><br>
+      In Safari tap <b>Share</b> → <b>Add to Home Screen</b>. It opens full screen like an app,
+      and stays signed in on this device.
+    </section>
+  </main>
+
+  <!-- Signed in -->
+  <main class="main" id="main-view">
+    <div class="title" data-tab="capture">
+      <div class="day" id="today-label"></div>
+      <h1>How was your day?</h1>
+    </div>
+
+    <div class="banner" id="banner" data-tab="capture" hidden>
+      <span id="banner-text"></span>
+      <button class="btn small" id="send-now" type="button">Send now</button>
+    </div>
+
+    <section class="card rec" id="rec-card" data-tab="capture">
+      <div class="rec-live" id="rec-live" hidden>
+        <div class="day rec-state">● Recording</div>
+        <div class="timer" id="timer">00:00</div>
+        <canvas class="wave" id="wave" width="460" height="56" aria-hidden="true"></canvas>
+      </div>
+      <button class="recbtn" id="rec-btn" type="button" aria-label="Start recording"></button>
+      <div class="rec-idle" id="rec-idle">
+        <div class="t">Log My Day</div>
+        <div class="s">Tap to record. Location and photos are attached when you stop.</div>
+      </div>
+      <div class="s rec-hint" id="rec-hint" hidden>Keep the screen on. Recording stops if you lock the phone.</div>
+      <div class="chips">
+        <span class="chip" id="place-chip">📍 <b id="place-text">No location</b></span>
+        <label class="chip clickable">🖼 <b id="rec-photo-count">0</b> photos
+          <input type="file" id="rec-photos" accept="image/*" multiple class="overlay-input"></label>
+        <label class="chip clickable">📅 Filing under <b class="date-label">today</b>
+          <input type="date" class="overlay-input date-input"></label>
+      </div>
+      <div class="thumbs" id="rec-thumbs"></div>
+      <button class="link-btn" id="discard-btn" type="button" hidden>Discard recording</button>
+    </section>
+
+    <section class="card note" data-tab="capture">
+      <div class="sec"><h2>Quick note</h2><span class="muted">Type, or use the 🎤 on your keyboard</span></div>
+      <textarea id="note-text" placeholder="Had coffee with a friend, finally fixed the bike…" maxlength="50000"></textarea>
+      <div class="thumbs" id="note-thumbs"></div>
+      <div class="row">
+        <label class="btn">🖼 Photos<input type="file" id="note-photos" accept="image/*" multiple class="overlay-input"></label>
+        <label class="btn">📅 <span class="date-label cap">Today</span><input type="date" class="overlay-input date-input"></label>
+        <button class="btn primary" id="note-send" type="button">Send</button>
+      </div>
+    </section>
+
+    <section class="card statscard" data-tab="capture">
+      <div class="sec"><h2>This week</h2><span class="muted">from your day files</span></div>
+      <div class="stats">
+        <div class="stat"><div class="v" id="stat-days">–</div><div class="l">days logged</div></div>
+        <div class="stat"><div class="v" id="stat-captures">–</div><div class="l">captures</div></div>
+        <div class="stat"><div class="v" id="stat-streak">–</div><div class="l">day streak</div></div>
+      </div>
+      <div class="week" id="week-dots" aria-hidden="true"></div>
+    </section>
+
+    <section class="card list" data-tab="history">
+      <div class="sec"><h2>Recent captures</h2><span class="muted">Last 7 days</span></div>
+      <div id="captures"></div>
+      <p class="empty muted" id="captures-empty" hidden>Nothing yet. Record your day or send a note.</p>
+    </section>
+
+    <section class="settings" data-tab="settings">
+      <div class="title"><div class="day">This device</div><h1>Settings</h1></div>
+      <section class="card">
+        <div class="field"><label for="place-input">Place name sent with captures (optional)</label>
+          <input id="place-input" placeholder="e.g. Austin" autocomplete="address-level2"></div>
+        <label class="toggle"><input type="checkbox" id="use-location"> Attach my location (latitude and longitude)</label>
+        <p class="muted small">Saved only on this device.</p>
+      </section>
+      <section class="card">
+        <div class="kv"><span class="muted">Signed in as</span><b id="who"></b></div>
+        <div class="kv"><span class="muted">Waiting to send</span><b id="pending-count">0</b></div>
+        <div class="kv"><span class="muted">Prism version</span><b id="version">–</b></div>
+        <div class="row">
+          <button class="btn" id="clear-history" type="button">Forget sent history</button>
+          <button class="btn danger" id="logout" type="button">Sign out</button>
+        </div>
+      </section>
+      <section class="card hint">
+        <b>Add to Home Screen</b><br>
+        In Safari tap <b>Share</b> → <b>Add to Home Screen</b>. On a laptop, use your browser's
+        <b>Install</b> or <b>Add to Dock</b> option.
+      </section>
+    </section>
+  </main>
+
+  <nav class="tabs only-signed-in" aria-label="Sections">
+    <button type="button" data-go="capture"><span>●</span>Capture</button>
+    <button type="button" data-go="history"><span>☰</span>History</button>
+    <button type="button" data-go="settings"><span>⚙︎</span>Settings</button>
+  </nav>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
