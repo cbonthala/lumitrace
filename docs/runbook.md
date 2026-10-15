@@ -13,8 +13,8 @@ and never paste real tokens or personal content here.
 2. **Drive login:** set `LUMITRACE_STORAGE_BACKEND=gdrive` in `.env`, then on a machine with a
    browser run `uv run lumitrace-drive-login` (`--no-browser` prints the URL). It writes
    `secrets/gdrive_token.json`; copy `secrets/` to the server.
-3. **Strong secrets:** `openssl rand -hex 32` for `LUMITRACE_API_TOKEN` and
-   `LUMITRACE_MCP_AUTH_TOKEN`, and a long passphrase for `LUMITRACE_MCP_OWNER_PASSWORD` (oauth mode).
+3. **Strong secrets:** `openssl rand -hex 32` for `LUMITRACE_API_TOKEN`, and a long passphrase
+   for `LUMITRACE_MCP_OWNER_PASSWORD` (the Lens's only login).
    With `change-me` or anything under 16 characters the Prism answers `503` and the Lens refuses to start.
 4. **Providers:** pick `LUMITRACE_STT_PROVIDER` / `LUMITRACE_STT_MODEL`, the `LUMITRACE_LLM_*` models
    and `LUMITRACE_EMBEDDING_MODEL` / `LUMITRACE_EMBEDDING_DIMENSION`, and put the provider keys in
@@ -52,10 +52,8 @@ and never paste real tokens or personal content here.
   and restart `prism`. Every signed-in browser is signed out and asks for the new password;
   captures waiting in a browser stay there and are sent after signing in again. After five wrong
   passwords sign-in is locked for 15 minutes (restarting `prism` clears the lock).
-* **Lens token / owner password:** set `LUMITRACE_MCP_AUTH_TOKEN` or `LUMITRACE_MCP_OWNER_PASSWORD`,
-  restart `lens`, reconnect the AI apps. Both must be 16+ characters (`openssl rand -hex 32`) or
-  the server refuses to start.
-  * A new **static token** takes effect on restart; update Cursor / `mcp-remote` configs.
+* **Lens owner password:** set `LUMITRACE_MCP_OWNER_PASSWORD` (16+ characters or the server
+  refuses to start) and restart `lens`. The Lens has no static token (decision 0035).
   * OAuth sessions end on their own `LUMITRACE_MCP_SESSION_DAYS` (default 7) after each
     sign-in; the app then asks for the owner password again.
   * A new **owner password** does *not* end existing OAuth sessions (apps hold refresh tokens).
@@ -138,7 +136,7 @@ speech providers stay external (their keys only in the server's `.env`).
    --long` on the server), run it by hand:
    `ssh -i ~/.ssh/lumitrace-lightsail ubuntu@<ip> 'sudo sh -s' < deploy/lightsail/cloud-init.sh`.
 3. **Production settings:** write a local `.env.production` (git-ignored) from `.env.example`:
-   real providers, `LUMITRACE_API_TOKEN`, `LUMITRACE_MCP_AUTH_TOKEN` and `LUMITRACE_MCP_OWNER_PASSWORD`,
+   real providers, `LUMITRACE_API_TOKEN` and `LUMITRACE_MCP_OWNER_PASSWORD`,
    `LUMITRACE_STORAGE_BACKEND=gdrive`, `LUMITRACE_FAMILY`, and `LUMITRACE_MCP_AUTH_MODE=oauth` (the public URL
    comes in step 5). Delete the `LUMITRACE_PROMPTS_DIR`, `LUMITRACE_LOCAL_ROOT`, `LUMITRACE_INDEX_PATH`
    and `LUMITRACE_GDRIVE_*_FILE` lines: the image sets the container paths (`/secrets/...`,
@@ -265,9 +263,8 @@ an HTTP API: **Prism**, **Spectrum** and **Lens** (with **OAuth** and **MCP** su
 `tests/test_bruno_collection.py` keeps it in step with the code.
 
 1. In Bruno: **Open Collection** → choose the `bruno/` folder.
-2. Copy `bruno/.env.example` to `bruno/.env` (git-ignored) and fill in the tokens (the same
-   values as `LUMITRACE_API_TOKEN` and `LUMITRACE_MCP_AUTH_TOKEN` on that server) and, for
-   production, the Tailscale addresses.
+2. Copy `bruno/.env.example` to `bruno/.env` (git-ignored) and fill in the API token (the same
+   value as `LUMITRACE_API_TOKEN` on that server) and, for production, the Tailscale addresses.
 3. Pick the **Local** or **Production** environment, then run **Health** in each folder.
 4. **Prism:** Quick note (JSON) needs nothing else. For the multipart requests, put a photo and a
    short audio file in `bruno/samples/` (git-ignored) as `photo.jpg` and `recording.m4a`, or pick
@@ -275,8 +272,9 @@ an HTTP API: **Prism**, **Spectrum** and **Lens** (with **OAuth** and **MCP** su
    The uploads have an empty `date` body field: leave it empty for today, or set `YYYY-MM-DD`
    to file the capture under an earlier day.
 5. **Lens → MCP:** run **Initialize** first (it saves the session id), then any tool call.
-   These use the static `LUMITRACE_MCP_AUTH_TOKEN`; production leaves it empty (OAuth only), so
-   run them against **Local** unless you set a token on the server for a while.
+   They send `mcpToken` as a bearer token, and the Lens only accepts OAuth access tokens
+   (1 hour): put one from an OAuth sign-in in `LOCAL_MCP_TOKEN` / `PROD_MCP_TOKEN`, or ask
+   through an AI app instead. There is no static token (decision 0035).
 
 In production, notes and recordings are added to today's real journal and **feedback** writes a
 real feedback record. Production Prism calls need this computer on the tailnet.

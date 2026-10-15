@@ -1,6 +1,6 @@
 # 0031. MCP auth modes: none, token, oauth
 
-- Status: accepted
+- Status: accepted; the `token` mode and the static token were removed by decision 0035
 - Date: 2026-10-10
 
 ## Context

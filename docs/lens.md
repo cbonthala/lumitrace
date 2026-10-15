@@ -19,7 +19,7 @@ uv run lumitrace-lens reset-oauth             # forget all OAuth clients and tok
 | `search.py` | Hybrid search: FTS5 bm25 + sqlite-vec cosine, reciprocal rank fusion, snippets |
 | `dates.py` | Date arguments (`YYYY-MM-DD`, `today`, `yesterday`, `MM-DD`) |
 | `index.py` | Read-only per-call connections; missing / empty / mismatched index handling |
-| `auth.py` | Auth modes `none`, `token`, `oauth` (`build_auth`) |
+| `auth.py` | Auth modes `oauth` and `none` (`build_auth`) |
 | `oauth.py` | Single-owner OAuth 2.1 authorization server with a password page |
 
 ## Server instructions
@@ -122,17 +122,20 @@ are created if missing. Returns `saved`, `id`, `dates`, `storage_path`.
 
 `LUMITRACE_MCP_AUTH_MODE`:
 
-* `none`: no auth. Only for a server bound to `127.0.0.1` (a warning is logged otherwise).
-* `token` (default): `Authorization: Bearer <LUMITRACE_MCP_AUTH_TOKEN>`. The token must be at
-  least 16 characters and not a placeholder (`openssl rand -hex 32`), or the server refuses to
-  start. Missing or wrong token → `401` with `WWW-Authenticate: Bearer`.
-* `oauth`: a minimal single-owner OAuth 2.1 authorization server for Claude and ChatGPT
-  connectors (decision 0032). Needs `LUMITRACE_MCP_OWNER_PASSWORD` (16+ characters) and
-  `LUMITRACE_MCP_PUBLIC_URL` = the public **https** root URL of the server (no path; it is the
-  OAuth issuer, and the protected resource is `<public URL><LUMITRACE_MCP_PATH>`). If
-  `LUMITRACE_MCP_AUTH_TOKEN` is also set, that static token keeps working (handy for Cursor).
-  It never expires and skips the password, so leave it empty on a public server unless a
-  tool really needs it.
+* `oauth` (default; the only login): a minimal single-owner OAuth 2.1 authorization server
+  (decision 0032). Every HTTP client, from Claude and ChatGPT to Cursor and `mcp-remote`, signs
+  in with the owner password on the Lens's own page. Needs `LUMITRACE_MCP_OWNER_PASSWORD`
+  (16+ characters) and `LUMITRACE_MCP_PUBLIC_URL` = the root URL of the server, **https**
+  except on localhost (no path; it is the OAuth issuer, and the protected resource is
+  `<public URL><LUMITRACE_MCP_PATH>`). For local testing use
+  `LUMITRACE_MCP_PUBLIC_URL=http://localhost:8002`. Without a valid token → `401` with
+  `WWW-Authenticate: Bearer` pointing to the sign-in metadata.
+* `none`: no auth. Only for a server bound to `127.0.0.1` (a warning is logged otherwise);
+  the tests use it in-process.
+
+There is no static bearer token (decision 0035): `LUMITRACE_MCP_AUTH_TOKEN` and the `token` mode
+were removed. A leftover `LUMITRACE_MCP_AUTH_TOKEN` in `.env` is ignored, and
+`LUMITRACE_MCP_AUTH_MODE=token` stops the Lens at startup with a settings error.
 
 `GET /health` is always unauthenticated: `{"status", "version", "auth_mode", "index_present"}`.
 
@@ -169,7 +172,7 @@ Endpoints (served by the MCP SDK's auth support; Lumitrace supplies storage and 
 ## Connecting AI apps
 
 Replace `/path/to/lumitrace` (the folder you cloned the repository into, whatever it is called)
-and `journal.example.com` with your own values. Never commit the token or password. The server
+and `journal.example.com` with your own values. Never commit the owner password. The server
 key `"lumitrace"` and the connector name `Lumitrace` are just labels; the server itself reports
 the title **Lumitrace**.
 
@@ -190,7 +193,7 @@ LUMITRACE_MCP_TRANSPORT=streamable-http
 LUMITRACE_MCP_PUBLIC_URL=https://journal.example.com
 LUMITRACE_MCP_AUTH_MODE=oauth
 LUMITRACE_MCP_OWNER_PASSWORD=<long passphrase>
-LUMITRACE_MCP_AUTH_TOKEN=<openssl rand -hex 32>   # optional, for Cursor / scripts
+LUMITRACE_MCP_SESSION_DAYS=7
 ```
 
 Check: `curl https://journal.example.com/health` and
@@ -238,17 +241,16 @@ Drive token). `~/Library/Application Support/Claude/claude_desktop_config.json` 
 `--directory` makes the server read `/path/to/lumitrace/.env`. Restart Claude Desktop after
 editing. Logs go to stderr (Claude Desktop shows them in its MCP log files).
 
-To use the remote server from Claude Desktop instead, add it as a connector (above), or with a
-static token through the `mcp-remote` bridge:
+To use the remote server from Claude Desktop instead, add it as a connector (above), or through
+the `mcp-remote` bridge, which opens the Lumitrace sign-in page in the browser the first time
+(and again when the session ends):
 
 ```json
 {
   "mcpServers": {
     "lumitrace": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "https://journal.example.com/mcp",
-               "--header", "Authorization: Bearer ${LUMITRACE_MCP_AUTH_TOKEN}"],
-      "env": { "LUMITRACE_MCP_AUTH_TOKEN": "<token>" }
+      "args": ["-y", "mcp-remote", "https://journal.example.com/mcp"]
     }
   }
 }
@@ -269,21 +271,18 @@ static token through the `mcp-remote` bridge:
 }
 ```
 
-Remote with the static token (works in `token` mode, and in `oauth` mode when
-`LUMITRACE_MCP_AUTH_TOKEN` is set):
+Remote: give only the URL; Cursor runs the OAuth sign-in itself (owner password in the
+browser):
 
 ```json
 {
   "mcpServers": {
     "lumitrace": {
-      "url": "https://journal.example.com/mcp",
-      "headers": { "Authorization": "Bearer ${env:LUMITRACE_MCP_AUTH_TOKEN}" }
+      "url": "https://journal.example.com/mcp"
     }
   }
 }
 ```
-
-Or leave out `headers` in `oauth` mode and Cursor runs the OAuth sign-in itself.
 
 ## Privacy
 
@@ -292,8 +291,8 @@ Or leave out `headers` in `oauth` mode and Cursor runs the OAuth sign-in itself.
   off. ChatGPT: **Settings → Data controls → Improve the model for everyone** off.
 * `get_day` links to audio and photos are private Drive links: the AI provider sees the link,
   but only your Google account can open the file.
-* Keep `mcp_auth_mode=none` for localhost only. Anyone with the token or the owner password can
-  read the whole journal; rotate them as in `docs/runbook.md`.
+* Keep `mcp_auth_mode=none` for localhost only. Anyone with the owner password can read the
+  whole journal; change it as in `docs/runbook.md`.
 * The MCP server never logs queries, answers or journal text (only ratings, ids and client
   names); a rejected tool call logs its error message (e.g. the unreadable date).
 

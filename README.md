@@ -52,9 +52,9 @@ cp .env.example .env    # then edit (below)
 uv run pytest           # everything runs offline
 ```
 
-In `.env`, set `LUMITRACE_API_TOKEN` and `LUMITRACE_MCP_AUTH_TOKEN` to `openssl rand -hex 32`
-values: with `change-me` or anything under 16 characters the Prism refuses every request
-(`503`) and the Lens refuses to start. Choose the speech, AI and embedding providers and
+In `.env`, set `LUMITRACE_API_TOKEN` to an `openssl rand -hex 32` value and
+`LUMITRACE_MCP_OWNER_PASSWORD` to a long passphrase: with `change-me` or anything under 16
+characters the Prism refuses every request (`503`) and the Lens refuses to start. Choose the speech, AI and embedding providers and
 add their keys (`OPENAI_API_KEY`, AWS credentials, ...). To try it without any provider, set
 `LUMITRACE_STT_PROVIDER=fake`, the three `LUMITRACE_LLM_*_MODEL=fake` and
 `LUMITRACE_EMBEDDING_MODEL=fake`.
@@ -88,10 +88,9 @@ Try it: `curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/js
 
 * **Claude Desktop / Cursor on the same machine:** run
   `lumitrace-lens --transport stdio` from the app's MCP config.
-* **Claude (web and phone) / ChatGPT:** serve the Lens over HTTPS with
-  `LUMITRACE_MCP_AUTH_MODE=oauth`, then add `https://<your host>/mcp` as a custom connector and
-  sign in with the owner password.
-* **Cursor remote:** the URL plus `Authorization: Bearer <LUMITRACE_MCP_AUTH_TOKEN>`.
+* **Claude (web and phone) / ChatGPT / Cursor remote:** serve the Lens over HTTPS, then add
+  `https://<your host>/mcp` as a connector and sign in with the owner password (OAuth is the
+  only login; sessions last `LUMITRACE_MCP_SESSION_DAYS`, default 7).
 
 Exact configs: `docs/lens.md`. Turn off "use my chats for training" in the app you
 connect.

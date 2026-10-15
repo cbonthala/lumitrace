@@ -101,7 +101,6 @@ class OwnerOAuthProvider:
         resource_url: str,
         owner_password: str,
         state_path: Path,
-        static_token: str | None = None,
         scope: str = "lumitrace",
         session_days: int = DEFAULT_SESSION_DAYS,
     ) -> None:
@@ -111,7 +110,6 @@ class OwnerOAuthProvider:
         self.session_days = session_days
         self._session_seconds = session_days * 24 * 60 * 60
         self._password = owner_password.encode()
-        self._static_token = (static_token or "").encode()
         self._state_path = Path(state_path)
         self._lock = threading.Lock()
         self._clients: dict[str, dict[str, Any]] = {}
@@ -348,14 +346,6 @@ class OwnerOAuthProvider:
         )
 
     async def load_access_token(self, token: str) -> AccessToken | None:
-        if self._static_token and hmac.compare_digest(self._static_token, token.encode()):
-            return AccessToken(
-                token=token,
-                client_id="static-token",
-                scopes=[self.scope],
-                subject="owner",
-                resource=self.resource_url,
-            )
         info = self._access.get(_hash(token))
         if info is None or info["expires_at"] < _now():
             return None

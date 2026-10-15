@@ -18,9 +18,9 @@ from lumitrace.prism.app import create_app as create_prism_app
 from lumitrace.spectrum.core import Indexer
 from lumitrace.spectrum.service import IndexerService
 from lumitrace.spectrum.service import create_app as create_spectrum_app
+from tests.lens.test_auth import BASE, CALLBACK, PASSWORD, _login, _pkce, _register, _token
 
 COLLECTION = Path(__file__).resolve().parents[1] / "bruno"
-TOKEN = "b" * 40
 VAR_RE = re.compile(r"\{\{([^{}]+)\}\}")
 
 
@@ -97,7 +97,13 @@ def _api_routes(app) -> set[tuple[str, str]]:
 
 def _lens_settings(settings: Settings, **overrides: object) -> Settings:
     return Settings(
-        _env_file=None, **{**settings.model_dump(), "mcp_auth_token": TOKEN, **overrides}
+        _env_file=None,
+        **{
+            **settings.model_dump(),
+            "mcp_auth_mode": "oauth",
+            "mcp_owner_password": PASSWORD,
+            **overrides,
+        },
     )
 
 
@@ -111,12 +117,7 @@ def test_every_request_matches_a_real_route(settings: Settings, storage: LocalSt
     finally:
         indexer.close()
 
-    oauth = _lens_settings(
-        settings,
-        mcp_auth_mode="oauth",
-        mcp_owner_password="correct horse battery staple",
-        mcp_public_url="https://journal.example.com",
-    )
+    oauth = _lens_settings(settings, mcp_public_url="https://journal.example.com")
     app = build_server(oauth, transport="streamable-http").streamable_http_app(
         streamable_http_path=oauth.mcp_path, host=oauth.mcp_host
     )
@@ -133,14 +134,14 @@ def _rpc(response: httpx.Response) -> dict:
 
 
 def test_lens_mcp_requests_run_in_order(settings: Settings) -> None:
-    lens = _lens_settings(settings, mcp_auth_mode="token")
+    lens = _lens_settings(settings, mcp_public_url=BASE)
     mcp = requests_in("Lens/MCP")
     assert [r.name for r in mcp][:2] == ["Initialize", "List tools"]
     assert mcp[-1].name == "End session"
     env = _pairs(_block((COLLECTION / "environments" / "Local.bru").read_text(), "vars"))
     variables = {
         "lensUrl": "",
-        "mcpToken": TOKEN,
+        "mcpToken": "",
         "mcpSessionId": "",
         **{"mcpProtocolVersion": env["mcpProtocolVersion"]},
     }
@@ -151,10 +152,20 @@ def test_lens_mcp_requests_run_in_order(settings: Settings) -> None:
         called = []
         async with (
             server.session_manager.run(),
-            httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app), base_url="http://localhost:8002"
-            ) as client,
+            httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=BASE) as client,
         ):
+            reg = await _register(client)
+            verifier, challenge = _pkce()
+            code = await _login(client, reg, challenge)
+            tokens = await _token(
+                client,
+                reg,
+                grant_type="authorization_code",
+                code=code,
+                redirect_uri=CALLBACK,
+                code_verifier=verifier,
+            )
+            variables["mcpToken"] = tokens.json()["access_token"]
             for req in mcp:
                 headers = {k: fill(v, variables) for k, v in req.headers.items()}
                 headers["Authorization"] = f"Bearer {fill(req.token or '', variables)}"

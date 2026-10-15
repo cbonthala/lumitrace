@@ -104,8 +104,7 @@ class Settings(BaseSettings):
     mcp_port: int = 8002
     mcp_path: str = "/mcp"
     mcp_public_url: str = "http://localhost:8002"
-    mcp_auth_mode: Literal["none", "token", "oauth"] = "token"
-    mcp_auth_token: SecretStr = SecretStr("")
+    mcp_auth_mode: Literal["none", "oauth"] = "oauth"
     mcp_owner_password: SecretStr = SecretStr("")
     mcp_session_days: int = Field(default=7, ge=1)
 

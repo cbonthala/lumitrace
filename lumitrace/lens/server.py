@@ -226,7 +226,6 @@ def build_server(
         instructions=INSTRUCTIONS,
         version=__version__,
         auth=auth.settings,
-        token_verifier=auth.token_verifier,
         auth_server_provider=auth.provider,
     )
     register_tools(server, LensTools(settings, storage))

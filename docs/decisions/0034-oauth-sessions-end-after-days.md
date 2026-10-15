@@ -32,4 +32,4 @@ lifetime) because the owner asked to be logged off every 7 days even when apps a
   everything at once.
 * Changing the setting applies to existing tokens on the next restart (shorter only; a longer
   setting does not extend tokens already cut short).
-* The static `LUMITRACE_MCP_AUTH_TOKEN` is not affected; production leaves it empty.
+* The static `LUMITRACE_MCP_AUTH_TOKEN` was not affected; decision 0035 removed it.

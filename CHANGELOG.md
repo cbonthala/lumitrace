@@ -208,6 +208,11 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
   no longer extends a connection; each AI app asks for the owner password again 7 days after
   signing in. The password page says so. Tokens saved earlier count as signed in at the next
   start. Production no longer sets the static `LUMITRACE_MCP_AUTH_TOKEN`.
+- **OAuth is the only login** (decision 0035): the `token` mode and `LUMITRACE_MCP_AUTH_TOKEN`
+  are removed, and `LUMITRACE_MCP_AUTH_MODE` defaults to `oauth`. Cursor and `mcp-remote`
+  connect with the URL only and run the password sign-in. `none` remains for local-only use.
+  A leftover `LUMITRACE_MCP_AUTH_TOKEN` is ignored; `LUMITRACE_MCP_AUTH_MODE=token` no longer
+  starts.
 
 - `get_day` returns each capture's English `translation` (or `null`).
 

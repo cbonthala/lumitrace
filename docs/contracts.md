@@ -22,7 +22,7 @@ Tests construct `Settings(_env_file=None, ...)` directly; the `settings` fixture
 | LLM | `llm_extract_facts_model`, `llm_write_journal_model`, `llm_fallback_model` (LiteLLM strings), `llm_timeout_seconds`, `llm_max_retries` |
 | Embeddings | `embedding_model` (`"fake"` = offline), `embedding_dimension` |
 | Index (Spectrum) | `index_path` (`data/index/lumitrace.sqlite`), `indexer_host`, `indexer_port` (8001), `indexer_poll_interval_seconds` (300), `indexer_nudge_url`, `indexer_backup_interval_hours` (24) |
-| MCP (Lens) | `mcp_transport: "stdio" \| "streamable-http"`, `mcp_host`, `mcp_port` (8002), `mcp_path` (`/mcp`), `mcp_public_url`, `mcp_auth_mode: "none" \| "token" \| "oauth"`, `mcp_auth_token: SecretStr`, `mcp_owner_password: SecretStr` |
+| MCP (Lens) | `mcp_transport: "stdio" \| "streamable-http"`, `mcp_host`, `mcp_port` (8002), `mcp_path` (`/mcp`), `mcp_public_url`, `mcp_auth_mode: "oauth" \| "none"` (`oauth`), `mcp_owner_password: SecretStr`, `mcp_session_days` (7) |
 
 ## Frames, storage: `lumitrace.frames.storage`
 

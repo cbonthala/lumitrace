@@ -63,12 +63,11 @@ async def _initialize(client: httpx.AsyncClient, token: str | None = None) -> ht
 # --- configuration -------------------------------------------------------------------------
 
 
-def test_token_mode_requires_a_real_token(settings: Settings) -> None:
-    for bad in ["", "change-me", "short"]:
-        with pytest.raises(AuthConfigError):
-            build_auth(_settings(settings, mcp_auth_mode="token", mcp_auth_token=bad))
-    setup = build_auth(_settings(settings, mcp_auth_mode="token", mcp_auth_token=TOKEN))
-    assert setup.token_verifier is not None and setup.provider is None
+def test_static_token_login_is_gone(settings: Settings) -> None:
+    assert Settings.model_fields["mcp_auth_mode"].default == "oauth"
+    assert "mcp_auth_token" not in Settings.model_fields
+    with pytest.raises(ValidationError):
+        _settings(settings, mcp_auth_mode="token")
 
 
 def test_oauth_mode_validation(settings: Settings) -> None:
@@ -86,32 +85,16 @@ def test_oauth_mode_validation(settings: Settings) -> None:
 
 def test_none_mode_has_no_auth(settings: Settings) -> None:
     setup = build_auth(settings)
-    assert setup.settings is None and setup.token_verifier is None
+    assert setup.settings is None and setup.provider is None
 
 
 def test_stdio_ignores_auth_settings(settings: Settings) -> None:
-    build_server(_settings(settings, mcp_auth_mode="token", mcp_auth_token=""), transport="stdio")
+    build_server(
+        _settings(settings, mcp_auth_mode="oauth", mcp_owner_password=""), transport="stdio"
+    )
 
 
-# --- token mode ----------------------------------------------------------------------------
-
-
-def test_token_mode_rejects_missing_and_wrong_tokens(settings: Settings) -> None:
-    cfg = _settings(settings, mcp_auth_mode="token", mcp_auth_token=TOKEN)
-
-    async def run() -> None:
-        async with http_client(cfg) as client:
-            missing = await _initialize(client)
-            assert missing.status_code == 401
-            assert missing.headers["www-authenticate"].startswith("Bearer")
-            assert (await _initialize(client, "wrong-token")).status_code == 401
-            ok = await _initialize(client, TOKEN)
-            assert ok.status_code == 200
-            assert "Lumitrace" in ok.text
-            health = await client.get("/health")
-            assert health.status_code == 200 and health.json()["auth_mode"] == "token"
-
-    anyio.run(run)
+# --- none mode -----------------------------------------------------------------------------
 
 
 def test_none_mode_allows_requests(settings: Settings) -> None:
@@ -343,12 +326,19 @@ def test_oauth_password_lockout(oauth_settings: Settings, monkeypatch: pytest.Mo
     anyio.run(run)
 
 
-def test_oauth_accepts_static_token_too(oauth_settings: Settings) -> None:
-    cfg = _settings(oauth_settings, mcp_auth_token=TOKEN)
+def test_oauth_ignores_an_old_static_token_setting(
+    oauth_settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LUMITRACE_MCP_AUTH_TOKEN", TOKEN)
+    cfg = _settings(oauth_settings)
 
     async def run() -> None:
         async with http_client(cfg) as client:
-            assert (await _initialize(client, TOKEN)).status_code == 200
+            refused = await _initialize(client, TOKEN)
+            assert refused.status_code == 401
+            assert refused.headers["www-authenticate"].startswith("Bearer")
+            health = await client.get("/health")
+            assert health.status_code == 200 and health.json()["auth_mode"] == "oauth"
 
     anyio.run(run)
 

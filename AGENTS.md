@@ -153,9 +153,11 @@ uv 0.13.0 on `/usr/local/bin` (the login shell does not load `~/.local/bin`) and
 `start` launches Prism, Spectrum, and Lens in tmux sessions named `prism`, `spectrum`, and
 `lens`. Logs are `/tmp/lumitrace-prism.log`, `/tmp/lumitrace-spectrum.log`, and
 `/tmp/lumitrace-lens.log`. If `.env` is missing, `start` copies `.env.example` and sets speech,
-the three LLM settings, and embeddings to `fake`, with development tokens long enough for Prism
+the three LLM settings, and embeddings to `fake`, with development secrets long enough for Prism
 and Lens to accept requests. An existing `.env` is left as it is. Read `LUMITRACE_API_TOKEN` and
-`LUMITRACE_MCP_AUTH_TOKEN` from that file. Ports: Prism `8000`, Spectrum `8001`, Lens `8002` (`/mcp`). Local day files
+`LUMITRACE_MCP_OWNER_PASSWORD` from that file. The Lens has no static token: HTTP clients sign
+in through OAuth (`LUMITRACE_MCP_PUBLIC_URL=http://localhost:8002` is allowed locally), or set
+`LUMITRACE_MCP_AUTH_MODE=none` with `LUMITRACE_MCP_HOST=127.0.0.1` for a local-only Lens. Ports: Prism `8000`, Spectrum `8001`, Lens `8002` (`/mcp`). Local day files
 are under `data/Lumitrace/` (gitignored). A nudge is asynchronous: wait until Spectrum
 `/health` reports `pending_paths` of 0 before searching.
 

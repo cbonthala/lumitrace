@@ -515,16 +515,15 @@ File: `tests/lens/test_tools.py`
 
 File: `tests/lens/test_auth.py`
 
-- Checks that "token" mode refuses to start with an empty, placeholder or short token, and starts with a proper one. <sub>`test_token_mode_requires_a_real_token`</sub>
+- Checks that the static-token login no longer exists: the "token" mode is refused as a setting, there is no token setting, and OAuth is the default. <sub>`test_static_token_login_is_gone`</sub>
 - Checks that "oauth" mode refuses to start without an owner password, with a public address that isn't https, or with a path in the address, and that a valid address gives the expected `/mcp` address. <sub>`test_oauth_mode_validation`</sub>
 - Checks that "none" mode sets up no login at all. <sub>`test_none_mode_has_no_auth`</sub>
 - Checks that the local connection used by desktop apps (stdio) starts even with incomplete login settings, since it isn't reachable over the network. <sub>`test_stdio_ignores_auth_settings`</sub>
 
-### Connecting with a token
+### Connecting without a login (local only)
 
 File: `tests/lens/test_auth.py`
 
-- Checks over HTTP that a missing or wrong token is refused (401, with a hint to use a bearer token), the right token connects, and the health page reports the login mode. <sub>`test_token_mode_rejects_missing_and_wrong_tokens`</sub>
 - Checks that in "none" mode apps connect without a token. <sub>`test_none_mode_allows_requests`</sub>
 
 ### Signing in with OAuth (Claude and ChatGPT)
@@ -535,7 +534,7 @@ File: `tests/lens/test_auth.py`
 - Checks the full sign-in: an app registers and is sent to a password page (showing the app's name safely and its website, and refusing to be shown inside other sites); a wrong password is refused; the right one gives a one-time code; exchanging the code with the wrong proof is refused; the right exchange gives tokens that work; the code can't be used twice; a made-up token is refused; refreshing gives new tokens and retires the old ones; and a revoked token stops working and can't be refreshed. <sub>`test_oauth_full_flow`</sub>
 - Checks that pressing "deny" sends the app an "access denied" answer and uses up the request, a sign-in for another server's address is refused, and an unknown sign-in request is refused. <sub>`test_oauth_deny_and_bad_resource`</sub>
 - Checks that after too many wrong passwords even the right password is refused for a while (429). <sub>`test_oauth_password_lockout`</sub>
-- Checks that in OAuth mode the static token, if set, also works (for apps such as Cursor). <sub>`test_oauth_accepts_static_token_too`</sub>
+- Checks that a leftover `LUMITRACE_MCP_AUTH_TOKEN` setting opens nothing: that token is refused (401, pointing to a bearer sign-in) and the health page reports OAuth as the login mode. <sub>`test_oauth_ignores_an_old_static_token_setting`</sub>
 - Checks that sign-ins survive a restart, that only fingerprints (hashes) of tokens are saved and never the tokens themselves, and that the file can be read only by its owner. <sub>`test_oauth_state_survives_restart_and_stores_only_hashes`</sub>
 - Checks that a damaged sign-in file is treated as empty instead of crashing. <sub>`test_oauth_corrupt_state_starts_empty`</sub>
 - Checks that a session length under one day is refused, that the password page says how long the app stays connected, that refreshing keeps an app connected only until 7 days after the sign-in (the last token is cut short to that moment), and that after the 7 days both the access token and the refresh token are refused. <sub>`test_oauth_session_ends_after_session_days`</sub>
@@ -724,7 +723,7 @@ File: `tests/test_shared_helpers.py`
 File: `tests/test_bruno_collection.py`
 
 - Checks that every request in the Bruno collection (`bruno/`) calls a route that really exists in the Prism, Spectrum or Lens, with the right method (ignoring any query string). <sub>`test_every_request_matches_a_real_route`</sub>
-- Checks that the collection's MCP requests, sent in order against a real Lens, open a session, list the tools, call all five tools without errors and close the session. <sub>`test_lens_mcp_requests_run_in_order`</sub>
+- Checks that the collection's MCP requests, sent in order against a real Lens with an access token from an OAuth sign-in, open a session, list the tools, call all five tools without errors and close the session. <sub>`test_lens_mcp_requests_run_in_order`</sub>
 - Checks that the collection contains no tokens: requests use `{{variables}}`, environments read tokens from the git-ignored `bruno/.env`, and `.env.example` leaves them blank. <sub>`test_collection_holds_no_secrets`</sub>
 
 ### Keeping this catalog complete
