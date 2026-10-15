@@ -7,6 +7,9 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- `docs/architecture.md` → *Deployment and providers*: a simple high-level diagram of the
+  programs, the Lightsail server, Tailscale and the outside services (Sarvam, OpenAI, Google
+  Drive).
 - `setup_logging` keeps `httpx` and `httpcore` at WARNING: their INFO lines printed full request
   URLs, including Sarvam's signed storage links.
 - **English translation in the day file** (ADR 0043): `Capture.translation`, written at the

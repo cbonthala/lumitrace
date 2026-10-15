@@ -31,6 +31,41 @@ because `POST /nudge` has no authentication.
 | Spectrum | indexer, `lumitrace-spectrum` | `lumitrace/spectrum/` | `docs/spectrum.md` |
 | Lens | MCP server, `lumitrace-lens` | `lumitrace/lens/` | `docs/lens.md` |
 
+## Deployment and providers
+
+The big picture in production. Every model and service can be swapped in config
+(`docs/tech-stack.md`).
+
+```mermaid
+flowchart LR
+    Phone["iPhone<br/>Flash"]
+    AIApps["Claude, ChatGPT"]
+    Tailscale["Tailscale"]
+
+    subgraph Server["AWS Lightsail"]
+        Prism["Prism<br/>records"]
+        Spectrum["Spectrum<br/>indexes"]
+        Lens["Lens<br/>answers"]
+    end
+
+    Drive[("Google Drive<br/>day files")]
+    Obsidian["Obsidian"]
+    Models["Sarvam, OpenAI"]
+
+    Phone --> Tailscale
+    AIApps --> Tailscale
+    Tailscale --> Prism
+    Tailscale --> Lens
+    Prism --> Drive
+    Models <--> Prism
+    Drive --> Spectrum
+    Spectrum --> Lens
+    Drive --> Obsidian
+```
+
+Tailscale is the only way in: the Prism is reachable from your own devices only, and just the
+Lens is public so AI apps can connect (decisions 0041 and 0044).
+
 ## Shared foundation
 
 * `lumitrace/config.py`: all settings, from `LUMITRACE_*` environment variables / `.env`.
