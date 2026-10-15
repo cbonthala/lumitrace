@@ -60,3 +60,4 @@ Template:
 | [0041](0041-aws-lightsail-with-tailscale.md) | Hosting: one AWS Lightsail instance, Prism on the tailnet, Lens public through Tailscale Funnel |
 | [0042](0042-rename-to-lumitrace.md) | Rename Lumen to Lumitrace everywhere; module names unchanged |
 | [0043](0043-capture-translation-in-day-file.md) | Day file: a recording's English translation stored under its transcript |
+| [0044](0044-flash-on-the-tailnet-root-url.md) | Hosting: the Flash app on the plain tailnet address, the Lens Funnel on `:8443` |

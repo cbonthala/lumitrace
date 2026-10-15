@@ -151,16 +151,34 @@ speech providers stay external (their keys only in the server's `.env`).
 5. **Tailscale (once):** `ssh -i ~/.ssh/lumitrace-lightsail ubuntu@<ip>`, then
    `sudo /opt/lumitrace/app/deploy/lightsail/tailscale.sh`. Open the sign-in link it prints (and the
    Funnel link if asked; MagicDNS and HTTPS certificates must be on in the Tailscale admin
-   console). It prints the two addresses:
-   * Prism, tailnet only: `https://lumitrace.<tailnet>.ts.net:8443`; use it in Flash Config. The
-     iPhone needs the Tailscale app with VPN On Demand (`docs/flash.md`).
-   * Lens, public through Funnel: `https://lumitrace.<tailnet>.ts.net/mcp`; set
-     `LUMITRACE_MCP_PUBLIC_URL=https://lumitrace.<tailnet>.ts.net` in `.env.production` and redeploy
-     with `ENV_FILE=.env.production`.
+   console). It prints the two addresses (decision 0044):
+   * Prism, tailnet only: `https://lumitrace.<tailnet>.ts.net` (no port); open it for the Flash
+     app and use it in Flash Config. The iPhone needs the Tailscale app with VPN On Demand
+     (`docs/flash.md`).
+   * Lens, public through Funnel: `https://lumitrace.<tailnet>.ts.net:8443/mcp`; set
+     `LUMITRACE_MCP_PUBLIC_URL=https://lumitrace.<tailnet>.ts.net:8443` in `.env.production` and
+     redeploy with `ENV_FILE=.env.production`.
+   The script resets any earlier serve/funnel setup first, so it is safe to run again (for
+   example after renaming the tailnet; see *Renaming the tailnet*).
 6. **Optional:** with Tailscale SSH working (`ssh ubuntu@lumitrace`), remove the SSH rule in the
    Lightsail console (Networking tab) so no port is open to the internet.
-7. **Check:** `https://lumitrace.<tailnet>.ts.net:8443/health` from Safari on the phone,
-   `curl https://lumitrace.<tailnet>.ts.net/health` from anywhere, then a test Quick Note.
+7. **Check:** `https://lumitrace.<tailnet>.ts.net/health` from Safari on the phone,
+   `curl https://lumitrace.<tailnet>.ts.net:8443/health` from anywhere, then a test Quick Note.
+
+### Renaming the tailnet
+
+The tailnet name (Tailscale admin console → DNS → *Rename tailnet*) is part of both addresses,
+so a rename changes them at once:
+
+1. In the Flash app, check Settings → **Waiting to send** is 0 (a new address is a new site to
+   the browser; captures waiting under the old one would stay there).
+2. Rename the tailnet. Set `LUMITRACE_MCP_PUBLIC_URL=https://lumitrace.<new>.ts.net:8443` in
+   `.env.production`, deploy with `ENV_FILE=.env.production`, then run
+   `sudo /opt/lumitrace/app/deploy/lightsail/tailscale.sh` on the server.
+3. Phone: open `https://lumitrace.<new>.ts.net`, sign in, add it to the Home Screen again and
+   delete the old icon; update the address in Flash Config.
+4. Claude / ChatGPT / Cursor: remove the Lumitrace connector and add it again with
+   `https://lumitrace.<new>.ts.net:8443/mcp`, then sign in with the Lens password.
 
 Logs: `ssh ... 'cd /opt/lumitrace/app && docker compose -p lumitrace logs -f'`. The data volume is
 `lumitrace_lumitrace-data`; the daily Lightsail snapshot covers it, `.env` and `secrets/`. Cost: the
@@ -342,5 +360,6 @@ one-time steps; nothing in the journal itself has to change.
    instance, so create a new one (*Deploying on AWS Lightsail*), deploy, join Tailscale, then
    delete the old instance, its static IP and key pair, and remove the old machine in the
    Tailscale admin console. Update the address in Flash Config
-   (`https://lumitrace.<tailnet>.ts.net:8443`) and the AI-app connectors
-   (`https://lumitrace.<tailnet>.ts.net/mcp`), and set `LUMITRACE_MCP_PUBLIC_URL`.
+   (`https://lumitrace.<tailnet>.ts.net`) and the AI-app connectors
+   (`https://lumitrace.<tailnet>.ts.net:8443/mcp`), and set `LUMITRACE_MCP_PUBLIC_URL`
+   (addresses as of decision 0044).

@@ -26,7 +26,7 @@ The foundation every program uses (`lumitrace/config.py`, `lumitrace/logging_set
 |---|---|---|---|
 | Flash web app (HTML, CSS, JavaScript) | | A page the Prism serves at `/flash/` for capturing from any browser and the iPhone Home Screen. No framework and no build step. Browser features it relies on: **MediaRecorder** and **getUserMedia** (record audio), **IndexedDB** (keep captures until the Prism confirms them), a **service worker** (open offline), **Screen Wake Lock** (keep the screen on while recording), **Geolocation** (optional location) and a web app manifest (Home Screen icon). Guide: `docs/flash.md` → section 0. | Yes (part of Lumitrace) |
 | Apple Shortcuts | | The iPhone side of Lumitrace, with no app to install. Example: **Log My Day** records your voice and uploads it to the Prism; **Quick Note** sends a typed note; **Send pending** retries uploads that failed offline. Build guide: `docs/flash.md`. | No (Apple) |
-| Tailscale iOS app | | Puts the iPhone on your private network so the shortcuts can reach the Prism at `https://lumitrace.<tailnet>.ts.net:8443`. With VPN On Demand it connects automatically. | Yes (BSD-3-Clause client) |
+| Tailscale iOS app | | Puts the iPhone on your private network so the shortcuts can reach the Prism at `https://lumitrace.<tailnet>.ts.net`. With VPN On Demand it connects automatically. | Yes (BSD-3-Clause client) |
 
 ## Prism (recording API and pipeline)
 
@@ -116,7 +116,7 @@ The `local` storage backend (a folder on disk) is used for tests and local runs.
 | AWS CLI | | Command-line access to AWS. Example: `provision.sh` uses it to create the server, static IP and firewall; `deploy.sh` uses it to look up the server's address. | Yes (Apache-2.0) |
 | Ubuntu | 24.04 | The server's operating system. | Yes (mixed free licenses) |
 | Docker Engine and Docker Compose | | Run the three programs as containers from one image. Example: `docker compose up` starts `prism`, `spectrum` and `lens` with a shared data volume and restarts them if they crash. | Yes (Apache-2.0) |
-| Tailscale client | | Connects the server to your private network and publishes it. Example: the Prism is at `https://lumitrace.<tailnet>.ts.net:8443` for your devices only; the Lens is public at `https://lumitrace.<tailnet>.ts.net/mcp` through Funnel. Also provides the HTTPS certificates. | Yes (BSD-3-Clause) |
+| Tailscale client | | Connects the server to your private network and publishes it. Example: the Prism is at `https://lumitrace.<tailnet>.ts.net` for your devices only; the Lens is public at `https://lumitrace.<tailnet>.ts.net:8443/mcp` through Funnel. Also provides the HTTPS certificates. | Yes (BSD-3-Clause) |
 | Tailscale coordination service and Funnel relays | | Tailscale's hosted part: the admin console, device sign-in, and relaying public internet traffic to the Lens. | No (Tailscale service, free plan) |
 | jq | | Reads JSON on the command line. Example: `tailscale.sh` uses it to get the server's `*.ts.net` name from `tailscale status`. | Yes (MIT) |
 | Git | | Version control. `deploy.sh` ships exactly the last commit, so uncommitted changes never reach the server. | Yes (GPL-2.0) |

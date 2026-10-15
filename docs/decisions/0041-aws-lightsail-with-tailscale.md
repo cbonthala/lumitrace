@@ -1,6 +1,6 @@
 # 0041. Hosting: one AWS Lightsail instance behind Tailscale
 
-- Status: accepted
+- Status: accepted; ports swapped by 0044 (Prism on `:443`, Lens Funnel on `:8443`)
 - Date: 2026-10-11
 
 ## Context

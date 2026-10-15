@@ -24,8 +24,8 @@ You can use both; captures from either land in the same day file.
 
 **On the phone or laptop:**
 
-1. Open `https://<your address>/flash/` (on the Tailscale setup:
-   `https://<machine>.<tailnet>.ts.net:8443/flash/`) and sign in. iCloud Keychain or your
+1. Open `https://<your address>` (it goes to `/flash/`; on the Tailscale setup:
+   `https://<machine>.<tailnet>.ts.net`) and sign in. iCloud Keychain or your
    password manager can save the password.
 2. iPhone: Safari → **Share** → **Add to Home Screen**. It opens full screen like an app and
    stays signed in for `LUMITRACE_FLASH_SESSION_DAYS` (90 days by default). On a laptop, use the
@@ -96,13 +96,13 @@ so never use plain HTTP outside your home network). Two options:
 
 1. Install Tailscale on the server and on the iPhone, sign in to the same tailnet.
 2. In the Tailscale admin console enable **MagicDNS** and **HTTPS certificates**.
-3. On the server: `sudo tailscale serve --bg --https=8443 http://127.0.0.1:8000` (proxies
-   `https://<machine>.<tailnet>.ts.net:8443` to the API with a valid certificate, tailnet only).
+3. On the server: `sudo tailscale serve --bg --https=443 http://127.0.0.1:8000` (proxies
+   `https://<machine>.<tailnet>.ts.net` to the API with a valid certificate, tailnet only).
    On the Lightsail server `deploy/lightsail/tailscale.sh` does this, and also publishes the Lens
    on port 443 through Funnel (`docs/runbook.md` → Deploying on AWS Lightsail).
 4. On the iPhone, Tailscale app → settings → turn on **VPN On Demand** so the connection comes up
    by itself when a shortcut runs.
-5. The API address is `https://<machine>.<tailnet>.ts.net:8443`.
+5. The API address is `https://<machine>.<tailnet>.ts.net` (no port; decision 0044).
 
 **B. Public HTTPS**
 

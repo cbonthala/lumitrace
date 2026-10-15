@@ -132,6 +132,11 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
   warn that a Docker `.env` must not set the path settings (they override the image's container
   paths). `docs/flash.md` now uses the Prism address `tailscale.sh` serves
   (`https://<machine>.<tailnet>.ts.net:8443`).
+- **Easier Flash address** (decision 0044): `tailscale.sh` now serves the Prism on port 443
+  (tailnet only) and funnels the Lens on 8443, so the Flash app is at
+  `https://lumitrace.<tailnet>.ts.net` and the Lens at `https://lumitrace.<tailnet>.ts.net:8443/mcp`.
+  The script resets the old serve/funnel setup first. New runbook section *Renaming the
+  tailnet*.
 
 ### Prism (recording API)
 
