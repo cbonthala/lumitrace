@@ -7,8 +7,9 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
-- `.env.example` uses `openai/gpt-4.1` for fact extraction and journal writing, matching
-  production.
+- `.env.example` matches production's providers: `openai/gpt-4.1` for fact extraction and
+  journal writing, and Sarvam speech-to-text in Telugu (`LUMITRACE_STT_MODEL` commented out, as
+  it is only read by the `litellm` provider).
 - `docs/architecture.md` → *Deployment and providers*: a simple high-level diagram of the
   programs, the Lightsail server, Tailscale and the outside services (Sarvam, OpenAI, Google
   Drive).
