@@ -56,6 +56,8 @@ and never paste real tokens or personal content here.
   restart `lens`, reconnect the AI apps. Both must be 16+ characters (`openssl rand -hex 32`) or
   the server refuses to start.
   * A new **static token** takes effect on restart; update Cursor / `mcp-remote` configs.
+  * OAuth sessions end on their own `LUMITRACE_MCP_SESSION_DAYS` (default 7) after each
+    sign-in; the app then asks for the owner password again.
   * A new **owner password** does *not* end existing OAuth sessions (apps hold refresh tokens).
     To disconnect every app (lost phone, suspected leak):
     `docker compose run --rm lens lumitrace-lens reset-oauth`, then
@@ -273,6 +275,8 @@ an HTTP API: **Prism**, **Spectrum** and **Lens** (with **OAuth** and **MCP** su
    The uploads have an empty `date` body field: leave it empty for today, or set `YYYY-MM-DD`
    to file the capture under an earlier day.
 5. **Lens → MCP:** run **Initialize** first (it saves the session id), then any tool call.
+   These use the static `LUMITRACE_MCP_AUTH_TOKEN`; production leaves it empty (OAuth only), so
+   run them against **Local** unless you set a token on the server for a while.
 
 In production, notes and recordings are added to today's real journal and **feedback** writes a
 real feedback record. Production Prism calls need this computer on the tailnet.

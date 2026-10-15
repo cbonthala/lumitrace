@@ -130,6 +130,7 @@ def build_auth(settings: Settings) -> AuthSetup:
             state_path=oauth_state_path(settings),
             static_token=static or None,
             scope=SCOPE,
+            session_days=settings.mcp_session_days,
         )
         return AuthSetup(
             settings=AuthSettings(

@@ -107,6 +107,7 @@ class Settings(BaseSettings):
     mcp_auth_mode: Literal["none", "token", "oauth"] = "token"
     mcp_auth_token: SecretStr = SecretStr("")
     mcp_owner_password: SecretStr = SecretStr("")
+    mcp_session_days: int = Field(default=7, ge=1)
 
     @field_validator("timezone")
     @classmethod

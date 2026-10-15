@@ -9,7 +9,11 @@ back to the AI app with an authorization code.
 Registered clients and tokens are kept in a small JSON file next to the index
 (:func:`oauth_state_path`), with tokens stored only as SHA-256 hashes. Authorization codes and
 pending sign-ins live in memory (they last minutes).
-See ``docs/decisions/0032-single-owner-oauth.md``.
+
+Every token records when the owner signed in (``signed_in_at``); refreshing keeps that time,
+and no token outlives ``signed_in_at + session_days``, so each app has to sign in again after
+``LUMITRACE_MCP_SESSION_DAYS``.
+See ``docs/decisions/0032-single-owner-oauth.md`` and ``0034-oauth-sessions-end-after-days.md``.
 """
 
 from __future__ import annotations
@@ -52,6 +56,7 @@ STATE_FILE_NAME = "mcp-oauth-state.json"
 
 ACCESS_TOKEN_TTL = 60 * 60  # 1 hour
 REFRESH_TOKEN_TTL = 90 * 24 * 60 * 60  # 90 days; refreshing rotates it
+DEFAULT_SESSION_DAYS = 7
 AUTH_CODE_TTL = 5 * 60
 LOGIN_TTL = 10 * 60
 MAX_CLIENTS = 50
@@ -64,6 +69,10 @@ FAILURE_DELAY = 0.5
 def oauth_state_path(settings: Settings) -> Path:
     """OAuth clients/tokens file: next to the index, on the server's disk (not in storage)."""
     return Path(settings.index_path).parent / STATE_FILE_NAME
+
+
+def _now() -> float:
+    return time.time()
 
 
 def _hash(token: str) -> str:
@@ -94,10 +103,13 @@ class OwnerOAuthProvider:
         state_path: Path,
         static_token: str | None = None,
         scope: str = "lumitrace",
+        session_days: int = DEFAULT_SESSION_DAYS,
     ) -> None:
         self.issuer_url = issuer_url.rstrip("/")
         self.resource_url = resource_url
         self.scope = scope
+        self.session_days = session_days
+        self._session_seconds = session_days * 24 * 60 * 60
         self._password = owner_password.encode()
         self._static_token = (static_token or "").encode()
         self._state_path = Path(state_path)
@@ -130,9 +142,28 @@ class OwnerOAuthProvider:
                 self._state_path,
                 exc_info=True,
             )
+            return
+        if self._limit_sessions():
+            self._save()
+
+    def _limit_sessions(self) -> bool:
+        """Cap every token at its sign-in time plus the session length. Tokens saved before
+        sign-in times were recorded count as signed in now. True if anything changed."""
+        now = int(_now())
+        changed = False
+        for table in (self._access, self._refresh):
+            for info in table.values():
+                if "signed_in_at" not in info:
+                    info["signed_in_at"] = now
+                    changed = True
+                end = info["signed_in_at"] + self._session_seconds
+                if info["expires_at"] > end:
+                    info["expires_at"] = end
+                    changed = True
+        return changed
 
     def _save(self) -> None:
-        now = time.time()
+        now = _now()
         self._access = {k: v for k, v in self._access.items() if v["expires_at"] > now}
         self._refresh = {k: v for k, v in self._refresh.items() if v["expires_at"] > now}
         data = {
@@ -184,7 +215,7 @@ class OwnerOAuthProvider:
             _norm_url(self.issuer_url),
         }:
             raise AuthorizeError("invalid_target", "unknown resource for this server")
-        now = time.time()
+        now = _now()
         self._pending = {k: v for k, v in self._pending.items() if v.expires_at > now}
         if len(self._pending) >= MAX_PENDING:
             raise AuthorizeError("temporarily_unavailable", "too many pending sign-ins")
@@ -204,7 +235,7 @@ class OwnerOAuthProvider:
             pending = self._pending_login(request_id)
             if pending is None:
                 return _expired_page()
-            return _login_page(request_id, pending)
+            return _login_page(request_id, pending, self.session_days)
 
         form = await request.form()
         request_id = str(form.get("request", ""))
@@ -225,7 +256,7 @@ class OwnerOAuthProvider:
                 )
             )
 
-        now = time.time()
+        now = _now()
         while self._failures and self._failures[0] < now - FAILURE_WINDOW:
             self._failures.popleft()
         if len(self._failures) >= MAX_FAILURES:
@@ -233,6 +264,7 @@ class OwnerOAuthProvider:
             return _login_page(
                 request_id,
                 pending,
+                self.session_days,
                 error="Too many wrong passwords. Wait 15 minutes and try again.",
                 status_code=429,
             )
@@ -241,7 +273,9 @@ class OwnerOAuthProvider:
             self._failures.append(now)
             logger.warning("OAuth sign-in: wrong owner password")
             await anyio.sleep(FAILURE_DELAY)
-            return _login_page(request_id, pending, error="Wrong password.", status_code=401)
+            return _login_page(
+                request_id, pending, self.session_days, error="Wrong password.", status_code=401
+            )
 
         self._pending.pop(request_id, None)
         code = secrets.token_urlsafe(32)
@@ -262,7 +296,7 @@ class OwnerOAuthProvider:
 
     def _pending_login(self, request_id: str) -> _PendingLogin | None:
         pending = self._pending.get(request_id) if request_id else None
-        if pending is None or pending.expires_at < time.time():
+        if pending is None or pending.expires_at < _now():
             return None
         return pending
 
@@ -279,29 +313,36 @@ class OwnerOAuthProvider:
     ) -> OAuthToken:
         if self._codes.pop(authorization_code.code, None) is None:
             raise TokenError("invalid_grant", "authorization code already used")
-        return self._issue(client.client_id, authorization_code.scopes)
+        return self._issue(client.client_id, authorization_code.scopes, int(_now()))
 
     # --- tokens -----------------------------------------------------------------------------
 
-    def _issue(self, client_id: str, scopes: list[str]) -> OAuthToken:
-        now = int(time.time())
+    def _issue(self, client_id: str, scopes: list[str], signed_in_at: int) -> OAuthToken:
+        now = int(_now())
+        session_end = signed_in_at + self._session_seconds
         access, refresh = secrets.token_urlsafe(32), secrets.token_urlsafe(48)
         access_hash, refresh_hash = _hash(access), _hash(refresh)
-        common = {"client_id": client_id, "scopes": scopes, "resource": self.resource_url}
+        common = {
+            "client_id": client_id,
+            "scopes": scopes,
+            "resource": self.resource_url,
+            "signed_in_at": signed_in_at,
+        }
+        access_expires = min(now + ACCESS_TOKEN_TTL, session_end)
         self._access[access_hash] = {
             **common,
-            "expires_at": now + ACCESS_TOKEN_TTL,
+            "expires_at": access_expires,
             "refresh": refresh_hash,
         }
         self._refresh[refresh_hash] = {
             **common,
-            "expires_at": now + REFRESH_TOKEN_TTL,
+            "expires_at": min(now + REFRESH_TOKEN_TTL, session_end),
             "access": access_hash,
         }
         self._save()
         return OAuthToken(
             access_token=access,
-            expires_in=ACCESS_TOKEN_TTL,
+            expires_in=access_expires - now,
             scope=" ".join(scopes),
             refresh_token=refresh,
         )
@@ -316,7 +357,7 @@ class OwnerOAuthProvider:
                 resource=self.resource_url,
             )
         info = self._access.get(_hash(token))
-        if info is None or info["expires_at"] < time.time():
+        if info is None or info["expires_at"] < _now():
             return None
         return AccessToken(
             token=token,
@@ -333,7 +374,7 @@ class OwnerOAuthProvider:
         info = self._refresh.get(_hash(refresh_token))
         if info is None or info["client_id"] != client.client_id:
             return None
-        if info["expires_at"] < time.time():
+        if info["expires_at"] < _now():
             return None
         return RefreshToken(
             token=refresh_token,
@@ -354,7 +395,7 @@ class OwnerOAuthProvider:
         if info is None:
             raise TokenError("invalid_grant", "refresh token already used")
         self._access.pop(info.get("access", ""), None)
-        return self._issue(client.client_id, scopes or info["scopes"])
+        return self._issue(client.client_id, scopes or info["scopes"], info["signed_in_at"])
 
     async def revoke_token(self, token: AccessToken | RefreshToken) -> None:
         token_hash = _hash(token.token)
@@ -400,13 +441,20 @@ def _redirect(url: str) -> Response:
 
 
 def _login_page(
-    request_id: str, pending: _PendingLogin, *, error: str | None = None, status_code: int = 200
+    request_id: str,
+    pending: _PendingLogin,
+    session_days: int,
+    *,
+    error: str | None = None,
+    status_code: int = 200,
 ) -> HTMLResponse:
     client = html.escape(pending.client_name or "An AI app")
     target = html.escape(AnyUrl(str(pending.params.redirect_uri)).host or "")
+    days = "1 day" if session_days == 1 else f"{session_days} days"
     body = f"""<h1>Connect to your Lumitrace</h1>
 <p><strong>{client}</strong> wants to read your journal.</p>
-<p class="muted">After you sign in you will be sent back to <strong>{target}</strong>.</p>
+<p class="muted">After you sign in you will be sent back to <strong>{target}</strong>.
+It stays connected for {days}, then asks for the password again.</p>
 {f'<p class="error">{html.escape(error)}</p>' if error else ""}
 <form method="post" action="{LOGIN_PATH}">
 <input type="hidden" name="request" value="{html.escape(request_id)}">

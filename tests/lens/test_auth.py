@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import secrets
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -11,6 +13,7 @@ from urllib.parse import parse_qs, urlparse
 import anyio
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from lumitrace.config import Settings
 from lumitrace.lens import oauth as O
@@ -391,3 +394,89 @@ def test_oauth_corrupt_state_starts_empty(tmp_path: Path) -> None:
         issuer_url=BASE, resource_url=f"{BASE}/mcp", owner_password=PASSWORD, state_path=path
     )
     assert anyio.run(provider.get_client, "anything") is None
+
+
+def test_oauth_session_ends_after_session_days(
+    oauth_settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(ValidationError):
+        _settings(oauth_settings, mcp_session_days=0)
+    cfg = _settings(oauth_settings, mcp_session_days=7)
+    day = 24 * 60 * 60
+    start = time.time()
+    clock = [start]
+    monkeypatch.setattr(O, "_now", lambda: clock[0])
+
+    async def refresh(client: httpx.AsyncClient, reg: dict, token: str) -> httpx.Response:
+        return await _token(client, reg, grant_type="refresh_token", refresh_token=token)
+
+    async def run() -> None:
+        async with http_client(cfg) as client:
+            reg = await _register(client)
+            verifier, challenge = _pkce()
+            login_url = (await _start_login(client, reg, challenge)).headers["location"]
+            assert "stays connected for 7 days" in (await client.get(login_url)).text
+            code = await _login(client, reg, challenge)
+            first = await _token(
+                client,
+                reg,
+                grant_type="authorization_code",
+                code=code,
+                redirect_uri=CALLBACK,
+                code_verifier=verifier,
+            )
+            tokens = first.json()
+            assert tokens["expires_in"] == O.ACCESS_TOKEN_TTL
+
+            clock[0] = start + 6 * day
+            assert (await _initialize(client, tokens["access_token"])).status_code == 401
+            resp = await refresh(client, reg, tokens["refresh_token"])
+            assert resp.status_code == 200, resp.text
+            tokens = resp.json()
+            assert (await _initialize(client, tokens["access_token"])).status_code == 200
+
+            clock[0] = start + 7 * day - 1800
+            resp = await refresh(client, reg, tokens["refresh_token"])
+            assert resp.status_code == 200, resp.text
+            tokens = resp.json()
+            assert tokens["expires_in"] == 1800
+
+            clock[0] = start + 7 * day + 1
+            assert (await _initialize(client, tokens["access_token"])).status_code == 401
+            assert (await refresh(client, reg, tokens["refresh_token"])).status_code == 400
+
+    anyio.run(run)
+
+
+def test_oauth_tokens_saved_before_session_limits_get_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    now = 1_800_000_000
+    monkeypatch.setattr(O, "_now", lambda: now)
+    path = tmp_path / "state.json"
+    common = {"client_id": "c1", "scopes": ["lumitrace"], "resource": f"{BASE}/mcp"}
+    access, refresh = "a" * 64, "r" * 64
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "clients": {},
+                "access_tokens": {access: {**common, "expires_at": now + 600, "refresh": refresh}},
+                "refresh_tokens": {
+                    refresh: {**common, "expires_at": now + 80 * 86400, "access": access}
+                },
+            }
+        )
+    )
+    OwnerOAuthProvider(
+        issuer_url=BASE,
+        resource_url=f"{BASE}/mcp",
+        owner_password=PASSWORD,
+        state_path=path,
+        session_days=7,
+    )
+    saved = json.loads(path.read_text())
+    assert saved["refresh_tokens"][refresh]["signed_in_at"] == now
+    assert saved["refresh_tokens"][refresh]["expires_at"] == now + 7 * 86400
+    assert saved["access_tokens"][access]["signed_in_at"] == now
+    assert saved["access_tokens"][access]["expires_at"] == now + 600

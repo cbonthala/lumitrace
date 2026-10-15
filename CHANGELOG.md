@@ -204,6 +204,11 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Lens (MCP server)
 
+- **OAuth sessions end after 7 days** (`LUMITRACE_MCP_SESSION_DAYS`, decision 0034): refreshing
+  no longer extends a connection; each AI app asks for the owner password again 7 days after
+  signing in. The password page says so. Tokens saved earlier count as signed in at the next
+  start. Production no longer sets the static `LUMITRACE_MCP_AUTH_TOKEN`.
+
 - `get_day` returns each capture's English `translation` (or `null`).
 
 - `query_facts` kinds `places` and `family` (replacing `family_events`), with a `person`

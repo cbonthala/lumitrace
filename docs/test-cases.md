@@ -538,6 +538,8 @@ File: `tests/lens/test_auth.py`
 - Checks that in OAuth mode the static token, if set, also works (for apps such as Cursor). <sub>`test_oauth_accepts_static_token_too`</sub>
 - Checks that sign-ins survive a restart, that only fingerprints (hashes) of tokens are saved and never the tokens themselves, and that the file can be read only by its owner. <sub>`test_oauth_state_survives_restart_and_stores_only_hashes`</sub>
 - Checks that a damaged sign-in file is treated as empty instead of crashing. <sub>`test_oauth_corrupt_state_starts_empty`</sub>
+- Checks that a session length under one day is refused, that the password page says how long the app stays connected, that refreshing keeps an app connected only until 7 days after the sign-in (the last token is cut short to that moment), and that after the 7 days both the access token and the refresh token are refused. <sub>`test_oauth_session_ends_after_session_days`</sub>
+- Checks that tokens saved before sessions had an end are treated as signed in when the server starts: they now expire 7 days later at the latest, and the new limit is saved. <sub>`test_oauth_tokens_saved_before_session_limits_get_one`</sub>
 
 ---
 

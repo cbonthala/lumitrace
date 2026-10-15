@@ -131,6 +131,8 @@ are created if missing. Returns `saved`, `id`, `dates`, `storage_path`.
   `LUMITRACE_MCP_PUBLIC_URL` = the public **https** root URL of the server (no path; it is the
   OAuth issuer, and the protected resource is `<public URL><LUMITRACE_MCP_PATH>`). If
   `LUMITRACE_MCP_AUTH_TOKEN` is also set, that static token keeps working (handy for Cursor).
+  It never expires and skips the password, so leave it empty on a public server unless a
+  tool really needs it.
 
 `GET /health` is always unauthenticated: `{"status", "version", "auth_mode", "index_present"}`.
 
@@ -151,6 +153,12 @@ Endpoints (served by the MCP SDK's auth support; Lumitrace supplies storage and 
 * Access tokens last 1 hour, refresh tokens 90 days (rotated on every refresh), codes 5 minutes
   (single use), sign-in pages 10 minutes. Tokens are bound to the resource URL (RFC 8707);
   `/authorize` rejects other `resource` values with `invalid_target`.
+* **Sessions end after `LUMITRACE_MCP_SESSION_DAYS` (default 7)** counted from the password
+  sign-in (decision 0034). Every token records `signed_in_at`; refreshing keeps it, and no
+  access or refresh token expires later than `signed_in_at` + the session length. After that the
+  refresh is refused and the AI app asks to connect again (Claude: Settings → Connectors →
+  Lumitrace → Connect). The password page says how long the app stays connected. Tokens saved
+  before this existed count as signed in when the server starts.
 * After 5 wrong passwords in 15 minutes the page refuses all attempts until the window passes.
 * Clients and tokens persist in `mcp-oauth-state.json` next to the index
   (`LUMITRACE_INDEX_PATH`'s folder, mode 0600, tokens stored only as SHA-256 hashes), so a
