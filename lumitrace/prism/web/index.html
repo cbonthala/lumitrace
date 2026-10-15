@@ -66,7 +66,8 @@
       <button class="recbtn" id="rec-btn" type="button" aria-label="Start recording"></button>
       <div class="rec-idle" id="rec-idle">
         <div class="t">Log My Day</div>
-        <div class="s">Tap to record. Location and photos are attached when you stop.</div>
+        <div class="s">Tap to record, or upload a voice memo. Location and photos are attached
+          when you send.</div>
       </div>
       <div class="s rec-hint" id="rec-hint" hidden>Keep the screen on. Recording stops if you lock the phone.</div>
       <div class="chips">
@@ -75,6 +76,8 @@
           <input type="file" id="rec-photos" accept="image/*" multiple class="overlay-input"></label>
         <label class="chip clickable">📅 Filing under <b class="date-label">today</b>
           <input type="date" class="overlay-input date-input"></label>
+        <label class="chip clickable">🎵 <b>Upload audio</b>
+          <input type="file" id="rec-upload" accept="audio/*,.m4a,.mp3,.wav,.aac,.ogg,.webm,.flac" class="overlay-input"></label>
       </div>
       <div class="thumbs" id="rec-thumbs"></div>
       <button class="link-btn" id="discard-btn" type="button" hidden>Discard recording</button>

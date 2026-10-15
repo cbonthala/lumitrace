@@ -159,6 +159,9 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
   minutes lock sign-in; cookie requests from other sites that change something get `403`.
 - `GET /captures` (recent capture statuses, newest first) and `GET /summary` (days logged in
   the last 7 days, captures in them, streak), for the web app.
+- **Flash web app: Upload audio**: a chip under the record button sends an audio file (a Voice
+  Memo saved to Files, `.m4a`, `.mp3`, `.wav`, ...) as Log My Day, filed under the day the file
+  was recorded or saved unless a day is chosen. It goes through the same offline outbox.
 - **Connected AI apps in Flash Settings** (decision 0036): lists the AI apps signed in to the
   Lens (name, website, sign-in time, session end, last use), with **Disconnect** and
   **Disconnect all apps**: the app is cut off on its next request and needs the Lens password

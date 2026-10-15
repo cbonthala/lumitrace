@@ -442,6 +442,49 @@ async function stopRecording() {
   }
 }
 
+function audioSeconds(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const audio = new Audio();
+    const done = (seconds) => { URL.revokeObjectURL(url); resolve(seconds); };
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => done(Number.isFinite(audio.duration) ? Math.round(audio.duration) : 0);
+    audio.onerror = () => done(0);
+    setTimeout(() => done(0), 3000);
+    audio.src = url;
+  });
+}
+
+async function uploadAudio(input) {
+  const file = input.files[0];
+  input.value = "";
+  if (!file) return;
+  if (state.recorder) {
+    toast("Stop the recording first.", true);
+    return;
+  }
+  // The file's time is when it was recorded or saved; it picks the day unless one is chosen.
+  const saved = new Date(file.lastModified || Date.now());
+  const started = saved > new Date() ? new Date() : saved;
+  const day = state.date || localDate(started);
+  const size = file.size < 1048576
+    ? `${Math.max(1, Math.round(file.size / 1024))} KB`
+    : `${(file.size / 1048576).toFixed(1)} MB`;
+  if (!confirm(`Send "${file.name}" (${size}) as Log My Day for ${dayLabel(day)}?`)) return;
+  const ext = (file.name.match(/\.[a-z0-9]{1,5}$/i) || [extensionFor(file.type)])[0].toLowerCase();
+  const item = {
+    capture_id: captureId("rec", started),
+    kind: "recording",
+    created: Date.now(),
+    fields: baseFields(started),
+    audio: file,
+    audioName: `audio${ext}`,
+    photos: takePhotos("recPhotos", "rec-thumbs", "rec-photo-count"),
+    seconds: await audioSeconds(file),
+  };
+  await queueAndSend(item);
+}
+
 async function discardRecording() {
   if (!state.recorder || !confirm("Discard this recording?")) return;
   await finishRecording();
@@ -780,6 +823,7 @@ function wire() {
   $("rec-btn").addEventListener("click", toggleRecording);
   $("discard-btn").addEventListener("click", discardRecording);
   $("rec-photos").addEventListener("change", (e) => addPhotos(e.target, "recPhotos", "rec-thumbs", "rec-photo-count"));
+  $("rec-upload").addEventListener("change", (e) => uploadAudio(e.target));
   $("note-photos").addEventListener("change", (e) => addPhotos(e.target, "notePhotos", "note-thumbs"));
   $("note-send").addEventListener("click", sendNote);
   $("send-now").addEventListener("click", async () => { await flushOutbox(); await refreshAll(); });

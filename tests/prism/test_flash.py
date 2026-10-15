@@ -206,6 +206,24 @@ def test_login_problem(flash_settings: Settings) -> None:
     assert not session_valid(off, make_session(off)[0])
 
 
+def test_uploaded_voice_memo_is_sent_like_a_recording(app: FastAPI, client: TestClient) -> None:
+    page = client.get("/flash/").text
+    assert 'id="rec-upload"' in page and 'accept="audio/*' in page
+    assert "uploadAudio" in client.get("/flash/app.js").text
+    resp = client.post(
+        "/recordings",
+        data={"captured_at": "2026-10-08T18:05:00-05:00", "capture_id": "web-memo-1"},
+        files=[("audio", ("audio.mp3", b"A walk by the lake with Leo.", "audio/mpeg"))],
+        headers=AUTH,
+    )
+    assert resp.status_code == 202, resp.text
+    assert resp.json()["entry_date"] == "2026-10-08"
+    wait_idle(app)
+    status = client.get("/captures/web-memo-1", headers=AUTH).json()
+    assert status["status"] == "done"
+    assert status["day_file"] == "2026/10/2026-10-08/2026-10-08.md"
+
+
 def test_recent_captures_newest_first(app: FastAPI, client: TestClient) -> None:
     assert client.get("/captures").status_code == 401
     for text, at in (("Morning tea.", "08:00"), ("Evening run.", "19:30"), ("Lunch.", "12:15")):

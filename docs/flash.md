@@ -36,6 +36,7 @@ You can use both; captures from either land in the same day file.
 | Part | What it does |
 |---|---|
 | **Log My Day** (big red button) | records audio; tap again to stop and send it to `POST /recordings` with the photos you picked, the place name and (if turned on) your location |
+| **Upload audio** (chip under the record button) | pick an audio file (a Voice Memo saved to Files, an `.m4a`, `.mp3`, `.wav`, ...) and send it as Log My Day with the photos you picked and the place name, but not your current location (the memo may be from elsewhere). It is filed under the day the file was recorded or saved, unless you chose a day in **Filing under**; the app asks before sending |
 | **Quick note** | type or dictate with the keyboard's microphone, add photos, send to `POST /notes` |
 | **Filing under** | choose another day (the `date` field); leave it on today otherwise |
 | **This week** | days logged in the last 7 days, entries in them, and your streak (`GET /summary`) |
