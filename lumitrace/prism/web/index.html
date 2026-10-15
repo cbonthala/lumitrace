@@ -168,6 +168,17 @@
           <button class="btn danger" id="logout" type="button">Sign out</button>
         </div>
       </section>
+      <section class="card apps">
+        <div class="sec"><h2>Connected AI apps</h2><span class="muted" id="apps-sub">Lens</span></div>
+        <p class="muted small">Apps that can search your journal through the Lens. Disconnecting
+          cuts an app off at once; it needs the Lens password to connect again.</p>
+        <div id="apps"></div>
+        <p class="empty muted" id="apps-empty" hidden>No AI app has connected yet.</p>
+        <div class="row">
+          <button class="btn small" id="apps-refresh" type="button">Refresh</button>
+          <button class="btn danger" id="apps-sign-out-all" type="button" hidden>Disconnect all apps</button>
+        </div>
+      </section>
       <section class="card hint">
         <b>Add to Home Screen</b><br>
         In Safari tap <b>Share</b> → <b>Add to Home Screen</b>. On a laptop, use your browser's

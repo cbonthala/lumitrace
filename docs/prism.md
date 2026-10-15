@@ -118,6 +118,14 @@ app itself in `lumitrace/prism/web/` (ADR 0019; user guide: `docs/flash.md` → 
 | `GET /session` | none | `{"signed_in", "username", "sign_in_available", "version"}` for the cookie sent (never an error) |
 | `GET /captures?days=7&limit=30` | token or cookie | the capture statuses (same shape as `GET /captures/{id}`) changed in the last `days` (1–60), newest capture first, at most `limit` (1–200). No journal content |
 | `GET /summary` | token or cookie | `{"today", "days": 7, "days_logged", "logged_dates", "captures", "streak"}` |
+| `GET /lens/apps` | token or cookie | the AI apps connected to the Lens, passed through from its admin API (`docs/lens.md` → Connected apps) |
+| `POST /lens/apps/{id}/sign-out` | token or cookie | disconnect one app now (it needs the Lens password again) |
+| `POST /lens/apps/sign-out-all` | token or cookie | disconnect every app; `{"signed_out": n}` |
+
+**Connected AI apps** (`lumitrace/prism/lens_apps.py`, decision 0036): the Prism calls the
+Lens's private admin API at `LUMITRACE_MCP_ADMIN_URL` with `LUMITRACE_API_TOKEN` (5-second
+timeout). The Lens's answer is passed through; an unknown app is `404`; a Lens that is down or
+refuses the token is `502` (never `401`, which the web app treats as its own sign-out).
 
 **Sign-in** is on when `LUMITRACE_FLASH_USERNAME` is set, `LUMITRACE_FLASH_PASSWORD` is at least
 10 characters (not `change-me`) and `LUMITRACE_API_TOKEN` is valid; otherwise `POST /login`
@@ -387,6 +395,7 @@ One JSON line per processing attempt, appended to the file for the month the att
 | `LUMITRACE_FAMILY` | comma-separated family members who get their own block under Family, each optionally with their relation to the owner in parentheses, the owner marked `(me)`: `Sam (me), Maya (wife), Leo (son)`; empty = no family blocks |
 | `LUMITRACE_PROMPTS_DIR` | prompt files; a relative path that does not exist falls back to the repository's `prompts/` |
 | `LUMITRACE_INDEXER_NUDGE_URL` | nudge after each capture (empty = off) |
+| `LUMITRACE_MCP_ADMIN_URL` | the Lens's private admin API for connected AI apps (Compose: `http://lens:8003`) |
 | storage settings | where everything is written (`get_storage`) |
 
 ## Testing

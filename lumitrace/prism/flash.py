@@ -4,6 +4,7 @@
   signed session cookie (:mod:`lumitrace.prism.auth`).
 * ``GET /captures``: recent capture statuses (no journal content).
 * ``GET /summary``: days logged, captures and streak, read from the day files.
+* ``/lens/apps``: the AI apps connected to the Lens (:mod:`lumitrace.prism.lens_apps`).
 * ``/flash/``: the static app in ``lumitrace/prism/web/``.
 """
 
@@ -43,6 +44,7 @@ from lumitrace.prism.auth import (
     session_valid,
 )
 from lumitrace.prism.inbox import CaptureStatus
+from lumitrace.prism.lens_apps import register_lens_apps
 
 log = logging.getLogger(__name__)
 
@@ -241,6 +243,8 @@ def register_flash(
     def summary() -> WeekSummary:
         today = entry_date(dt.datetime.now(settings.tz), settings.tz, settings.day_rollover_hour)
         return week_summary(services().storage, today)
+
+    register_lens_apps(app, settings, auth)
 
     @app.get("/", include_in_schema=False)
     def root() -> RedirectResponse:

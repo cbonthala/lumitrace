@@ -172,6 +172,15 @@ File: `tests/prism/test_flash.py`
 - Checks that the weekly summary counts the days with a day file in the last seven days, the entries in them, and the streak of days in a row up to today. <sub>`test_week_summary_counts_days_captures_and_streak`</sub>
 - Checks that the streak still counts while today has no entry yet, carries across the end of a month, drops to zero after a missed day, and that an empty journal gives all zeros. <sub>`test_streak_waits_for_today_and_crosses_months`</sub>
 
+### Connected AI apps in the Flash Settings tab
+
+File: `tests/prism/test_lens_apps.py`
+
+- Checks that listing, disconnecting one and disconnecting all AI apps need a login, that each is passed on to the Lens's private admin address with the API token, with an app id made safe for the address, and that there is no way to delete an app. <sub>`test_connected_apps_are_forwarded_to_the_lens`</sub>
+- Checks that a Lens that refuses the API token or can't be reached gives 502 (never 401, which would sign the Flash app out), and that an unknown app gives 404. <sub>`test_lens_failures_never_look_like_a_flash_sign_out`</sub>
+- Checks the Prism against the real Lens admin app: an empty list with the session length, 404 for an unknown app, and "nobody disconnected" when no app is connected. <sub>`test_connected_apps_against_the_real_admin_api`</sub>
+- Checks that the Settings tab has the Connected AI apps card with its list and disconnect-all button, and that the app's script loads the list. <sub>`test_settings_tab_has_connected_apps`</sub>
+
 ### Sending a recording
 
 File: `tests/prism/test_capture_api.py`
@@ -539,6 +548,16 @@ File: `tests/lens/test_auth.py`
 - Checks that a damaged sign-in file is treated as empty instead of crashing. <sub>`test_oauth_corrupt_state_starts_empty`</sub>
 - Checks that a session length under one day is refused, that the password page says how long the app stays connected, that refreshing keeps an app connected only until 7 days after the sign-in (the last token is cut short to that moment), and that after the 7 days both the access token and the refresh token are refused. <sub>`test_oauth_session_ends_after_session_days`</sub>
 - Checks that tokens saved before sessions had an end are treated as signed in when the server starts: they now expire 7 days later at the latest, and the new limit is saved. <sub>`test_oauth_tokens_saved_before_session_limits_get_one`</sub>
+
+### Managing connected apps (private admin API)
+
+File: `tests/lens/test_admin.py`
+
+- Checks that the Lens serves the admin API on its own port (127.0.0.1:8003 by default) next to the MCP port, and not at all when the admin port is 0 or there is no OAuth sign-in. <sub>`test_lens_serves_the_admin_api_only_with_oauth`</sub>
+- Checks that the admin API refuses a missing or wrong API token (401), is turned off (503) while the API token is a placeholder, and is not reachable on the public MCP port. <sub>`test_admin_api_needs_the_api_token`</sub>
+- Checks that a signed-in app is listed with its name, website, sign-in time, a session end 7 days later and when it was last used; that disconnecting it makes its current access token fail on the very next request and its refresh token fail too, removes its tokens from the saved file while keeping its registration, and shows it as signed out; that the same app can connect again with the password; and that an unknown app gives 404. <sub>`test_admin_lists_and_disconnects_an_app`</sub>
+- Checks that "disconnect all" reports how many apps were signed in, ends every app's access and refresh tokens, and keeps the apps listed as signed out. <sub>`test_admin_signs_out_every_app`</sub>
+- Checks that an app's first use is saved at once and later uses at most once a minute, so busy apps don't rewrite the file on every request. <sub>`test_last_used_is_saved_at_most_once_a_minute`</sub>
 
 ---
 

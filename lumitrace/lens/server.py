@@ -215,10 +215,15 @@ def build_server(
     storage: Storage | None = None,
     *,
     transport: str | None = None,
+    auth: AuthSetup | None = None,
 ) -> MCPServer:
-    """Build the server. Auth applies only to the streamable-http transport."""
+    """Build the server. Auth applies only to the streamable-http transport; pass ``auth`` to
+    share an already built provider (the admin API uses the same one)."""
     transport = transport or settings.mcp_transport
-    auth = build_auth(settings) if transport == "streamable-http" else AuthSetup()
+    if transport != "streamable-http":
+        auth = AuthSetup()
+    elif auth is None:
+        auth = build_auth(settings)
     server = MCPServer(
         name="lumitrace",
         title="Lumitrace",

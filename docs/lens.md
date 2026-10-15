@@ -14,7 +14,9 @@ uv run lumitrace-lens reset-oauth             # forget all OAuth clients and tok
 
 | Module | What it does |
 |---|---|
-| `server.py` | `build_server(settings, storage=None, *, transport=None)`, server instructions, tool registration, `/health` |
+| `server.py` | `build_server(settings, storage=None, *, transport=None, auth=None)`, server instructions, tool registration, `/health` |
+| `__main__.py` | `lumitrace-lens`; `http_apps(settings)` lists the MCP app and the private admin app, served together |
+| `admin.py` | Private admin API for connected apps (`build_admin_app`) |
 | `tools.py` | `LensTools`: the five tools as plain Python returning JSON-ready dicts |
 | `search.py` | Hybrid search: FTS5 bm25 + sqlite-vec cosine, reciprocal rank fusion, snippets |
 | `dates.py` | Date arguments (`YYYY-MM-DD`, `today`, `yesterday`, `MM-DD`) |
@@ -168,6 +170,30 @@ Endpoints (served by the MCP SDK's auth support; Lumitrace supplies storage and 
   restart does not disconnect the apps. Pending sign-ins and codes are in memory: run **one**
   MCP server process.
 * Scope: `lumitrace` (the only one).
+
+### Connected apps (private admin API)
+
+With OAuth, `lumitrace-lens` also serves a small admin API (`admin.py`, decision 0036) on
+`LUMITRACE_MCP_ADMIN_HOST`:`LUMITRACE_MCP_ADMIN_PORT` (default `127.0.0.1:8003`; Docker
+Compose binds it inside the container network as `http://lens:8003`). Port 0 turns it off.
+**Never publish or funnel this port.** It shares the MCP app's process and OAuth state, so a
+sign-out applies at once. The Flash Settings tab uses it through the Prism (`docs/flash.md`).
+
+Every request needs `Authorization: Bearer <LUMITRACE_API_TOKEN>` (401 otherwise; 503 while the
+token is a placeholder or shorter than 16 characters).
+
+| Route | What it does |
+|---|---|
+| `GET /admin/apps` | `{"apps": [...], "session_days": 7}`; each app has `id`, `name` (as registered, untrusted), `hosts` (from its redirect addresses), `registered_at`, `signed_in`, `signed_in_at`, `session_ends_at`, `last_used_at` (UTC ISO-8601 or null). Signed-in apps first |
+| `POST /admin/apps/{id}/sign-out` | Disconnects the app now: deletes its tokens and half-finished sign-ins, so its next request gets 401 (no waiting for the 1-hour access token to expire: every request is checked against the stored tokens). It keeps its registration and reconnects with the password. 404 if unknown |
+| `POST /admin/apps/sign-out-all` | Disconnects every app; `{"signed_out": <apps that were signed in>}` |
+
+Registrations are never deleted from here: an app that keeps its client id (Claude, ChatGPT)
+would fail to reconnect until its connector is re-added. Signed-out registrations are pruned
+only by the 50-client cap or `reset-oauth`.
+
+`last_used_at` is the last request with a valid access token; the file is updated at once on
+first use and then at most once a minute.
 
 ## Connecting AI apps
 

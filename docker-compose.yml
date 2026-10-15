@@ -6,6 +6,8 @@ x-lumitrace: &lumitrace
   env_file: .env
   environment:
     LUMITRACE_INDEXER_NUDGE_URL: http://spectrum:8001/nudge
+    LUMITRACE_MCP_ADMIN_HOST: 0.0.0.0
+    LUMITRACE_MCP_ADMIN_URL: http://lens:8003
   volumes:
     - lumitrace-data:/data
     - ./secrets:/secrets
@@ -31,6 +33,10 @@ services:
     command: ["lumitrace-lens"]
     ports:
       - "8002:8002"
+    # 8003 is the private admin API (connected AI apps) the prism service calls. Never publish
+    # it: keep it out of `ports:` here and out of Tailscale serve/funnel.
+    expose:
+      - "8003"
 
 volumes:
   lumitrace-data:

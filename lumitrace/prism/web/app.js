@@ -102,7 +102,8 @@ async function api(path, options = {}) {
   if (!resp.ok) {
     let detail = `HTTP ${resp.status}`;
     try { detail = (await resp.json()).detail || detail; } catch { /* not JSON */ }
-    if (resp.status >= 500) setConn("bad", "Server problem");
+    // A Lens problem is shown in its own card, not as a Prism problem.
+    if (resp.status >= 500 && !path.startsWith("/lens/")) setConn("bad", "Server problem");
     throw new HttpError(resp.status, typeof detail === "string" ? detail : JSON.stringify(detail));
   }
   setConn("ok", "Connected");
@@ -618,6 +619,78 @@ async function refreshAll() {
   refreshSummary();
 }
 
+// --- connected AI apps (Settings) ------------------------------------------------------------
+
+function stamp(iso) {
+  const d = new Date(iso);
+  const day = localDate(d);
+  if (day === localDate() || day === localDate(new Date(Date.now() - 86400000))) return when(iso);
+  const date = d.toLocaleDateString([], { month: "short", day: "numeric" });
+  return `${date}, ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+}
+
+function appRow(app) {
+  const row = el("div", "item");
+  row.append(el("div", "ico", "✦"));
+  const meta = el("div", "meta");
+  const name = el("div", "a", app.name || "Unnamed app");
+  name.append(el("span", `st ${app.signed_in ? "done" : "queue"}`, app.signed_in ? "Connected" : "Disconnected"));
+  const from = app.hosts.length ? app.hosts.join(", ") : "unknown address";
+  const used = app.last_used_at ? ` · used ${stamp(app.last_used_at)}` : "";
+  meta.append(name, el("div", "b", `${from}${used}`));
+  meta.append(el("div", "b", app.signed_in
+    ? `Signed in ${stamp(app.signed_in_at)} · ends ${new Date(app.session_ends_at).toLocaleDateString([], { month: "short", day: "numeric" })}`
+    : `Added ${stamp(app.registered_at)}`));
+  row.append(meta);
+  if (app.signed_in) {
+    const button = el("button", "btn small", "Disconnect");
+    button.type = "button";
+    button.addEventListener("click", () => disconnectApp(app));
+    row.append(button);
+  }
+  return row;
+}
+
+async function refreshApps() {
+  const box = $("apps");
+  try {
+    const { apps, session_days: days } = await api("/lens/apps");
+    $("apps-sub").textContent = `Sessions last ${days} day${days === 1 ? "" : "s"}`;
+    box.replaceChildren(...apps.map(appRow));
+    $("apps-empty").textContent = "No AI app has connected yet.";
+    $("apps-empty").hidden = apps.length > 0;
+    $("apps-sign-out-all").hidden = !apps.some((a) => a.signed_in);
+  } catch (err) {
+    box.replaceChildren();
+    $("apps-empty").textContent = err instanceof HttpError
+      ? `Can't load the apps: ${err.message}.`
+      : "Can't reach the server. Check your connection (or VPN).";
+    $("apps-empty").hidden = false;
+    $("apps-sign-out-all").hidden = true;
+  }
+}
+
+async function appAction(path, options, done) {
+  try {
+    await api(path, options);
+    toast(done);
+  } catch (err) {
+    toast(`That didn't work: ${err.message}`, true);
+  }
+  await refreshApps();
+}
+
+function disconnectApp(app) {
+  const name = app.name || "this app";
+  if (!confirm(`Disconnect ${name} now? It needs the Lens password to connect again.`)) return;
+  appAction(`/lens/apps/${encodeURIComponent(app.id)}/sign-out`, { method: "POST" }, `${name} disconnected.`);
+}
+
+function disconnectAllApps() {
+  if (!confirm("Disconnect every AI app now? Each needs the Lens password to connect again.")) return;
+  appAction("/lens/apps/sign-out-all", { method: "POST" }, "All AI apps disconnected.");
+}
+
 // --- sign-in -------------------------------------------------------------------------------
 
 function showSignedOut() {
@@ -695,6 +768,7 @@ async function logout() {
 function go(tab) {
   document.body.dataset.tab = tab;
   window.scrollTo(0, 0);
+  if (tab === "settings") refreshApps();
 }
 
 function wire() {
@@ -726,6 +800,8 @@ function wire() {
     renderPlace();
     if (e.target.checked) getCoords();
   });
+  $("apps-refresh").addEventListener("click", refreshApps);
+  $("apps-sign-out-all").addEventListener("click", disconnectAllApps);
   $("clear-history").addEventListener("click", () => {
     localStorage.removeItem(SENT_KEY);
     renderCaptures();

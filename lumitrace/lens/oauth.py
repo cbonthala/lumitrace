@@ -18,6 +18,7 @@ See ``docs/decisions/0032-single-owner-oauth.md`` and ``0034-oauth-sessions-end-
 
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import hmac
 import html
@@ -64,6 +65,7 @@ MAX_PENDING = 100
 MAX_FAILURES = 5
 FAILURE_WINDOW = 15 * 60
 FAILURE_DELAY = 0.5
+LAST_USED_SAVE_INTERVAL = 60
 
 
 def oauth_state_path(settings: Settings) -> Path:
@@ -73,6 +75,12 @@ def oauth_state_path(settings: Settings) -> Path:
 
 def _now() -> float:
     return time.time()
+
+
+def _iso(timestamp: float | None) -> str | None:
+    if timestamp is None:
+        return None
+    return dt.datetime.fromtimestamp(timestamp, dt.UTC).isoformat(timespec="seconds")
 
 
 def _hash(token: str) -> str:
@@ -117,6 +125,8 @@ class OwnerOAuthProvider:
         self._refresh: dict[str, dict[str, Any]] = {}
         self._pending: dict[str, _PendingLogin] = {}
         self._codes: dict[str, AuthorizationCode] = {}
+        self._last_used: dict[str, float] = {}
+        self._last_used_saved_at = 0.0
         self._failures: deque[float] = deque()
         self._load()
 
@@ -134,6 +144,7 @@ class OwnerOAuthProvider:
             self._clients = dict(data.get("clients", {}))
             self._access = dict(data.get("access_tokens", {}))
             self._refresh = dict(data.get("refresh_tokens", {}))
+            self._last_used = dict(data.get("last_used", {}))
         except (OSError, ValueError, AttributeError):
             logger.warning(
                 "OAuth state file %s is unreadable; starting empty (AI apps must reconnect)",
@@ -169,6 +180,7 @@ class OwnerOAuthProvider:
             "clients": self._clients,
             "access_tokens": self._access,
             "refresh_tokens": self._refresh,
+            "last_used": self._last_used,
         }
         with self._lock:
             self._state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -200,8 +212,74 @@ class OwnerOAuthProvider:
 
     def _forget_client(self, client_id: str) -> None:
         self._clients.pop(client_id, None)
+        self._last_used.pop(client_id, None)
+        self._drop_tokens(client_id)
+
+    def _drop_tokens(self, client_id: str) -> None:
         self._access = {k: v for k, v in self._access.items() if v["client_id"] != client_id}
         self._refresh = {k: v for k, v in self._refresh.items() if v["client_id"] != client_id}
+        self._codes = {k: v for k, v in self._codes.items() if v.client_id != client_id}
+        self._pending = {k: v for k, v in self._pending.items() if v.client_id != client_id}
+
+    # --- connected apps (the private admin API, decision 0036) ------------------------------
+
+    def list_apps(self) -> list[dict[str, Any]]:
+        """Registered apps with their current session, signed-in ones first."""
+        now = _now()
+        apps = []
+        for client_id, raw in self._clients.items():
+            sessions = [
+                v
+                for v in self._refresh.values()
+                if v["client_id"] == client_id and v["expires_at"] > now
+            ]
+            hosts = sorted(
+                {AnyUrl(str(uri)).host or "" for uri in raw.get("redirect_uris") or []} - {""}
+            )
+            apps.append(
+                {
+                    "id": client_id,
+                    "name": raw.get("client_name") or None,
+                    "hosts": hosts,
+                    "registered_at": _iso(raw.get("client_id_issued_at")),
+                    "signed_in": bool(sessions),
+                    "signed_in_at": _iso(max((s["signed_in_at"] for s in sessions), default=None)),
+                    "session_ends_at": _iso(max((s["expires_at"] for s in sessions), default=None)),
+                    "last_used_at": _iso(self._last_used.get(client_id)),
+                }
+            )
+        apps.sort(
+            key=lambda a: (a["signed_in"], a["last_used_at"] or "", a["registered_at"] or ""),
+            reverse=True,
+        )
+        return apps
+
+    def sign_out(self, client_id: str) -> bool:
+        """Disconnect the app now: its tokens are deleted, so its next request gets 401 and it
+        must sign in with the password again. The registration stays. False if unknown."""
+        if client_id not in self._clients:
+            return False
+        self._drop_tokens(client_id)
+        self._save()
+        logger.info("OAuth app signed out by the owner")
+        return True
+
+    def sign_out_all(self) -> int:
+        """End every session (registrations stay). Returns how many apps were signed in."""
+        now = _now()
+        signed_in = {v["client_id"] for v in self._refresh.values() if v["expires_at"] > now}
+        self._access, self._refresh, self._codes, self._pending = {}, {}, {}, {}
+        self._save()
+        logger.info("OAuth: every app signed out by the owner (%d were signed in)", len(signed_in))
+        return len(signed_in)
+
+    def _note_use(self, client_id: str) -> None:
+        now = _now()
+        first_use = client_id not in self._last_used
+        self._last_used[client_id] = now
+        if first_use or now - self._last_used_saved_at >= LAST_USED_SAVE_INTERVAL:
+            self._last_used_saved_at = now
+            self._save()
 
     # --- authorization ----------------------------------------------------------------------
 
@@ -349,6 +427,7 @@ class OwnerOAuthProvider:
         info = self._access.get(_hash(token))
         if info is None or info["expires_at"] < _now():
             return None
+        self._note_use(info["client_id"])
         return AccessToken(
             token=token,
             client_id=info["client_id"],

@@ -207,6 +207,10 @@ textarea::placeholder, input::placeholder { color: #5e648a; }
 .hint { font-size: 13.5px; color: var(--muted); }
 .hint b { color: var(--text); }
 .settings { display: grid; gap: 16px; align-content: start; }
+.apps .item { align-items: flex-start; }
+.apps .ico { color: var(--accent); }
+.apps .a .st { margin-left: 8px; vertical-align: 1px; }
+.apps .meta .b + .b { margin-top: 2px; }
 
 /* toast */
 .toast {

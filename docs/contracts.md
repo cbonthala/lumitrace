@@ -22,7 +22,7 @@ Tests construct `Settings(_env_file=None, ...)` directly; the `settings` fixture
 | LLM | `llm_extract_facts_model`, `llm_write_journal_model`, `llm_fallback_model` (LiteLLM strings), `llm_timeout_seconds`, `llm_max_retries` |
 | Embeddings | `embedding_model` (`"fake"` = offline), `embedding_dimension` |
 | Index (Spectrum) | `index_path` (`data/index/lumitrace.sqlite`), `indexer_host`, `indexer_port` (8001), `indexer_poll_interval_seconds` (300), `indexer_nudge_url`, `indexer_backup_interval_hours` (24) |
-| MCP (Lens) | `mcp_transport: "stdio" \| "streamable-http"`, `mcp_host`, `mcp_port` (8002), `mcp_path` (`/mcp`), `mcp_public_url`, `mcp_auth_mode: "oauth" \| "none"` (`oauth`), `mcp_owner_password: SecretStr`, `mcp_session_days` (7) |
+| MCP (Lens) | `mcp_transport: "stdio" \| "streamable-http"`, `mcp_host`, `mcp_port` (8002), `mcp_path` (`/mcp`), `mcp_public_url`, `mcp_auth_mode: "oauth" \| "none"` (`oauth`), `mcp_owner_password: SecretStr`, `mcp_session_days` (7), `mcp_admin_host` (`127.0.0.1`), `mcp_admin_port` (8003, 0 = off), `mcp_admin_url` (`http://127.0.0.1:8003`, read by the Prism) |
 
 ## Frames, storage: `lumitrace.frames.storage`
 
@@ -137,6 +137,14 @@ writes the index, the Lens reads it.
 `nudge_indexer(settings, paths=(), *, timeout=2.0, client=None) -> bool` (never raises).
 Wire contract: `POST {LUMITRACE_INDEXER_NUDGE_URL}` with JSON `{"paths": [...]}`; Spectrum
 answers `202 Accepted` and syncs soon.
+
+## Lens admin API (connected AI apps)
+
+The Prism's `/lens/apps` routes (`lumitrace/prism/lens_apps.py`) call the Lens's private
+admin API (`lumitrace/lens/admin.py`) at `LUMITRACE_MCP_ADMIN_URL` with
+`Authorization: Bearer <LUMITRACE_API_TOKEN>`, so both services need the same API token. Routes
+and response shapes: `docs/lens.md` → Connected apps; decision 0036. The admin port (8003) is
+never published or funnelled.
 
 ## Entry points
 

@@ -47,7 +47,7 @@ def resource_url(settings: Settings) -> str:
     return public_base_url(settings) + "/" + settings.mcp_path.strip("/")
 
 
-def _check_secret(name: str, value: str) -> None:
+def check_secret(name: str, value: str) -> None:
     if not value:
         raise AuthConfigError(f"{name} must be set")
     if value.strip().lower() in _PLACEHOLDERS or len(value) < MIN_SECRET_LENGTH:
@@ -71,7 +71,7 @@ def build_auth(settings: Settings) -> AuthSetup:
 
     if mode == "oauth":
         password = settings.mcp_owner_password.get_secret_value()
-        _check_secret("LUMITRACE_MCP_OWNER_PASSWORD", password)
+        check_secret("LUMITRACE_MCP_OWNER_PASSWORD", password)
         issuer = public_base_url(settings)
         parsed = urlparse(issuer)
         if parsed.scheme != "https" and parsed.hostname not in _LOOPBACK_HOSTS:

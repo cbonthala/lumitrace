@@ -41,7 +41,8 @@ You can use both; captures from either land in the same day file.
 | **This week** | days logged in the last 7 days, entries in them, and your streak (`GET /summary`) |
 | **Recent captures** / History | each capture's status from the last 7 days: Waiting to send, Queued, Writing journal…, In journal, or Failed (tap to retry) (`GET /captures`) |
 | **Design** (tab on a phone, **How it works** button on a laptop) | an animated diagram of the Flash → Prism → Frames → Spectrum → Lens flow and one short card per module: what it does and where you see it in the app |
-| **Settings** | place name and location switch (saved on the device only), sign out |
+| **Settings** | place name and location switch (saved on the device only), sign out, and **Connected AI apps** |
+| **Connected AI apps** (in Settings) | the AI apps that have connected to the Lens (Claude, ChatGPT, ...): name, the website it signs in from, Connected or Disconnected, when it signed in, when its session ends and when it was last used. **Disconnect** cuts an app off at once (its next request is refused) until it signs in again with the Lens password; **Disconnect all apps** does it for every app. Each asks for confirmation (`/lens/apps`, decision 0036) |
 
 On a phone the screen has four tabs (Capture, History, Design, Settings). Turned sideways, the
 Capture page uses two columns (record next to the note) so the record button stays on the first
@@ -108,8 +109,8 @@ so never use plain HTTP outside your home network). Two options:
 Put a reverse proxy with automatic certificates in front of port 8000, for example Caddy with a
 `Caddyfile` of `lumitrace.example.com { reverse_proxy localhost:8000 }`, and point the DNS name at
 the server. The Shortcuts only need `POST /recordings`, `POST /notes`, `GET /captures/*` and
-`GET /health`; the web app also needs `/flash/*`, `/login`, `/logout`, `/session`, `/captures`
-and `/summary`. Every request without the token or a signed-in session is refused.
+`GET /health`; the web app also needs `/flash/*`, `/login`, `/logout`, `/session`, `/captures`,
+`/summary` and `/lens/apps*`. Every request without the token or a signed-in session is refused.
 
 Check it from Safari on the phone: `https://<address>/health` should show `{"status":"ok",...}`.
 

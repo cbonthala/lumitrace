@@ -154,6 +154,12 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
   minutes lock sign-in; cookie requests from other sites that change something get `403`.
 - `GET /captures` (recent capture statuses, newest first) and `GET /summary` (days logged in
   the last 7 days, captures in them, streak), for the web app.
+- **Connected AI apps in Flash Settings** (decision 0036): lists the AI apps signed in to the
+  Lens (name, website, sign-in time, session end, last use), with **Disconnect** and
+  **Disconnect all apps**: the app is cut off on its next request and needs the Lens password
+  again. Backed by `GET /lens/apps`, `POST /lens/apps/{id}/sign-out` and
+  `POST /lens/apps/sign-out-all`, which call the Lens admin API at the new
+  `LUMITRACE_MCP_ADMIN_URL`; Lens failures are `502`.
 - **Prompts `extract_facts` v4, `write_journal` v3, `journal_addendum` v3** (ADR 0018): follow
   the original transcript when the machine translation disagrees (instead of dropping the
   detail), understand parents talking about themselves as "Dad"/"Nanna", always fill the
@@ -213,6 +219,11 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
   connect with the URL only and run the password sign-in. `none` remains for local-only use.
   A leftover `LUMITRACE_MCP_AUTH_TOKEN` is ignored; `LUMITRACE_MCP_AUTH_MODE=token` no longer
   starts.
+- **Private admin API for connected apps** (decision 0036): with OAuth, `lumitrace-lens` also
+  serves `/admin/apps` (list, disconnect one, disconnect all) on `LUMITRACE_MCP_ADMIN_HOST` /
+  `LUMITRACE_MCP_ADMIN_PORT` (default `127.0.0.1:8003`, never published; Compose exposes it
+  to the `prism` service only), guarded by `LUMITRACE_API_TOKEN`. The OAuth state now also
+  records when each app last used the Lens.
 
 - `get_day` returns each capture's English `translation` (or `null`).
 

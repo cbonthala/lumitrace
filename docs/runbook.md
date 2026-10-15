@@ -57,7 +57,9 @@ and never paste real tokens or personal content here.
   * OAuth sessions end on their own `LUMITRACE_MCP_SESSION_DAYS` (default 7) after each
     sign-in; the app then asks for the owner password again.
   * A new **owner password** does *not* end existing OAuth sessions (apps hold refresh tokens).
-    To disconnect every app (lost phone, suspected leak):
+    To disconnect one app or all of them, use the Flash web app: Settings → **Connected AI
+    apps** → **Disconnect** / **Disconnect all apps** (takes effect at once, no restart). If the
+    Flash app is unavailable, use the command line instead:
     `docker compose run --rm lens lumitrace-lens reset-oauth`, then
     `docker compose restart lens`,
     then reconnect each app (Claude: Settings → Connectors → Lumitrace → Connect; ChatGPT:

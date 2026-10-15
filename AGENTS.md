@@ -87,6 +87,8 @@ Cross-component rules that are not visible in any one module:
   only writes `feedback`. The `_system/` folders and their writers are listed in
   `docs/contracts.md`.
 * The Spectrum port (8001) is never published outside the Docker network (`/nudge` has no auth).
+* The Lens admin port (8003, connected AI apps) is never published or funnelled; only the Prism
+ calls it, with `LUMITRACE_API_TOKEN` (decision 0036).
 
 ## Module ownership (parallel work streams)
 

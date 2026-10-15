@@ -107,6 +107,9 @@ class Settings(BaseSettings):
     mcp_auth_mode: Literal["none", "oauth"] = "oauth"
     mcp_owner_password: SecretStr = SecretStr("")
     mcp_session_days: int = Field(default=7, ge=1)
+    mcp_admin_host: str = "127.0.0.1"
+    mcp_admin_port: int = 8003
+    mcp_admin_url: str = "http://127.0.0.1:8003"
 
     @field_validator("timezone")
     @classmethod
