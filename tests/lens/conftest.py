@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
-import json
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -29,6 +28,7 @@ from lumitrace.frames.dayfile import (
 from lumitrace.frames.storage.local import LocalStorage
 from lumitrace.index.schema import connect, serialize_embedding
 from lumitrace.lens.tools import LensTools
+from lumitrace.spectrum.core import _insert_day
 
 TZ = ZoneInfo("America/Chicago")
 
@@ -53,13 +53,11 @@ def fixture_days(sample_day_markdown: str) -> list[DayFile]:
                 activities=[Activity(kind="hike", minutes=90)],
                 family=[
                     FamilyMember(
-                        name="Leo", food=["pumpkin pie"], moments=["picked the biggest pumpkin"]
+                        name="Leo",
+                        meals=[Meal(type="snacks", items=["pumpkin pie"])],
+                        moments=["picked the biggest pumpkin"],
                     ),
-                    FamilyMember(
-                        name="Maya",
-                        places=["the farm trail"],
-                        activities=[Activity(kind="hike", minutes=90)],
-                    ),
+                    FamilyMember(name="Maya", moments=["hiked the farm trail"]),
                 ],
                 highlights=["Leo picked the biggest pumpkin"],
             ),
@@ -94,18 +92,17 @@ def fixture_days(sample_day_markdown: str) -> list[DayFile]:
                 mood_score=5,
                 people=["Leo", "Grandma Rose"],
                 places=["home", "the farmers market"],
-                meals=[
-                    Meal(type="dinner", items=["pasta"]),
-                    Meal(type="drink", items=["lemonade"]),
-                ],
                 activities=[Activity(kind="Run", minutes=45), Activity(kind="reading")],
                 family=[
                     FamilyMember(
                         name="Leo",
-                        mood="happy",
-                        food=["pasta", "lemonade"],
+                        feelings=["happy"],
+                        meals=[
+                            Meal(type="dinner", items=["pasta"]),
+                            Meal(type="snacks", items=["lemonade"]),
+                        ],
                         health=["a runny nose"],
-                        school=["spelling test"],
+                        moments=["passed the spelling test"],
                     ),
                 ],
                 highlights=["Grandma Rose visited"],
@@ -158,62 +155,7 @@ def index_day(conn, settings: Settings, day: DayFile) -> None:
             "VALUES (?, 'day', ?, 'hash', '2026-10-11T00:00:00+00:00')",
             (path, date),
         )
-        m = day.meta
-        f = day.facts
-        conn.execute(
-            "INSERT INTO days(date, path, title, mood, mood_score, city, weather, audio_json, "
-            "photos_json, user_edited, capture_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
-            (
-                date,
-                path,
-                day.title,
-                f.mood,
-                f.mood_score,
-                f.city,
-                f.weather,
-                json.dumps(m.audio),
-                json.dumps(m.photos),
-                len(day.captures),
-            ),
-        )
-        pos = 0
-        for meal in f.meals:
-            for item in meal.items:
-                conn.execute(
-                    "INSERT INTO meals(date, meal_type, item, position) VALUES (?, ?, ?, ?)",
-                    (date, meal.type, item, pos),
-                )
-                pos += 1
-        for i, act in enumerate(f.activities):
-            conn.execute(
-                "INSERT INTO activities(date, kind, minutes, position) VALUES (?, ?, ?, ?)",
-                (date, act.kind, act.minutes, i),
-            )
-        for table, column, values in (
-            ("people", "name", f.people),
-            ("places", "name", f.places),
-            ("highlights", "text", f.highlights),
-        ):
-            for i, value in enumerate(values):
-                conn.execute(
-                    f"INSERT INTO {table}(date, {column}, position) VALUES (?, ?, ?)",
-                    (date, value, i),
-                )
-        family_pos = 0
-        for member in f.family:
-            items = [("mood", member.mood, None)] if member.mood else []
-            items += [("food", v, None) for v in member.food]
-            items += [("places", v, None) for v in member.places]
-            items += [("activities", a.kind, a.minutes) for a in member.activities]
-            for category in ("moments", "health", "school"):
-                items += [(category, v, None) for v in getattr(member, category)]
-            for category, text, minutes in items:
-                conn.execute(
-                    "INSERT INTO family_facts(date, person, category, text, minutes, position)"
-                    " VALUES (?, ?, ?, ?, ?, ?)",
-                    (date, member.name, category, text, minutes, family_pos),
-                )
-                family_pos += 1
+        _insert_day(conn, path, day)
         chunks = _passages(day)
         vectors = embed_texts([c[3] for c in chunks], settings)
         for ordinal, ((section, heading, capture_id, text), vector) in enumerate(

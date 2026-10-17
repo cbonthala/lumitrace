@@ -1,4 +1,4 @@
-# Index schema (schema version 2)
+# Index schema (schema version 3)
 
 One SQLite file (`LUMITRACE_INDEX_PATH`, default `data/index/lumitrace.sqlite`) with FTS5 keyword
 search and sqlite-vec vector search. Code: `lumitrace/index/schema.py` (shared: Spectrum writes,
@@ -20,7 +20,7 @@ the Markdown files with `reset_derived(conn)` followed by a full sync.
 
 | key | value |
 |---|---|
-| `schema_version` | `"2"`; Spectrum rebuilds the index when it differs from `SCHEMA_VERSION` |
+| `schema_version` | `"3"`; Spectrum rebuilds the index when it differs from `SCHEMA_VERSION` |
 | `embedding_model` | model the vectors were made with |
 | `embedding_dimension` | vector size; `connect` raises `EmbeddingDimensionMismatch` if settings differ |
 | `sync_token` | last `Storage.list_changes` token (cleared by `reset_derived`) |
@@ -46,17 +46,20 @@ are not downloaded.
 
 | Table | Columns (plus `id`, `date`, `position`) |
 |---|---|
-| `meals` | `meal_type` (`breakfast`, `lunch`, `dinner`, `snacks` or `drinks`), `item` (one row per item) |
+| `meals` | `person` (`''` when the meal is not tied to one; the `Everyone` block), `meal_type` (`breakfast`, `lunch`, `dinner` or `snacks`), `item` (one row per item) |
 | `activities` | `kind`, `minutes` |
 | `people` | `name` (index with `COLLATE NOCASE`) |
 | `places` | `name` (index with `COLLATE NOCASE`) |
 | `family_facts` | `person`, `category`, `text`, `minutes` (index on `person COLLATE NOCASE, category`) |
 | `highlights` | `text` |
 
-`family_facts` has one row per item of a family member's block: `category` is `mood`, `food`,
-`places`, `activities` (`text` is the kind, `minutes` may be set), `moments`, `health` or
-`school`. Schema version 1 had a `family_events(text)` table instead of `places` and
-`family_facts`.
+`days.remember` holds the day's one-line `Remember` recap. `family_facts` has one row per item
+under a person's block: `category` is `feelings`, `health` or `moments` (their memories); the
+family's shared memories (`#### Together`) are rows with `person` = `Together`. Schema version 2
+had the categories `mood`, `food`, `places`, `activities` and `school` (now meals, places and
+things we did) and no `meals.person`; version 1 had `family_events(text)`. `reset_derived`
+drops and recreates all fact tables, so an index from an older schema is rebuilt with the
+current columns.
 
 Re-indexing a day = `DELETE FROM days WHERE date = ?` (cascades) then insert again.
 

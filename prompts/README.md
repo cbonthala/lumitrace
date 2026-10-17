@@ -11,12 +11,15 @@ One file per task and version:
 
 ```
 prompts/
-  extract_facts/v4.md      facts for the day, incl. places and per family member facts
-                           (validated against lumitrace.frames.dayfile.DayFacts); knows the
-                           speaker, family relations and translations; v1-v3 are older
-  write_journal/v3.md      {headline, journal} for the whole day; v1, v2 are older
-  journal_addendum/v3.md   {text}: a paragraph about a new entry, for days the owner edited;
-                           v1, v2 are older
+  extract_facts/v6.md      facts for the day in the topic-first format 3 (highlights, remember,
+                           places, people, memories, things we did, and per family member
+                           meals, health, feelings, moments; validated against
+                           lumitrace.frames.dayfile.DayFacts); knows the speaker, family
+                           relations, translations and the owner's glossary; v1-v5 are older
+  write_journal/v4.md      {headline, journal} for the whole day, as bullets with a Remember
+                           line; v1-v3 are older
+  journal_addendum/v4.md   {text}: a few bullets about a new entry, for days the owner edited;
+                           v1-v3 are older
 ```
 
 * **Task** folders match the per-task model settings: `extract_facts` (uses
@@ -47,9 +50,9 @@ prompt and the code cannot silently drift apart. Available values:
 
 | Task | Placeholders |
 |---|---|
-| `extract_facts` | `date` (`2026-10-10 (Saturday)`), `author`, `family`, `location`, `captures` |
-| `write_journal` | `date`, `author`, `family`, `facts` (JSON), `captures` |
-| `journal_addendum` | `date`, `author`, `family`, `journal` (the edited page), `capture` (the new entry) |
+| `extract_facts` | `date` (`2026-10-10 (Saturday)`), `author`, `family`, `glossary`, `location`, `captures` |
+| `write_journal` | `date`, `author`, `family`, `glossary`, `facts` (JSON), `captures` |
+| `journal_addendum` | `date`, `author`, `family`, `glossary`, `journal` (the edited page), `capture` (the new entry) |
 
 `author` is the `LUMITRACE_FAMILY` member marked `(me)`, or `(not given)`. `family` lists every
 member with their relation to the author: `Sam (the author), Maya (the author's wife), Leo`.

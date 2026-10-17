@@ -82,16 +82,18 @@ Models (pydantic):
 
 * `Meal(type: str, items: list[str])` (`type` is one of `MEAL_TYPES`),
   `Activity(kind: str, minutes: int | None)`
-* `FamilyMember`: `name`, `mood`, `food`, `places`, `activities: list[Activity]`, `moments`,
-  `health`, `school`; `.has_facts()`.
-* `DayFacts`: `mood`, `mood_score` (1–5), `city`, `weather`, `people`, `places`, `meals`,
-  `activities`, `family: list[FamilyMember]`, `highlights`; `.is_empty()`. Also the output
+* `FamilyMember`: `name`, `meals: list[Meal]` (breakfast, lunch, dinner, snacks), `health`,
+  `feelings`, `moments` (memories); `.has_facts()`.
+* `DayFacts`: `mood`, `mood_score` (1–5), `city`, `weather`, `highlights`, `remember`,
+  `places`, `people`, `memories` (shared), `activities` (things we did), `meals` (not tied to a
+  person), `family: list[FamilyMember]`; `.is_empty()`. Format 1/2 shaped data is converted by a
+  validator (`docs/frames-format.md` → Older formats). Also the output
   schema of fact extraction. Values are normalised (one line, no separators inside items) so
   render and parse agree. `FACT_FIELDS`.
 * `FrontMatter`: `date`, `audio`, `photos`, `prompt_version`, `models_used` (task → model),
   `generated_at`, `generated_hash`, `lumitrace_format` (read from `lumen_format`,
   `bookshelf_format` or `lifelog_format` in files written under the earlier names); unknown keys preserved. Facts are
-  not in the front matter since format 2.
+  not in the front matter since format 2. `FORMAT_VERSION` is 3.
 * `Capture`: `id`, `kind: "recording" | "note"`, `captured_at` (aware), `text`, `translation`
   (English translation of a recording, `""` if none; written under `TRANSLATION_MARKER`),
   `audio`, `photos`, `location`; `Capture.make_id(kind, captured_at)`.

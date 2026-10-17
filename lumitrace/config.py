@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     each day file, each optionally followed by its relation to the owner in parentheses, e.g.
     ``Sam (me), Maya (wife), Leo (son)``; ``(me)`` marks the owner. Use :attr:`family_members`,
     :attr:`family_relations` and :attr:`owner_name`."""
+    glossary: str = ""
+    """Notes for the AI prompts, separated by ``;``: names, relation words and known
+    mishearings, e.g. ``Leon is Leo's daycare friend; "Leo Nanna" means Sam; potty not party``.
+    Use :attr:`glossary_lines`."""
 
     # --- Recording API -------------------------------------------------------------------
     api_token: SecretStr = SecretStr("")
@@ -145,6 +149,11 @@ class Settings(BaseSettings):
                 seen.add(name.casefold())
                 relations[name] = relation
         return relations
+
+    @property
+    def glossary_lines(self) -> list[str]:
+        """:attr:`glossary` notes as a list: split on ``;``, whitespace collapsed, empty dropped."""
+        return [" ".join(part.split()) for part in self.glossary.split(";") if part.strip()]
 
     @property
     def owner_name(self) -> str | None:

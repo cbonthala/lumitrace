@@ -111,10 +111,24 @@ def test_sample_fixture_roundtrips(sample_day_markdown: str) -> None:
     assert day.date == DAY
     assert day.title == "Saturday, October 10, 2026 · First tooth"
     assert (day.facts.mood, day.facts.mood_score, day.facts.city) == ("happy", 4, "Austin")
-    assert day.facts.people == ["Maya", "Leo"]
-    assert day.facts.places == ["the river trail", "the taco truck", "home"]
-    assert day.facts.meals[0] == D.Meal(type="breakfast", items=["oatmeal", "blueberries"])
-    assert day.facts.activities[1] == D.Activity(kind="reading", minutes=None)
+    assert day.facts.weather == "sunny, 24°C"
+    assert day.facts.people == ["Ravi, neighbour - at the river trail (Sam)"]
+    assert day.facts.places == [
+        "the river trail (Sam)",
+        "the taco truck (Sam, Maya)",
+        "home (Sam, Maya, Leo)",
+    ]
+    assert day.facts.remember == "Leo lost his first tooth and was very proud"
+    assert day.facts.memories == ["Leo's first tooth came out at bedtime"]
+    sam, maya, leo = day.facts.family
+    assert sam.meals[0] == D.Meal(type="breakfast", items=["oatmeal", "blueberries"])
+    assert (sam.feelings, leo.feelings, leo.moments) == (
+        ["happy"],
+        ["proud"],
+        ["lost his first tooth"],
+    )
+    assert maya.meals == [D.Meal(type="lunch", items=["fish tacos"])]
+    assert day.facts.activities[1] == D.Activity(kind="reading (Sam)", minutes=None)
     assert day.meta.model_extra == {}
     assert day.meta.audio == ["2026-10-10-2130.m4a"]
     assert day.meta.photos == ["photo-01.jpg", "photo-02.jpg"]
@@ -148,22 +162,89 @@ def test_parses_files_written_before_the_rename(sample_day_markdown: str, old_na
     assert D.render(day) == sample_day_markdown
 
 
-def test_reads_format_1_files_and_writes_format_2(
-    sample_day_v1_markdown: str, sample_day_markdown: str
+def test_reads_format_1_files_and_writes_the_current_format(
+    sample_day_v1_markdown: str,
 ) -> None:
     old = D.parse(sample_day_v1_markdown)
-    new = D.parse(sample_day_markdown)
-    assert old.facts == new.facts.model_copy(update={"places": [], "family": []})
     assert old.facts.highlights == ["Leo lost his first tooth", "Finished a book"]
+    assert (old.facts.mood, old.facts.mood_score, old.facts.city) == ("happy", 4, "Austin")
+    assert old.facts.meals[0] == D.Meal(type="breakfast", items=["oatmeal", "blueberries"])
     assert old.meta.model_extra == {}
     assert old.meta.lumitrace_format == D.FORMAT_VERSION
     assert not old.is_user_edited()  # matched the format 1 hash, so it was re-stamped
     rendered = D.render(old)
     front = rendered.split("\n---\n", 1)[0]
     assert "mood" not in front and "meals" not in front
-    assert "lumitrace_format: 2" in front
+    assert f"lumitrace_format: {D.FORMAT_VERSION}" in front
     assert "- **Mood:** happy (4/5)" in rendered
     assert D.parse(rendered) == old
+
+
+def test_reads_format_2_files_and_moves_their_facts_into_the_current_sections(
+    sample_day_v2_markdown: str,
+) -> None:
+    day = D.parse(sample_day_v2_markdown)
+    facts = day.facts
+    assert (facts.mood, facts.mood_score, facts.city) == ("happy", 4, "Austin")
+    assert facts.people == ["Maya", "Leo"]
+    assert facts.places == ["the river trail", "the taco truck", "home", "the taco truck (Maya)"]
+    assert facts.meals[0] == D.Meal(type="breakfast", items=["oatmeal", "blueberries"])
+    leo = next(m for m in facts.family if m.name == "Leo")
+    assert (leo.feelings, leo.moments) == (["proud"], ["lost his first tooth"])
+    assert leo.meals == [D.Meal(type="snacks", items=["pasta"])]
+    assert day.meta.lumitrace_format == D.FORMAT_VERSION
+    assert day.is_user_edited()  # the format 2 hash does not match, so it is never overwritten
+    assert D.parse(D.render(day)) == day
+
+
+def test_format_2_family_lines_become_places_and_things_we_did() -> None:
+    md = (
+        "---\ndate: 2026-10-10\nlumitrace_format: 2\n---\n\n# T\n\n## At a glance\n\n"
+        "<!-- lumitrace:facts:start -->\n### Family\n\n#### Leo\n\n"
+        "- **Mood:** proud\n- **Ate:** pizza, apple juice\n- **Went to:** school\n"
+        "- **Did:** soccer (60 min); drawing\n- **School/work:** spelling test\n"
+        "<!-- lumitrace:facts:end -->\n"
+    )
+    facts = D.parse(md).facts
+    assert facts.places == ["school (Leo)"]
+    assert facts.activities == [
+        D.Activity(kind="soccer (Leo)", minutes=60),
+        D.Activity(kind="drawing (Leo)"),
+        D.Activity(kind="school/work: spelling test (Leo)"),
+    ]
+    assert facts.family == [
+        D.FamilyMember(
+            name="Leo",
+            feelings=["proud"],
+            meals=[D.Meal(type="snacks", items=["pizza", "apple juice"])],
+        )
+    ]
+
+
+def test_format_2_day_meals_go_to_the_person_who_ate_them() -> None:
+    facts = D.DayFacts.model_validate(
+        {
+            "meals": [
+                {"type": "breakfast", "items": ["eggs"]},
+                {"type": "dinner", "items": ["soup"]},
+            ],
+            "family": [
+                {"name": "Sam", "food": ["eggs", "soup", "tea"]},
+                {"name": "Leo", "food": ["milk"]},
+            ],
+        }
+    )
+    assert facts.meals == []
+    sam, leo = facts.family
+    assert sam.meals == [
+        D.Meal(type="breakfast", items=["eggs"]),
+        D.Meal(type="dinner", items=["soup"]),
+        D.Meal(type="snacks", items=["tea"]),
+    ]
+    assert leo.meals == [D.Meal(type="snacks", items=["milk"])]
+    unclaimed = D.DayFacts.model_validate({"meals": [{"type": "lunch", "items": ["rice"]}]})
+    assert unclaimed.meals == [D.Meal(type="lunch", items=["rice"])]
+    assert "#### Everyone\n\n- **Lunch:** rice" in D.render_facts_section(unclaimed)
 
 
 def test_facts_section_tolerates_hand_edits() -> None:
@@ -196,63 +277,63 @@ def test_facts_section_tolerates_hand_edits() -> None:
     assert D.parse(D.render(day)) == day
 
 
-def test_family_blocks_tolerate_hand_edits() -> None:
+def test_person_sections_tolerate_hand_edits() -> None:
     md = (
-        "---\ndate: 2026-10-10\n---\n\n# Title\n\n## At a glance\n\n"
-        "<!-- lumitrace:facts:start -->\n"
-        "### Family events\n"
-        "- typed before any name\n\n"
-        "#### Leo\n"
-        "- Food: pizza, apple juice\n"
-        "* **Went to**: school\n"
-        "- Did: soccer (60 minutes); drawing\n"
-        "- Milestones: lost a tooth; first goal\n"
-        "- Health: a cold\n"
-        "- Work: spelling test\n"
-        "- Shoe size: 12\n\n"
-        "### Sam\n"
+        f"---\ndate: 2026-10-10\n{D.FORMAT_KEY}: {D.FORMAT_VERSION}\n---\n\n# Title\n\n"
+        "## At a glance\n\n<!-- lumitrace:facts:start -->\n"
         "Mood: grumpy\n\n"
-        "#### Nobody\n\n"
-        "### Highlights\n- a good day\n"
+        "### Food\n"
+        "- eggs\n\n"
+        "#### Leo\n"
+        "- Morning: pancakes,juice\n"
+        "* **Snacks / drinks / other**: apple\n"
+        "\n"
+        "#### Sam\n- not mentioned\n\n"
+        "### Feelings\n#### Leo\n- proud\n- a bit tired\n\n"
+        "### memories\n- sang in the car\n#### Leo\n- lost a tooth; first goal\n\n"
+        "### Health and fitness\n- a stray line\n\n"
+        "### Highlight\n- a good day\n- Remember: the tooth\n\n"
+        "### Weather\n- not looked up (Austin)\n\n"
+        "### Dreams\n- flying\n"
         "<!-- lumitrace:facts:end -->\n"
     )
     day = D.parse(md)
-    leo, sam, nobody = day.facts.family
+    facts = day.facts
+    assert facts.mood == "grumpy"
+    assert facts.meals == [D.Meal(type="snacks", items=["eggs"])]
+    leo, sam = facts.family
     assert leo == D.FamilyMember(
         name="Leo",
-        food=["pizza", "apple juice"],
-        places=["school"],
-        activities=[D.Activity(kind="soccer", minutes=60), D.Activity(kind="drawing")],
+        meals=[
+            D.Meal(type="breakfast", items=["pancakes", "juice"]),
+            D.Meal(type="snacks", items=["apple"]),
+        ],
+        feelings=["proud", "a bit tired"],
         moments=["lost a tooth", "first goal"],
-        health=["a cold"],
-        school=["spelling test"],
     )
-    assert sam == D.FamilyMember(name="Sam", mood="grumpy")
-    assert nobody == D.FamilyMember(name="Nobody")
-    assert day.facts.highlights == ["a good day"]
-    assert "- typed before any name" in day.notes and "- Shoe size: 12" in day.notes
-    rendered = D.render(day)
-    assert "#### Leo\n\n- **Mood:** none\n- **Ate:** pizza, apple juice\n" in rendered
-    assert "- **Did:** soccer (60 min); drawing\n- **Moments:** lost a tooth; first goal\n" in (
-        rendered
-    )
-    assert "#### Nobody\n\n- **Mood:** none\n- **Ate:** none\n" in rendered
-    assert D.parse(rendered) == day
+    assert sam == D.FamilyMember(name="Sam")
+    assert facts.memories == ["sang in the car"]
+    assert facts.highlights == ["a good day"]
+    assert facts.remember == "the tooth"
+    assert facts.weather is None
+    for stray in ["- a stray line", "### Dreams", "- flying"]:
+        assert stray in day.notes
+    assert D.parse(D.render(day)) == day
 
 
-def test_family_items_never_contain_their_separator() -> None:
+def test_person_items_never_contain_their_separator() -> None:
     member = D.FamilyMember(
         name=" Leo ",
-        food=["pizza, juice"],
+        meals=[D.Meal(type="lunch", items=["pizza, juice"])],
         moments=["tooth; goal"],
-        activities=[D.Activity(kind="swim; dive")],
+        feelings=["happy; tired"],
     )
     assert member.name == "Leo"
-    assert member.food == ["pizza", "juice"]
+    assert member.meals == [D.Meal(type="lunch", items=["pizza", "juice"])]
     assert member.moments == ["tooth", "goal"]
-    assert member.activities[0].kind == "swim, dive"
+    assert member.feelings == ["happy", "tired"]
     facts = D.DayFacts(
-        family=[member, D.FamilyMember(name="Empty"), D.FamilyMember(name="", food=["x"])]
+        family=[member, D.FamilyMember(name="Empty"), D.FamilyMember(name="", health=["x"])]
     )
     assert [m.name for m in facts.family] == ["Leo", "Empty"]
     assert D.parse_facts_section(D.render_facts_section(facts)) == (facts, "")
@@ -278,9 +359,10 @@ def test_fact_values_are_normalised_so_render_and_parse_agree() -> None:
             D.Meal(type="drink", items=["tea"]),
             D.Meal(type="breakfast", items=["Toast", "coffee"]),
         ],
+        remember=" the  tooth\n",
         activities=[D.Activity(kind="  "), D.Activity(kind="none"), D.Activity(kind="long\nwalk")],
-        highlights=["two\n\nlines", "none"],
-        weather="None",
+        highlights=["two\n\nlines", "Not mentioned"],
+        weather="Not looked up (Austin)",
     )
     assert facts.mood == "tired but fine"
     assert (facts.city, facts.weather) == (None, None)
@@ -288,9 +370,9 @@ def test_fact_values_are_normalised_so_render_and_parse_agree() -> None:
     assert facts.meals == [
         D.Meal(type="breakfast", items=["eggs", "toast", "coffee"]),
         D.Meal(type="dinner", items=["soup"]),
-        D.Meal(type="snacks", items=["cake"]),
-        D.Meal(type="drinks", items=["tea"]),
+        D.Meal(type="snacks", items=["cake", "tea"]),
     ]
+    assert facts.remember == "the tooth"
     assert facts.activities == [D.Activity(kind="long walk")]
     assert facts.highlights == ["two lines"]
     section = D.render_facts_section(facts)
@@ -298,26 +380,31 @@ def test_fact_values_are_normalised_so_render_and_parse_agree() -> None:
 
 
 def test_every_day_file_has_the_same_fact_lines() -> None:
+    n = D.NONE_TEXT
     assert D.render_facts_section(D.DayFacts(family=[D.FamilyMember(name="Leo")])) == (
-        "- **Mood:** none\n- **City:** none\n- **Weather:** none\n\n"
-        "### Food\n\n"
-        "- **Breakfast:** none\n- **Lunch:** none\n- **Dinner:** none\n"
-        "- **Snacks:** none\n- **Drinks:** none\n\n"
-        "### Places\n\n- none\n\n"
-        "### People\n\n- none\n\n"
-        "### Activities\n\n- none\n\n"
-        "### Family\n\n#### Leo\n\n"
-        "- **Mood:** none\n- **Ate:** none\n- **Went to:** none\n- **Did:** none\n"
-        "- **Moments:** none\n- **Health:** none\n- **School/work:** none\n\n"
-        "### Highlights\n\n- none"
+        f"- **Mood:** {n}\n- **City:** {n}\n\n"
+        f"### Highlight\n\n- {n}\n- **Remember:** {n}\n\n"
+        "### Food\n\n#### Leo\n\n"
+        f"- **Morning:** {n}\n- **Lunch:** {n}\n- **Dinner:** {n}\n"
+        f"- **Snacks / drinks / other:** {n}\n\n"
+        f"### Places visited\n\n- {n}\n\n"
+        f"### People we met or visited\n\n- {n}\n\n"
+        f"### Health and fitness\n\n#### Leo\n\n- {n}\n\n"
+        f"### Feelings\n\n#### Leo\n\n- {n}\n\n"
+        f"### Memories\n\n#### Together\n\n- {n}\n\n#### Leo\n\n- {n}\n\n"
+        "### Weather\n\n- not looked up\n\n"
+        f"### Things we did\n\n- {n}"
     )
-    assert D.render_facts_section(D.DayFacts()).count("- none") == 5
     assert D.parse_facts_section(D.render_facts_section(D.DayFacts())) == (D.DayFacts(), "")
     assert D.render_facts_section(D.DayFacts(), include_empty=False) == ""
     compact = D.render_facts_section(
         D.DayFacts(mood="ok", family=[D.FamilyMember(name="Leo")]), include_empty=False
     )
     assert compact == "- **Mood:** ok"
+    old_spelling = D.parse_facts_section(
+        "### Places visited\n- none\n### Feelings\n#### Leo\n- none"
+    )
+    assert old_spelling == (D.DayFacts(family=[D.FamilyMember(name="Leo")]), "")
 
 
 def test_generated_journal_gets_the_fixed_headings() -> None:
@@ -343,10 +430,10 @@ def test_generated_journal_gets_the_fixed_headings() -> None:
     assert day.journal == journal
 
 
-def test_fact_keys_in_the_front_matter_of_a_format_2_file_are_kept(
+def test_fact_keys_in_the_front_matter_of_a_format_3_file_are_kept(
     sample_day_markdown: str,
 ) -> None:
-    md = sample_day_markdown.replace("lumitrace_format: 2", "lumitrace_format: 2\nmood: sleepy")
+    md = sample_day_markdown.replace("lumitrace_format: 3", "lumitrace_format: 3\nmood: sleepy")
     day = D.parse(md)
     assert day.facts.mood == "happy"
     assert day.meta.model_extra == {"mood": "sleepy"}
@@ -436,12 +523,15 @@ def test_render_layout_markers_in_order(sample_day_markdown: str) -> None:
         md.index("\n# "),
         md.index(D.FACTS_HEADING),
         md.index(D.FACTS_START),
+        md.index("### Highlight"),
         md.index("### Food"),
-        md.index("### Places"),
-        md.index("### People"),
-        md.index("### Activities"),
-        md.index("### Family"),
-        md.index("### Highlights"),
+        md.index("### Places visited"),
+        md.index("### People we met or visited"),
+        md.index("### Health and fitness"),
+        md.index("### Feelings"),
+        md.index("### Memories"),
+        md.index("### Weather"),
+        md.index("### Things we did"),
         md.index(D.FACTS_END),
         md.index(D.JOURNAL_START),
         md.index(D.JOURNAL_END),
@@ -521,8 +611,11 @@ def test_user_edited_transcript_text_is_preserved(sample_day_markdown: str) -> N
     ("old", "new"),
     [
         ("- **Mood:** happy (4/5)", "- **Mood:** tired (4/5)"),
-        ("- **Dinner:** pasta", "- **Dinner:** pasta, salad"),
-        ("- the taco truck\n", ""),
+        (
+            "- **Dinner:** pasta\n- **Snacks / drinks / other:** horchata",
+            "- **Dinner:** pasta, salad",
+        ),
+        ("- the taco truck (Sam, Maya)\n", ""),
         ("# Saturday, October 10, 2026 · First tooth", "# My own title"),
         ("then oatmeal with blueberries.", "then oatmeal with strawberries."),
     ],
@@ -646,17 +739,24 @@ def test_additive_merge_on_edited_day_keeps_edits(sample_day_markdown: str) -> N
         day,
         facts=_facts(
             mood="sad",
-            people=["maya", "Sam"],
-            places=["Home", "the night market"],
+            remember="a night walk",
+            people=["ravi, neighbour - at the river trail (Sam)", "Zoe, friend"],
+            places=["The river trail (Sam)", "the night market (Sam)"],
+            memories=["star count"],
             family=[
-                D.FamilyMember(name="leo", mood="sleepy", food=["Pasta", "ice cream"]),
+                D.FamilyMember(
+                    name="leo",
+                    feelings=["sleepy"],
+                    meals=[D.Meal(type="Dinner", items=["Pasta", "ice cream"])],
+                ),
                 D.FamilyMember(name="Maya", health=["headache"]),
+                D.FamilyMember(name="Rose", moments=["visited"]),
             ],
-            meals=[
-                D.Meal(type="Dinner", items=["pasta", "salad"]),
-                D.Meal(type="snack", items=["apple"]),
+            meals=[D.Meal(type="snack", items=["apple"])],
+            activities=[
+                D.Activity(kind="run (Sam)", minutes=10),
+                D.Activity(kind="yoga (Sam)", minutes=20),
             ],
-            activities=[D.Activity(kind="run", minutes=10), D.Activity(kind="yoga", minutes=20)],
             highlights=["Night walk"],
         ),
         journal_addendum="A late walk.",
@@ -665,17 +765,26 @@ def test_additive_merge_on_edited_day_keeps_edits(sample_day_markdown: str) -> N
         generated_at=at(23),
     )
     assert merged.facts.mood == "great"
-    assert merged.facts.people == ["Maya", "Leo", "Sam"]
-    assert merged.facts.places == ["the river trail", "the taco truck", "home", "the night market"]
-    leo, maya = merged.facts.family
-    assert (leo.name, leo.mood, leo.food) == ("Leo", "proud", ["pasta", "ice cream"])
+    assert merged.facts.remember == day.facts.remember
+    assert merged.facts.people == [
+        "Ravi, neighbour - at the river trail (Sam)",
+        "Zoe, friend",
+    ]
+    assert merged.facts.places == [
+        "the river trail (Sam)",
+        "the taco truck (Sam, Maya)",
+        "home (Sam, Maya, Leo)",
+        "the night market (Sam)",
+    ]
+    assert merged.facts.memories == ["Leo's first tooth came out at bedtime", "star count"]
+    _sam, maya, leo, rose = merged.facts.family
+    assert (leo.name, leo.feelings) == ("Leo", ["proud", "sleepy"])
+    assert leo.meals == [D.Meal(type="dinner", items=["pasta", "ice cream"])]
     assert leo.moments == ["lost his first tooth"]
-    assert (maya.food, maya.health) == (["fish tacos"], ["headache"])
-    dinner = next(m for m in merged.facts.meals if m.type == "dinner")
-    assert dinner.items == ["pasta", "salad"]
-    assert [m.type for m in merged.facts.meals] == list(D.MEAL_TYPES)
-    assert merged.facts.meals[3] == D.Meal(type="snacks", items=["apple"])
-    assert [a.kind for a in merged.facts.activities] == ["run", "reading", "yoga"]
+    assert (maya.meals, maya.health) == ([D.Meal(type="lunch", items=["fish tacos"])], ["headache"])
+    assert rose.moments == ["visited"]
+    assert merged.facts.meals == [D.Meal(type="snacks", items=["apple"])]
+    assert [a.kind for a in merged.facts.activities] == ["run (Sam)", "reading (Sam)", "yoga (Sam)"]
     assert merged.facts.activities[0].minutes == 40
     assert merged.journal.startswith(day.journal)
     assert merged.journal.endswith("## Later\n\n**23:00 · Quick Note**\n\nA late walk.")

@@ -50,6 +50,12 @@ def test_family_relations_and_owner() -> None:
     assert Settings(_env_file=None, family="Sam (Self)").owner_name == "Sam"
 
 
+def test_glossary_lines_split_on_semicolons() -> None:
+    s = Settings(_env_file=None, glossary=" Leon is Leo's  friend ;; potty not party; ")
+    assert s.glossary_lines == ["Leon is Leo's friend", "potty not party"]
+    assert Settings(_env_file=None).glossary_lines == []
+
+
 def test_stt_keyterms_start_with_the_family() -> None:
     s = Settings(_env_file=None, family="Sam (me), Maya", stt_keyterms=" Corner Bakery ,maya,,")
     assert s.stt_keyterm_list == ["Sam", "Maya", "Corner Bakery"]

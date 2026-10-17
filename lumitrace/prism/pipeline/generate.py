@@ -127,6 +127,7 @@ class Generator:
         return {
             "author": owner or "(not given)",
             "family": describe_family(self.settings.family_relations, owner),
+            "glossary": "\n".join(f"- {line}" for line in self.settings.glossary_lines) or "(none)",
         }
 
     def extract_facts(

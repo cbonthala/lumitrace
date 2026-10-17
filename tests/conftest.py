@@ -55,3 +55,9 @@ def sample_day_markdown() -> str:
 def sample_day_v1_markdown() -> str:
     """The same day in format 1, facts in the front matter (tests/fixtures/sample-day-v1.md)."""
     return (FIXTURES / "sample-day-v1.md").read_text(encoding="utf-8")
+
+
+@pytest.fixture
+def sample_day_v2_markdown() -> str:
+    """The same day in format 2 (per-member Family block; tests/fixtures/sample-day-v2.md)."""
+    return (FIXTURES / "sample-day-v2.md").read_text(encoding="utf-8")

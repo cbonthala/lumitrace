@@ -22,9 +22,9 @@ from pathlib import Path
 import lumitrace
 
 PROMPT_VERSIONS: dict[str, str] = {
-    "extract_facts": "v4",
-    "write_journal": "v3",
-    "journal_addendum": "v3",
+    "extract_facts": "v6",
+    "write_journal": "v4",
+    "journal_addendum": "v4",
 }
 """Current version of each task's prompt. Bump together with a new file in ``prompts/``."""
 

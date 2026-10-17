@@ -81,7 +81,10 @@ class _FactSpec:
 
 _FACT_SPECS: dict[str, _FactSpec] = {
     "meals": _FactSpec(
-        "meals", ("meal_type", "item"), ("item", "meal_type"), "date DESC, position"
+        "meals",
+        ("person", "meal_type", "item"),
+        ("item", "meal_type"),
+        "date DESC, position",
     ),
     "activities": _FactSpec("activities", ("kind", "minutes"), ("kind",), "date DESC, position"),
     "people": _FactSpec("people", ("name",), ("name",), "date DESC, position"),
@@ -256,8 +259,8 @@ class LensTools:
             raise ToolInputError(f"kind must be one of: {', '.join(FACT_KINDS)}; got {kind!r}")
         kind = kind.strip().lower()
         person = (person or "").strip() or None
-        if person and kind != "family":
-            raise ToolInputError("person only applies to kind 'family'")
+        if person and kind not in ("family", "meals"):
+            raise ToolInputError("person only applies to kind 'family' or 'meals'")
         start, end = parse_range(from_date, to_date, self.settings)
         limit = _clamp(limit, 50, 1, MAX_FACT_LIMIT)
         contains = (contains or "").strip() or None

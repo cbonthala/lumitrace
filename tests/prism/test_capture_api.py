@@ -65,7 +65,7 @@ def test_recording_end_to_end(
     assert day.facts.meals[0].items == ["fish tacos"]
     assert day.meta.audio == ["2026-10-10-2130.m4a"]
     assert day.meta.photos == ["photo-01.jpg", "photo-02.jpg"]
-    assert day.meta.prompt_version == "extract_facts-v4+write_journal-v3"
+    assert day.meta.prompt_version == "extract_facts-v6+write_journal-v4"
     assert day.meta.models_used == {
         "stt": "fake",
         "extract_facts": "test/extract",

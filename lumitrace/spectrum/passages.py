@@ -2,11 +2,11 @@
 
 One day becomes, in this order: a ``title`` passage, ``facts``, ``journal`` and ``notes``
 passages split at Markdown headings (the facts are the day file's "At a glance" text without
-its "none" lines, so a passage's heading is "Food", "Places", ... or a family member's name),
-and ``transcript``
-passages, one or more per capture (then its English translation, if any, under the heading
-``HH:MM · Log My Day · English``). Every passage is at most :data:`MAX_CHARS` characters;
-longer text is cut at paragraph, then sentence, then word boundaries. ``ordinal`` counts
+its "not mentioned" lines, so a passage's heading is "Highlight", "Places visited", ... or, for
+the per-person sections, the section and the person: "Food · Leo", "Feelings · Maya"), and
+``transcript`` passages, one or more per capture (then its English translation, if any, under
+the heading ``HH:MM · Log My Day · English``). Every passage is at most :data:`MAX_CHARS`
+characters; longer text is cut at paragraph, then sentence, then word boundaries. ``ordinal`` counts
 passages within a section.
 """
 
@@ -15,7 +15,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from lumitrace.frames.dayfile import CAPTURE_LABELS, DayFile, render_facts_section
 
@@ -53,10 +53,7 @@ def build_passages(day: DayFile, max_chars: int = MAX_CHARS) -> list[Passage]:
     if day.title.strip():
         out.append(Passage("title", None, None, 0, day.title.strip()))
     facts_text = render_facts_section(day.facts, include_empty=False)
-    facts = _markdown_passages("facts", facts_text, max_chars)
-    # "### Family" has nothing under it but the members' "####" blocks, which are passages.
-    facts = [p for p in facts if not (p.heading == "Family" and p.text == "Family")]
-    out.extend(replace(p, ordinal=i) for i, p in enumerate(facts))
+    out.extend(_facts_passages(facts_text, max_chars))
     out.extend(_markdown_passages("journal", day.journal, max_chars))
     out.extend(_markdown_passages("notes", day.notes, max_chars))
     ordinal = 0
@@ -68,6 +65,37 @@ def build_passages(day: DayFile, max_chars: int = MAX_CHARS) -> list[Passage]:
         for chunk in chunk_text(capture.translation, max_chars):
             out.append(Passage("transcript", f"{heading} · English", capture.id, ordinal, chunk))
             ordinal += 1
+    return out
+
+
+def _facts_passages(facts_text: str, max_chars: int) -> list[Passage]:
+    """Passages of the facts: one per ``###`` section, and one per person under the per-person
+    sections, headed ``Section · Person``. A section with only person blocks has no passage of
+    its own."""
+    blocks: list[tuple[str | None, str | None, list[str]]] = [(None, None, [])]
+    section: str | None = None
+    in_fence = False
+    for line in facts_text.split("\n"):
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+        m = None if in_fence else _HEADING_RE.match(line)
+        if m:
+            title = m.group(2).strip()
+            if len(m.group(1)) <= 3:
+                section = title
+                blocks.append((title, None, []))
+            else:
+                blocks.append((section, title, []))
+        else:
+            blocks[-1][2].append(line)
+    out: list[Passage] = []
+    for heading, person, lines in blocks:
+        body = "\n".join(lines).strip()
+        if not body:
+            continue
+        label = None if heading is None else (f"{heading} · {person}" if person else heading)
+        for chunk in chunk_text(body, max_chars):
+            out.append(Passage("facts", label, None, len(out), chunk))
     return out
 
 

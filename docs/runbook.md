@@ -95,10 +95,17 @@ and never paste real tokens or personal content here.
   failed transiently; run `sync` again. `curl http://localhost:8001/health` inside the Docker
   network shows the last result of the running Spectrum service.
 
-* After upgrading Lumitrace to a version with a new index schema (for example day file format 2,
-  which added places and family facts), no manual step is needed: Spectrum sees the old
-  `schema_version` on start, logs "rebuilding the index" and rebuilds. Existing format 1 day
-  files are read as they are and rewritten in format 2 the next time the Prism writes that day.
+* After upgrading Lumitrace to a version with a new index schema (for example day file format 3,
+  which reorganised the fact tables), no manual step is needed: Spectrum sees the old
+  `schema_version` on start, logs "rebuilding the index" and rebuilds. Older day files (format 1 or 2) are read as
+  they are and rewritten in format 3 the next time the Prism writes that day. To convert past
+  days at once (this calls the AI models and costs money):
+
+  1. `lumitrace-prism regenerate --dry-run` lists what would change.
+  2. Put real names and known mishearings in `LUMITRACE_GLOSSARY` in `.env` first.
+  3. `lumitrace-prism regenerate --from 2026-10-01 --to 2026-10-15 --nudge` redoes a range;
+     omit the dates for every day. In Docker: `docker compose run --rm prism lumitrace-prism regenerate ...`.
+  Days you edited only gain the new facts; your words are never replaced.
 
 ### Recovering from a lost or corrupt index
 

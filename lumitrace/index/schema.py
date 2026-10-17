@@ -16,7 +16,7 @@ from pathlib import Path
 
 import sqlite_vec
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 META_SCHEMA_VERSION = "schema_version"
 META_EMBEDDING_MODEL = "embedding_model"
@@ -39,6 +39,18 @@ DERIVED_TABLES: tuple[str, ...] = (
     "files",
 )
 """Tables cleared by :func:`reset_derived` (children before parents)."""
+
+FACT_TABLES: tuple[str, ...] = (
+    "meals",
+    "activities",
+    "people",
+    "places",
+    "family_facts",
+    "highlights",
+    "days",
+)
+"""Derived tables that :func:`reset_derived` drops and recreates (children before ``days``), so an
+index made by an older schema version gets the current columns."""
 
 PRESERVED_TABLES: tuple[str, ...] = ("feedback", "edit_signals")
 
@@ -74,6 +86,7 @@ CREATE TABLE IF NOT EXISTS days (
     mood_score      INTEGER,               -- 1..5 or NULL
     city            TEXT,
     weather         TEXT,
+    remember        TEXT,                  -- the one moment worth keeping (Highlight)
     audio_json      TEXT NOT NULL DEFAULT '[]',   -- JSON list of file names in the day folder
     photos_json     TEXT NOT NULL DEFAULT '[]',
     prompt_version  TEXT,
@@ -87,7 +100,8 @@ CREATE TABLE IF NOT EXISTS days (
 CREATE TABLE IF NOT EXISTS meals (
     id         INTEGER PRIMARY KEY,
     date       TEXT NOT NULL REFERENCES days(date) ON DELETE CASCADE,
-    meal_type  TEXT NOT NULL,              -- breakfast|lunch|dinner|snacks|drinks
+    person     TEXT NOT NULL DEFAULT '',   -- family member; '' = not named (the Everyone block)
+    meal_type  TEXT NOT NULL,              -- breakfast|lunch|dinner|snacks
     item       TEXT NOT NULL,              -- one row per item
     position   INTEGER NOT NULL DEFAULT 0
 );
@@ -120,14 +134,15 @@ CREATE TABLE IF NOT EXISTS places (
 CREATE INDEX IF NOT EXISTS places_date ON places(date);
 CREATE INDEX IF NOT EXISTS places_name ON places(name COLLATE NOCASE);
 
--- One row per item in a family member's block: person "Leo", category "food", text "pasta".
+-- One row per item in a person's block: person "Leo", category "feelings", text "tired".
+-- Memories shared by everyone have person "Together" and category "moments".
 CREATE TABLE IF NOT EXISTS family_facts (
     id        INTEGER PRIMARY KEY,
     date      TEXT NOT NULL REFERENCES days(date) ON DELETE CASCADE,
     person    TEXT NOT NULL,
-    category  TEXT NOT NULL,               -- mood|food|places|activities|moments|health|school
-    text      TEXT NOT NULL,               -- the item (activity kind for activities)
-    minutes   INTEGER,                     -- activities only
+    category  TEXT NOT NULL,               -- feelings|health|moments
+    text      TEXT NOT NULL,               -- the item
+    minutes   INTEGER,                     -- unused (kept for schema 2 compatibility)
     position  INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS family_facts_date ON family_facts(date);
@@ -312,6 +327,7 @@ def reset_derived(
     embedding_model: str | None = None,
 ) -> None:
     """Empty every derived table and the sync token, keeping ``feedback`` and ``edit_signals``.
+    The fact tables are dropped and recreated, so they get the current columns.
 
     Pass ``embedding_dimension`` to recreate the vector table with a new dimension (after
     changing the embedding model).
@@ -324,11 +340,14 @@ def reset_derived(
                 set_meta(conn, META_EMBEDDING_DIMENSION, str(embedding_dimension))
             elif table == "passages_fts":
                 conn.execute("INSERT INTO passages_fts(passages_fts) VALUES ('delete-all')")
+            elif table in FACT_TABLES:
+                conn.execute(f"DROP TABLE IF EXISTS {table}")
             else:
                 conn.execute(f"DELETE FROM {table}")
         if embedding_model is not None:
             set_meta(conn, META_EMBEDDING_MODEL, embedding_model)
         conn.execute("DELETE FROM meta WHERE key = ?", (META_SYNC_TOKEN,))
+    conn.executescript("BEGIN;" + _SCHEMA_SQL + "COMMIT;")
 
 
 def serialize_embedding(vector: Sequence[float]) -> bytes:

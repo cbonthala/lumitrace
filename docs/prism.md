@@ -267,7 +267,7 @@ activity record.
    * If one step fails on every model, the other step's result is still applied (facts without a
      new journal, or a journal with the old facts). If both fail, the day keeps the transcript
      and `generation` is `failed`.
-   * Front matter: `prompt_version` (e.g. `extract_facts-v4+write_journal-v3`) and `models_used`
+   * Front matter: `prompt_version` (e.g. `extract_facts-v6+write_journal-v4`) and `models_used`
      (`stt`, `extract_facts`, `write_journal` or `journal_addendum`: the models that actually
      answered), merged with what was there.
 7. **Write** the day file and its snapshot again.
@@ -291,14 +291,24 @@ The model string **`fake`** never calls a provider: facts come back empty and th
 day's text under `## Summary`. With `LUMITRACE_STT_PROVIDER=fake` and the three `LUMITRACE_LLM_*`
 models set to `fake`, the whole API runs offline.
 
+### Regenerating days
+
+`lumitrace-prism regenerate [--from D] [--to D] [--dry-run] [--nudge]` (code:
+`lumitrace/prism/regenerate.py`) redoes past days from their stored transcripts with the current
+prompts and the current day format. A day you did not edit (its hash matches, or the file equals
+its `_system/generated` snapshot) gets new facts, title and journal; an edited day only gains
+the new facts. Notes, transcripts, audio and photos are never touched. It writes the day file
+and the identical snapshot, like the Prism does. It calls the AI models for every day (cost),
+so start with `--dry-run` and a short date range. Days without transcript text are skipped.
+
 ### Prompts
 
-Versioned files in `prompts/<task>/<version>.md` (`prompts/README.md`): `extract_facts/v4.md`,
-`write_journal/v3.md`, `journal_addendum/v3.md` (older versions are kept for reference). The
+Versioned files in `prompts/<task>/<version>.md` (`prompts/README.md`): `extract_facts/v6.md`,
+`write_journal/v4.md`, `journal_addendum/v4.md` (older versions are kept for reference). The
 current versions are in `lumitrace.prism.pipeline.prompts.PROMPT_VERSIONS`. Each file has a
 system part and a user part separated by `<!-- lumitrace-prompt: system -->` /
 `<!-- lumitrace-prompt: user -->`, with `{{name}}` placeholders (`date`, `location`, `captures`,
-`facts`, `journal`, `capture`, `author`, `family`). A missing value raises an error. Prompts tell
+`facts`, `journal`, `capture`, `author`, `family`, `glossary`). A missing value raises an error. Prompts tell
 the model to use only what the entries say and never invent.
 
 The current versions (ADR 0016) also tell the model:
@@ -323,6 +333,16 @@ The current versions (ADR 0016) also tell the model:
   entry ("food from the deli") instead of borrowing another meal's food, and a meal's type may
   come from the order of events. Feelings and worries anyone expressed are kept as moments and
   in the journal.
+* **The Telugu day rules** (`extract_facts` v6, `write_journal` v4, `journal_addendum` v4; ADR
+  0045, mirrored by the skill `.cursor/skills/lumitrace-telugu-day-journal/`): the audio is mostly
+  Telugu, the journal is English; the original wins over the machine translation and later
+  recordings win over earlier ones; the translation's known errors are listed (wrong subject,
+  sound-alike words, similar names, a kids' show read as a friend); "<child> Nanna" is the
+  father speaking, "my Nanna" is the author's own father, a bare "Nanna" is left out when
+  unclear; deliveries are not visits, shows are not people, a guess is not a health fact; small
+  emotional moments are kept. The journal is bullets (Summary has 3 to 5, ending with
+  `**Remember:**`) and the addendum is one to three bullets. `{{glossary}}` is the owner's
+  `LUMITRACE_GLOSSARY` notes (names, relation words, known mishearings), or `(none)`.
 * **The facts can be wrong:** `write_journal` follows the entries when the extracted facts
   disagree with them, and uses Morning/Afternoon/Evening only for events the entries place
   there.
@@ -392,6 +412,7 @@ One JSON line per processing attempt, appended to the file for the month the att
 | `LUMITRACE_STT_PROVIDER`, `LUMITRACE_STT_MODEL`, `LUMITRACE_STT_LANGUAGE`, `LUMITRACE_STT_KEYTERMS`, `LUMITRACE_AWS_REGION`, `LUMITRACE_AWS_TRANSCRIBE_BUCKET` | speech to text |
 | `LUMITRACE_SARVAM_API_KEY`, `LUMITRACE_SARVAM_MODEL` (`saaras:v4`), `LUMITRACE_SARVAM_MODE` (`codemix`), `LUMITRACE_SARVAM_TRANSLATE` (`true`) | the `sarvam` speech-to-text option |
 | `LUMITRACE_LLM_EXTRACT_FACTS_MODEL`, `LUMITRACE_LLM_WRITE_JOURNAL_MODEL`, `LUMITRACE_LLM_FALLBACK_MODEL`, `LUMITRACE_LLM_TIMEOUT_SECONDS`, `LUMITRACE_LLM_MAX_RETRIES` | AI steps (`fake` = offline) |
+| `LUMITRACE_GLOSSARY` | notes for the AI prompts separated by `;` (names, relation words, known mishearings); empty = none |
 | `LUMITRACE_FAMILY` | comma-separated family members who get their own block under Family, each optionally with their relation to the owner in parentheses, the owner marked `(me)`: `Sam (me), Maya (wife), Leo (son)`; empty = no family blocks |
 | `LUMITRACE_PROMPTS_DIR` | prompt files; a relative path that does not exist falls back to the repository's `prompts/` |
 | `LUMITRACE_INDEXER_NUDGE_URL` | nudge after each capture (empty = off) |

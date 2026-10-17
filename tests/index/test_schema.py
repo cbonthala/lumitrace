@@ -159,3 +159,26 @@ def test_reset_derived_keeps_signals_and_feedback() -> None:
 def test_invalid_dimension() -> None:
     with pytest.raises(ValueError):
         S.connect(":memory:", 0)
+
+
+def test_reset_derived_gives_old_fact_tables_the_current_columns(tmp_path: Path) -> None:
+    path = tmp_path / "index.sqlite"
+    conn = S.connect(path, 4)
+    with conn:  # an index made by schema version 2: no meals.person, no days.remember
+        conn.execute("DROP TABLE meals")
+        conn.execute(
+            "CREATE TABLE meals (id INTEGER PRIMARY KEY, date TEXT NOT NULL REFERENCES"
+            " days(date) ON DELETE CASCADE, meal_type TEXT NOT NULL, item TEXT NOT NULL,"
+            " position INTEGER NOT NULL DEFAULT 0)"
+        )
+    columns = {r[1] for r in conn.execute("PRAGMA table_info(meals)")}
+    assert "person" not in columns
+    S.reset_derived(conn)
+    assert "person" in {r[1] for r in conn.execute("PRAGMA table_info(meals)")}
+    assert "remember" in {r[1] for r in conn.execute("PRAGMA table_info(days)")}
+    with conn:
+        conn.execute("INSERT INTO days(date, path) VALUES ('2026-10-10', 'p')")
+        conn.execute(
+            "INSERT INTO meals(date, person, meal_type, item) VALUES"
+            " ('2026-10-10', 'Leo', 'dinner', 'pasta')"
+        )

@@ -70,7 +70,7 @@ def test_edited_day_gets_additive_update(
     assert day.facts.people == ["Maya", "Leo"]
     assert day.notes == "Private thought."
     assert day.is_user_edited()
-    assert day.meta.prompt_version == "extract_facts-v4+journal_addendum-v3"
+    assert day.meta.prompt_version == "extract_facts-v6+journal_addendum-v4"
     assert day.meta.models_used["journal_addendum"] == "test/journal"
     assert day.meta.models_used["stt"] == "fake"
     addendum_call = next(c for c in fake_llm.calls if c[0] == "journal_addendum")

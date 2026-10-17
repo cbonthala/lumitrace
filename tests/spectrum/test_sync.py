@@ -44,15 +44,21 @@ def test_first_sync_indexes_day_files(
     assert day["capture_count"] == 3 and day["user_edited"] == 0
     assert day["prompt_version"] == "journal-v1"
     meals = conn.execute(
-        "SELECT meal_type, item FROM meals WHERE date = '2026-10-10' ORDER BY position"
+        "SELECT person, meal_type, item FROM meals WHERE date = '2026-10-10' ORDER BY position"
     ).fetchall()
-    assert [tuple(m) for m in meals][:2] == [("breakfast", "oatmeal"), ("breakfast", "blueberries")]
-    assert _count(conn, "SELECT count(*) FROM people WHERE name = 'maya' COLLATE NOCASE") == 1
+    assert [tuple(m) for m in meals][:3] == [
+        ("Sam", "breakfast", "oatmeal"),
+        ("Sam", "breakfast", "blueberries"),
+        ("Sam", "lunch", "fish tacos"),
+    ]
+    assert ("Leo", "dinner", "pasta") in [tuple(m) for m in meals]
+    assert day["remember"] == "Leo lost his first tooth and was very proud"
+    assert _count(conn, "SELECT count(*) FROM people WHERE name LIKE 'ravi%' COLLATE NOCASE") == 1
     places = conn.execute("SELECT date, name FROM places ORDER BY date, position").fetchall()
     assert [tuple(p) for p in places] == [
-        ("2026-10-10", "the river trail"),
-        ("2026-10-10", "the taco truck"),
-        ("2026-10-10", "home"),
+        ("2026-10-10", "the river trail (Sam)"),
+        ("2026-10-10", "the taco truck (Sam, Maya)"),
+        ("2026-10-10", "home (Sam, Maya, Leo)"),
         ("2026-10-11", "the park"),
     ]
     assert _fts_dates(conn, "river trail") == {"2026-10-10"}
@@ -61,14 +67,13 @@ def test_first_sync_indexes_day_files(
         " ORDER BY position"
     ).fetchall()
     assert [tuple(f) for f in family] == [
-        ("Leo", "mood", "proud"),
-        ("Leo", "food", "pasta"),
+        ("Together", "moments", "Leo's first tooth came out at bedtime"),
+        ("Sam", "feelings", "happy"),
+        ("Leo", "feelings", "proud"),
         ("Leo", "moments", "lost his first tooth"),
-        ("Maya", "food", "fish tacos"),
-        ("Maya", "places", "the taco truck"),
     ]
     assert _count(conn, "SELECT count(*) FROM activities WHERE date = '2026-10-11'") == 1
-    assert _count(conn, "SELECT count(*) FROM highlights") == 3
+    assert _count(conn, "SELECT count(*) FROM highlights") == 5
 
     passages = _count(conn, "SELECT count(*) FROM passages")
     assert passages > 10

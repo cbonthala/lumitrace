@@ -77,12 +77,12 @@ with an `error` if the file is missing), and `user_edited`. A missing day return
 `kind`: `meals` | `activities` | `people` | `places` | `family` | `mood` | `highlights`.
 `contains` is a case-insensitive substring (LIKE wildcards are escaped); for meals it matches the
 item or the meal type ("breakfast"), for family the text or the category ("food"). `person`
-(case-insensitive exact name) only applies to `family`; with any other kind it is an input
+(case-insensitive exact name) applies to `family` and `meals`; with any other kind it is an input
 error. Returns:
 
-* `rows`: newest first, each with `date` (meals: `meal_type`, `item`; activities: `kind`,
-  `minutes`; people / places: `name`; family: `person`, `category` (`mood`, `food`, `places`,
-  `activities`, `moments`, `health`, `school`), `text`, `minutes`; highlights: `text`; mood:
+* `rows`: newest first, each with `date` (meals: `person`, `meal_type`, `item`; activities: `kind`,
+  `minutes`; people / places: `name`; family: `person`, `category` (`feelings`, `health`,
+  `moments`; `person` is `Together` for shared memories), `text`, `minutes`; highlights: `text`; mood:
   `mood`, `mood_score`), at most `limit` (1–500); `truncated` says if there were more.
 * `counts`: `rows`, `days`, `first_date`, `last_date` over **all** matches.
 * `aggregates` over all matches: meals `top_items` and `by_meal_type`; activities

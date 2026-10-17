@@ -11,8 +11,8 @@ models_used:
   extract_facts: openai/gpt-4o-mini
   write_journal: openai/gpt-4o
 generated_at: '2026-10-11T00:41:00-05:00'
-generated_hash: 2c4980bf67ca8a30
-lumitrace_format: 2
+generated_hash: 66bd9471a8c0b8c9
+lumitrace_format: 3
 ---
 
 # Saturday, October 10, 2026 · First tooth
@@ -22,58 +22,102 @@ lumitrace_format: 2
 <!-- lumitrace:facts:start (found by Lumitrace; if you edit them, your edits are kept) -->
 - **Mood:** happy (4/5)
 - **City:** Austin
-- **Weather:** sunny, 24°C
+
+### Highlight
+
+- Morning run by the river
+- Fish tacos from the taco truck
+- Leo lost his first tooth
+- Finished a book late at night
+- **Remember:** Leo lost his first tooth and was very proud
 
 ### Food
 
-- **Breakfast:** oatmeal, blueberries
+#### Sam
+
+- **Morning:** oatmeal, blueberries
 - **Lunch:** fish tacos
 - **Dinner:** pasta
-- **Snacks:** none
-- **Drinks:** horchata
-
-### Places
-
-- the river trail
-- the taco truck
-- home
-
-### People
-
-- Maya
-- Leo
-
-### Activities
-
-- run (40 min)
-- reading
-
-### Family
-
-#### Leo
-
-- **Mood:** proud
-- **Ate:** pasta
-- **Went to:** none
-- **Did:** none
-- **Moments:** lost his first tooth
-- **Health:** none
-- **School/work:** none
+- **Snacks / drinks / other:** horchata
 
 #### Maya
 
-- **Mood:** none
-- **Ate:** fish tacos
-- **Went to:** the taco truck
-- **Did:** none
-- **Moments:** none
-- **Health:** none
-- **School/work:** none
+- **Morning:** not mentioned
+- **Lunch:** fish tacos
+- **Dinner:** not mentioned
+- **Snacks / drinks / other:** not mentioned
 
-### Highlights
+#### Leo
 
-- Leo lost his first tooth
-- Finished a book
+- **Morning:** not mentioned
+- **Lunch:** not mentioned
+- **Dinner:** pasta
+- **Snacks / drinks / other:** not mentioned
+
+### Places visited
+
+- the river trail (Sam)
+- the taco truck (Sam, Maya)
+- home (Sam, Maya, Leo)
+
+### People we met or visited
+
+- Ravi, neighbour - at the river trail (Sam)
+
+### Health and fitness
+
+#### Sam
+
+- not mentioned
+
+#### Maya
+
+- not mentioned
+
+#### Leo
+
+- not mentioned
+
+### Feelings
+
+#### Sam
+
+- happy
+
+#### Maya
+
+- not mentioned
+
+#### Leo
+
+- proud
+
+### Memories
+
+#### Together
+
+- Leo's first tooth came out at bedtime
+
+#### Sam
+
+- not mentioned
+
+#### Maya
+
+- not mentioned
+
+#### Leo
+
+- lost his first tooth
+
+### Weather
+
+- sunny, 24°C
+
+### Things we did
+
+- run (Sam) (40 min)
+- reading (Sam)
 <!-- lumitrace:facts:end -->
 
 <!-- lumitrace:journal:start (written by Lumitrace; if you edit it, your edits are kept) -->

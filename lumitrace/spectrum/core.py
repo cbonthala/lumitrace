@@ -33,6 +33,7 @@ from typing import Any
 from lumitrace.config import Settings
 from lumitrace.embeddings import embed_texts
 from lumitrace.frames.dayfile import (
+    TOGETHER,
     DayFile,
     DayFileParseError,
     classify_path,
@@ -600,7 +601,8 @@ def _insert_day(conn: sqlite3.Connection, path: str, day: DayFile) -> None:
     conn.execute(
         "INSERT INTO days(date, path, title, mood, mood_score, city, weather, audio_json,"
         " photos_json, prompt_version, models_used_json, generated_at, generated_hash,"
-        " user_edited, capture_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " user_edited, capture_count, remember)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             date,
             path,
@@ -617,17 +619,19 @@ def _insert_day(conn: sqlite3.Connection, path: str, day: DayFile) -> None:
             m.generated_hash,
             int(day.is_user_edited()),
             len(day.captures),
+            f.remember,
         ),
     )
     meal_rows = [
-        (meal.type.strip().casefold(), item.strip())
-        for meal in f.meals
+        (person, meal.type.strip().casefold(), item.strip())
+        for person, meals in [("", f.meals), *[(m.name, m.meals) for m in f.family]]
+        for meal in meals
         for item in meal.items
         if meal.type.strip() and item.strip()
     ]
     conn.executemany(
-        "INSERT INTO meals(date, meal_type, item, position) VALUES (?, ?, ?, ?)",
-        [(date, t, item, pos) for pos, (t, item) in enumerate(meal_rows)],
+        "INSERT INTO meals(date, person, meal_type, item, position) VALUES (?, ?, ?, ?, ?)",
+        [(date, who, t, item, pos) for pos, (who, t, item) in enumerate(meal_rows)],
     )
     activities = [a for a in f.activities if a.kind.strip()]
     conn.executemany(
@@ -644,16 +648,11 @@ def _insert_day(conn: sqlite3.Connection, path: str, day: DayFile) -> None:
             f"INSERT INTO {table}(date, {column}, position) VALUES (?, ?, ?)",
             [(date, v, pos) for pos, v in enumerate(clean)],
         )
-    family_rows: list[tuple[str, str, str, int | None]] = []
+    family_rows: list[tuple[str, str, str, int | None]] = [
+        (TOGETHER, "moments", v, None) for v in f.memories if v.strip()
+    ]
     for member in f.family:
-        if member.mood:
-            family_rows.append((member.name, "mood", member.mood, None))
-        for category in ("food", "places"):
-            family_rows.extend((member.name, category, v, None) for v in getattr(member, category))
-        family_rows.extend(
-            (member.name, "activities", a.kind, a.minutes) for a in member.activities
-        )
-        for category in ("moments", "health", "school"):
+        for category in ("feelings", "health", "moments"):
             family_rows.extend((member.name, category, v, None) for v in getattr(member, category))
     conn.executemany(
         "INSERT INTO family_facts(date, person, category, text, minutes, position)"

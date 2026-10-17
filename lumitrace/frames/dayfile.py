@@ -77,7 +77,7 @@ from pydantic import (
     model_validator,
 )
 
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3
 SYSTEM_DIR = "_system"
 AUDIO_EXT = ".m4a"
 PHOTO_EXT = ".jpg"
@@ -283,12 +283,18 @@ def _strip(value: Any) -> Any:
 StrippedStr = Annotated[str, BeforeValidator(_strip)]
 
 
-NONE_TEXT = "none"
-"""Written in place of an empty fact, so every day file has the same lines; read back as empty."""
+NONE_TEXT = "not mentioned"
+"""Written in place of an empty fact, so every day file has the same lines; read back as empty
+(together with the format 2 spelling ``none``)."""
+NONE_TEXTS: frozenset[str] = frozenset({NONE_TEXT, "none"})
+NOT_LOOKED_UP = "not looked up"
+"""Written in place of an empty weather; read back as empty (also with a city in brackets)."""
+UNCERTAIN_MARK = "[uncertain:"
+"""A fact the AI was not sure about ends with ``[uncertain: why]``; kept as text."""
 
 
 def _is_none_text(value: Any) -> bool:
-    return isinstance(value, str) and value.casefold() == NONE_TEXT
+    return isinstance(value, str) and value.casefold() in NONE_TEXTS
 
 
 def _one_line(value: Any) -> Any:
@@ -341,14 +347,27 @@ SemicolonItems = Annotated[list[str], BeforeValidator(_semicolon_items)]
 """Rendered semicolon-separated on one line, so the items never contain semicolons."""
 
 
-MEAL_TYPES: tuple[str, ...] = ("breakfast", "lunch", "dinner", "snacks", "drinks")
-"""The only meal types, in render order. Every day file has one Food line per type."""
+MEAL_TYPES: tuple[str, ...] = ("breakfast", "lunch", "dinner", "snacks")
+"""The only meal types, in render order. Every person has one Food line per type."""
+
+MEAL_LABELS: dict[str, str] = {
+    "breakfast": "Morning",
+    "lunch": "Lunch",
+    "dinner": "Dinner",
+    "snacks": "Snacks / drinks / other",
+}
+"""The label of each meal type on a person's Food lines."""
 
 _MEAL_TYPE_ALIASES: dict[str, str] = {
+    **{label.casefold(): meal for meal, label in MEAL_LABELS.items()},
+    "morning": "breakfast",
     "snack": "snacks",
-    "drink": "drinks",
-    "beverage": "drinks",
-    "beverages": "drinks",
+    "drink": "snacks",
+    "drinks": "snacks",
+    "beverage": "snacks",
+    "beverages": "snacks",
+    "other": "snacks",
+    "snacks/drinks/other": "snacks",
     "supper": "dinner",
     "brunch": "lunch",
 }
@@ -357,8 +376,8 @@ _MEAL_TYPE_ALIASES: dict[str, str] = {
 class Meal(BaseModel):
     model_config = ConfigDict(extra="ignore")
     type: str
-    """One of :data:`MEAL_TYPES`. A few synonyms are mapped ("drink", "supper", "brunch");
-    anything else becomes "snacks"."""
+    """One of :data:`MEAL_TYPES`. A few synonyms are mapped ("morning", "drinks", "supper",
+    "brunch"); anything else becomes "snacks"."""
     items: CommaItems = Field(default_factory=list)
 
     @field_validator("type", mode="before")
@@ -385,59 +404,164 @@ class Activity(BaseModel):
         return value.replace(";", ",") if isinstance(value, str) else value
 
 
+def _normalise_meals(meals: list[Meal]) -> list[Meal]:
+    """One meal per type, in :data:`MEAL_TYPES` order; meals without items are dropped."""
+    merged: dict[str, Meal] = {}
+    for meal in meals:
+        if meal.type in merged:
+            _add_unique(merged[meal.type].items, meal.items)
+        elif meal.items:
+            merged[meal.type] = meal.model_copy(deep=True)
+    return [merged[t] for t in MEAL_TYPES if t in merged]
+
+
 class FamilyMember(BaseModel):
-    """One family member's day: a ``#### name`` block under ``### Family`` in "At a glance".
-    The Prism writes a block for every configured member (``LUMITRACE_FAMILY``), with nothing in it
-    when the day says nothing about them; the owner may add others by hand."""
+    """One family member's day: a ``#### name`` block in each per-person section of "At a
+    glance" (Food, Health and fitness, Feelings, Memories). The Prism writes a block for every
+    configured member (``LUMITRACE_FAMILY``), with nothing in it when the day says nothing about
+    them; the owner may add others by hand."""
 
     model_config = ConfigDict(extra="ignore")
     name: FactLine
-    mood: OptionalFactLine = None
-    food: CommaItems = Field(default_factory=list)
-    """What they ate or drank."""
-    places: CommaItems = Field(default_factory=list)
-    """Where they went."""
-    activities: list[Activity] = Field(default_factory=list)
-    moments: SemicolonItems = Field(default_factory=list)
-    """Notable moments and milestones, e.g. "lost his first tooth"."""
+    meals: list[Meal] = Field(default_factory=list)
+    """What they ate or drank, by meal."""
     health: SemicolonItems = Field(default_factory=list)
-    """Sickness, doctor visits, medicine."""
-    school: SemicolonItems = Field(default_factory=list)
-    """School or work."""
+    """Sleep, sickness, doctor visits, medicine, workouts: only what was plainly said."""
+    feelings: SemicolonItems = Field(default_factory=list)
+    """How they felt, in the speaker's words."""
+    moments: SemicolonItems = Field(default_factory=list)
+    """Memories: firsts, quotes, milestones, e.g. "lost his first tooth"."""
 
-    @field_validator("activities", mode="before")
+    @field_validator("meals", mode="before")
     @classmethod
     def _none_is_empty(cls, value: Any) -> Any:
         return [] if value is None else value
 
     @model_validator(mode="after")
-    def _drop_empty_activities(self) -> FamilyMember:
-        self.activities = [a for a in self.activities if a.kind]
+    def _normalise(self) -> FamilyMember:
+        self.meals = _normalise_meals(self.meals)
         return self
 
     def has_facts(self) -> bool:
         return self.model_copy(update={"name": ""}) != FamilyMember(name="")
 
 
+def _as_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    return list(value) if isinstance(value, list | tuple) else [value]
+
+
+def _migrate_legacy_facts(data: dict[str, Any]) -> dict[str, Any]:
+    """Facts in the format 1 and 2 shape, as a dict in the current shape.
+
+    Format 2 family blocks had ``mood``, ``food``, ``places``, ``activities`` and ``school``.
+    Mood becomes a feeling; places, activities and school move to the day's places and things
+    we did with the person's name in brackets; food becomes meals: a person whose food holds all
+    of the day's (top-level) meals gets those meals, the rest of the food goes under snacks.
+    Top-level meals nobody could be given stay as the day's own "Everyone" meals. Current-shape
+    data passes through unchanged."""
+    data = dict(data)
+    unassigned = _as_list(data.get("meals"))
+    places = _as_list(data.get("places"))
+    activities = _as_list(data.get("activities"))
+    family: list[Any] = []
+    for raw in _as_list(data.get("family")):
+        if not isinstance(raw, dict):
+            family.append(raw)
+            continue
+        member = dict(raw)
+        name = str(member.get("name") or "").strip()
+        feelings = _as_list(member.get("feelings"))
+        mood = member.pop("mood", None)
+        if isinstance(mood, str) and mood.strip() and not _is_none_text(mood.strip()):
+            feelings.append(mood)
+        member["feelings"] = feelings
+        for place in _legacy_items(member.pop("places", None), _COMMA_RE):
+            places.append(f"{place} ({name})" if name else place)
+        for activity in _as_list(member.pop("activities", None)):
+            if isinstance(activity, dict) and name:
+                activity = {**activity, "kind": f"{activity.get('kind', '')} ({name})"}
+            elif isinstance(activity, Activity) and name:
+                activity = {"kind": f"{activity.kind} ({name})", "minutes": activity.minutes}
+            activities.append(activity)
+        for item in _legacy_items(member.pop("school", None), _SEMICOLON_RE):
+            activities.append({"kind": f"school/work: {item} ({name})" if name else item})
+        food = _legacy_items(member.pop("food", None), _COMMA_RE)
+        meals = _as_list(member.get("meals"))
+        if food:
+            known = {str(i).casefold() for m in unassigned for i in _as_list(_item(m, "items"))}
+            if unassigned and known and known <= {f.casefold() for f in food}:
+                meals = [*meals, *unassigned]
+                food = [f for f in food if f.casefold() not in known]
+                unassigned = []
+            if food:
+                meals = [*meals, {"type": "snacks", "items": food}]
+        member["meals"] = meals
+        family.append(member)
+    data["family"], data["places"], data["activities"], data["meals"] = (
+        family,
+        places,
+        activities,
+        unassigned,
+    )
+    return data
+
+
+def _legacy_items(value: Any, split: re.Pattern[str]) -> list[str]:
+    """Strings of a format 2 list, split into items, without empty or "none" items."""
+    out: list[str] = []
+    for raw in _as_list(value):
+        for part in split.split(" ".join(str(raw).split())):
+            if part and not _is_none_text(part):
+                out.append(part)
+    return out
+
+
+def _item(value: Any, key: str) -> Any:
+    return value.get(key) if isinstance(value, dict) else getattr(value, key, None)
+
+
 class DayFacts(BaseModel):
     """Structured facts about a day: the "At a glance" region of the day file. This is also the
     shape the fact-extraction step returns. Values are normalised (one line each, no empty or
-    ``none`` items, one meal per type of :data:`MEAL_TYPES` in that order, family members kept
-    even when empty) so that rendering and parsing them back gives the same facts."""
+    ``not mentioned`` items, one meal per type of :data:`MEAL_TYPES` in that order, family
+    members kept even when empty) so that rendering and parsing them back gives the same facts.
+    Facts in the older shape (format 1 and 2) are converted when validated."""
 
     model_config = ConfigDict(extra="ignore")
     mood: OptionalFactLine = None
     mood_score: int | None = Field(default=None, ge=1, le=5)
     city: OptionalFactLine = None
     weather: OptionalFactLine = None
-    people: FactList = Field(default_factory=list)
-    places: FactList = Field(default_factory=list)
-    """Places the owner visited, e.g. "the river trail", "taco truck on 5th"."""
-    meals: list[Meal] = Field(default_factory=list)
-    activities: list[Activity] = Field(default_factory=list)
-    family: list[FamilyMember] = Field(default_factory=list)
-    """Per family member: what they ate, where they went, what they did, moments, health..."""
+    """From a lookup for the places visited, never guessed; empty when not looked up."""
     highlights: FactList = Field(default_factory=list)
+    remember: OptionalFactLine = None
+    """The one moment worth keeping (a first, a funny quote, a feeling)."""
+    meals: list[Meal] = Field(default_factory=list)
+    """Meals nobody in particular is named for (the "Everyone" block under Food)."""
+    places: FactList = Field(default_factory=list)
+    """Places someone went to, with who went in brackets: "Ravi's house (Maya, Leo)"."""
+    people: FactList = Field(default_factory=list)
+    """People met or visited: "Ravi, friend - at his house (Sam, Maya)"."""
+    memories: FactList = Field(default_factory=list)
+    """Memories the whole family shares ("Together")."""
+    activities: list[Activity] = Field(default_factory=list)
+    """Things we did, with who in brackets: "grocery shopping (Sam, Maya)"."""
+    family: list[FamilyMember] = Field(default_factory=list)
+    """Per family member: what they ate, health, feelings and memories."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate(cls, data: Any) -> Any:
+        return _migrate_legacy_facts(data) if isinstance(data, dict) else data
+
+    @field_validator("weather", mode="before")
+    @classmethod
+    def _not_looked_up(cls, value: Any) -> Any:
+        if isinstance(value, str) and value.strip().casefold().startswith(NOT_LOOKED_UP):
+            return None
+        return value
 
     @field_validator("meals", "activities", "family", mode="before")
     @classmethod
@@ -446,13 +570,7 @@ class DayFacts(BaseModel):
 
     @model_validator(mode="after")
     def _normalise_entries(self) -> DayFacts:
-        meals: dict[str, Meal] = {}
-        for meal in self.meals:
-            if meal.type in meals:
-                _add_unique(meals[meal.type].items, meal.items)
-            elif meal.items:
-                meals[meal.type] = meal.model_copy(deep=True)
-        self.meals = [meals[t] for t in MEAL_TYPES if t in meals]
+        self.meals = _normalise_meals(self.meals)
         self.activities = [a for a in self.activities if a.kind]
         self.family = [f for f in self.family if f.name]
         return self
@@ -656,45 +774,39 @@ def _region(start: str, content: str, end: str) -> str:
 
 
 FACT_SECTIONS: tuple[tuple[str, str], ...] = (
+    ("Highlight", "highlights"),
     ("Food", "meals"),
-    ("Places", "places"),
-    ("People", "people"),
-    ("Activities", "activities"),
-    ("Family", "family"),
-    ("Highlights", "highlights"),
+    ("Places visited", "places"),
+    ("People we met or visited", "people"),
+    ("Health and fitness", "health"),
+    ("Feelings", "feelings"),
+    ("Memories", "memories"),
+    ("Weather", "weather"),
+    ("Things we did", "activities"),
 )
-"""``(heading, DayFacts field)`` of the ``###`` sections in "At a glance", in render order."""
+"""``(heading, topic)`` of the ``###`` sections in "At a glance", in render order. Food, Health
+and fitness, Feelings and Memories are per person (a ``#### name`` block each)."""
+
+PERSON_SECTIONS: tuple[str, ...] = ("meals", "health", "feelings", "memories")
+TOGETHER = "Together"
+"""The ``####`` block under Memories for memories the whole family shares."""
+EVERYONE = "Everyone"
+"""The ``####`` block under Food for meals nobody in particular is named for."""
+REMEMBER_LABEL = "Remember"
+"""The last line under Highlight: the one moment worth keeping."""
 
 _SECTION_ALIASES: dict[str, str] = {
     **{heading.casefold(): name for heading, name in FACT_SECTIONS},
+    "highlights": "highlights",
     "meals": "meals",
-    "places visited": "places",
-    "family events": "family",
-}
-
-FAMILY_FIELDS: tuple[tuple[str, str, str], ...] = (
-    ("Mood", "mood", ""),
-    ("Ate", "food", ", "),
-    ("Went to", "places", ", "),
-    ("Did", "activities", "; "),
-    ("Moments", "moments", "; "),
-    ("Health", "health", "; "),
-    ("School/work", "school", "; "),
-)
-"""``(label, FamilyMember field, item separator)`` of the lines in a family member's block."""
-
-_FAMILY_ALIASES: dict[str, str] = {
-    **{label.casefold(): name for label, name, _ in FAMILY_FIELDS},
-    "food": "food",
-    "meals": "food",
     "places": "places",
+    "people": "people",
+    "health": "health",
+    "memory": "memories",
     "activities": "activities",
-    "moment": "moments",
-    "milestones": "moments",
-    "school": "school",
-    "work": "school",
-    "school / work": "school",
+    "things": "activities",
 }
+_PERSON_FIELD = {"health": "health", "feelings": "feelings", "memories": "moments"}
 
 
 def _mood_text(facts: DayFacts) -> str | None:
@@ -709,57 +821,74 @@ def _activity_text(activity: Activity) -> str:
     return f"{activity.kind} ({activity.minutes} min)" if activity.minutes else activity.kind
 
 
-def _family_member_block(member: FamilyMember, include_empty: bool) -> str:
-    lines = [f"#### {member.name}", ""]
-    for label, name, sep in FAMILY_FIELDS:
-        value = getattr(member, name)
-        if name == "activities":
-            value = [_activity_text(a) for a in value]
-        text = sep.join(value) if isinstance(value, list) else value
-        if text or include_empty:
-            lines.append(f"- **{label}:** {text or NONE_TEXT}")
-    return "\n".join(lines)
+def _meal_lines(meals: list[Meal], include_empty: bool) -> list[str]:
+    items = {m.type: ", ".join(m.items) for m in meals}
+    return [
+        f"- **{MEAL_LABELS[t]}:** {items.get(t) or NONE_TEXT}"
+        for t in MEAL_TYPES
+        if t in items or include_empty
+    ]
+
+
+def _person_blocks(facts: DayFacts, topic: str, include_empty: bool) -> list[str]:
+    """The ``#### name`` blocks of a per-person section (Together and Everyone included)."""
+    blocks: list[tuple[str, list[str]]] = []
+    if topic == "memories":
+        blocks.append((TOGETHER, [f"- {m}" for m in facts.memories]))
+    if topic == "meals" and facts.meals:
+        blocks.append((EVERYONE, _meal_lines(facts.meals, include_empty=False)))
+    for member in facts.family:
+        if topic == "meals":
+            lines = _meal_lines(member.meals, include_empty)
+        else:
+            lines = [f"- {i}" for i in getattr(member, _PERSON_FIELD[topic])]
+        blocks.append((member.name, lines))
+    out = []
+    for name, lines in blocks:
+        if not lines and include_empty:
+            lines = [f"- {NONE_TEXT}"]
+        if lines:
+            out.append(f"#### {name}\n\n" + "\n".join(lines))
+    return out
 
 
 def render_facts_section(facts: DayFacts, *, include_empty: bool = True) -> str:
     """The Markdown inside the facts markers.
 
-    Every day file has the same lines in the same order: Mood, City and Weather; then each
-    ``### heading`` of :data:`FACT_SECTIONS`, with one Food line per :data:`MEAL_TYPES` and a
-    ``#### name`` block per family member holding every line of :data:`FAMILY_FIELDS`. Empty
-    facts are written as ``none``. With ``include_empty=False`` (the index's view) empty lines,
-    sections and family members are left out, and no facts at all give an empty string."""
+    Every day file has the same lines in the same order: Mood and City; then each ``###
+    heading`` of :data:`FACT_SECTIONS`. The per-person sections (Food, Health and fitness,
+    Feelings, Memories) have a ``#### name`` block for every family member (Food has one line per
+    :data:`MEAL_TYPES`; Memories starts with ``Together``). Empty facts are written as ``not
+    mentioned`` (``not looked up`` for the weather). With ``include_empty=False`` (the index's
+    view) empty lines, sections and people are left out, and no facts at all give an empty
+    string."""
     blocks: list[str] = []
     scalars = [
         f"- **{label}:** {value or NONE_TEXT}"
-        for label, value in (
-            ("Mood", _mood_text(facts)),
-            ("City", facts.city),
-            ("Weather", facts.weather),
-        )
+        for label, value in (("Mood", _mood_text(facts)), ("City", facts.city))
         if value or include_empty
     ]
     if scalars:
         blocks.append("\n".join(scalars))
-    for heading, name in FACT_SECTIONS:
-        if name == "meals":
-            items = {m.type: ", ".join(m.items) for m in facts.meals}
-            lines = [
-                f"- **{t.capitalize()}:** {items.get(t) or NONE_TEXT}"
-                for t in MEAL_TYPES
-                if t in items or include_empty
-            ]
-        elif name == "activities":
-            lines = [f"- {_activity_text(a)}" for a in facts.activities]
-        elif name == "family":
-            members = [m for m in facts.family if include_empty or m.has_facts()]
+    for heading, topic in FACT_SECTIONS:
+        lines: list[str]
+        if topic == "highlights":
+            lines = [f"- {item}" for item in facts.highlights]
+            if facts.remember or include_empty:
+                lines.append(f"- **{REMEMBER_LABEL}:** {facts.remember or NONE_TEXT}")
+            if not facts.highlights and include_empty:
+                lines.insert(0, f"- {NONE_TEXT}")
+        elif topic in PERSON_SECTIONS:
+            lines = ["\n\n".join(_person_blocks(facts, topic, include_empty))]
+            lines = [lines[0]] if lines[0] else []
+        elif topic == "weather":
             lines = (
-                ["\n\n".join(_family_member_block(m, include_empty) for m in members)]
-                if members
-                else []
+                [f"- {facts.weather or NOT_LOOKED_UP}"] if facts.weather or include_empty else []
             )
+        elif topic == "activities":
+            lines = [f"- {_activity_text(a)}" for a in facts.activities]
         else:
-            lines = [f"- {item}" for item in getattr(facts, name)]
+            lines = [f"- {item}" for item in getattr(facts, topic)]
         if not lines and include_empty:
             lines = [f"- {NONE_TEXT}"]
         if lines:
@@ -946,15 +1075,158 @@ _MOOD_RE = re.compile(r"^(.*?)[ \t]*\(?[ \t]*([1-5])[ \t]*/[ \t]*5[ \t]*\)?$")
 _MINUTES_RE = re.compile(r"^(.*?)[ \t]*\([ \t]*(\d+)[ \t]*min(?:ute)?s?[ \t]*\)$", re.IGNORECASE)
 
 
-def parse_facts_section(markdown: str) -> tuple[DayFacts, str]:
+def _parse_scalar(text: str, data: dict[str, Any]) -> bool:
+    """A ``Mood``, ``City`` or ``Weather`` line before any section. False if it is none of them."""
+    label = _LABEL_RE.match(text)
+    key = label.group(1).casefold() if label else None
+    if label and key == "mood":
+        mood = _MOOD_RE.match(label.group(2))
+        if mood:
+            data["mood"] = mood.group(1) or None
+            data["mood_score"] = int(mood.group(2))
+        else:
+            data["mood"] = label.group(2)
+    elif label and key in ("city", "weather"):
+        data[key] = label.group(2)
+    else:
+        return False
+    return True
+
+
+_LEVELED_HEADING_RE = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
+
+
+def parse_facts_section(
+    markdown: str, *, source_format: int = FORMAT_VERSION
+) -> tuple[DayFacts, str]:
     """Parse the Markdown inside the facts markers. Returns ``(facts, stray)``.
 
-    Tolerates hand edits: bullets are optional, labels may or may not be bold, headings may use
-    any level and the aliases in :data:`_SECTION_ALIASES` and :data:`_FAMILY_ALIASES`. Under
-    Family, any heading that is not a section name starts a family member's block. Lines that
-    fit nowhere (an unknown label or heading, and everything under an unknown heading) are
-    returned as ``stray`` text, which :func:`parse` moves into the notes so nothing is lost.
+    ``source_format`` is the file's format: 3 is the current layout (:func:`render_facts_section`),
+    older files are read with :func:`_parse_facts_v2` and converted. Tolerates hand edits:
+    bullets are optional, labels may or may not be bold, headings may use any level and the
+    aliases in :data:`_SECTION_ALIASES`. Under a per-person section, any heading that is not a
+    section name starts a person's block. Lines that fit nowhere (an unknown label or heading,
+    and everything under an unknown heading) are returned as ``stray`` text, which :func:`parse`
+    moves into the notes so nothing is lost.
     """
+    if source_format < 3:
+        return _parse_facts_v2(markdown)
+    data: dict[str, Any] = {n: [] for n in ("people", "places", "highlights", "memories")}
+    unassigned: list[dict[str, Any]] = []
+    activities: list[dict[str, Any]] = []
+    members: dict[str, dict[str, Any]] = {}
+    stray: list[str] = []
+    section: str | None = None
+    person: str | None = None
+    unknown_section = False
+    for raw in markdown.split("\n"):
+        line = raw.strip()
+        if not line:
+            continue
+        heading = _LEVELED_HEADING_RE.match(line)
+        if heading:
+            title = heading.group(2).strip()
+            known = _SECTION_ALIASES.get(title.casefold())
+            if known is None and section in PERSON_SECTIONS and not unknown_section:
+                person = title
+                key = title.casefold()
+                if key not in (TOGETHER.casefold(), EVERYONE.casefold()) and key not in members:
+                    members[key] = {"name": title, "meals": [], "health": [], "feelings": []}
+                    members[key]["moments"] = []
+                continue
+            section, person, unknown_section = known, None, known is None
+            if unknown_section:
+                stray.append(line)
+            continue
+        if unknown_section:
+            stray.append(line)
+            continue
+        text = _BULLET_RE.match(line).group(1).strip()  # type: ignore[union-attr]
+        if _is_none_text(text):
+            continue
+        member = members.get((person or "").casefold())
+        if section is None:
+            if not _parse_scalar(text, data):
+                stray.append(line)
+        elif section == "highlights":
+            label = _LABEL_RE.match(text)
+            if label and label.group(1).casefold() == REMEMBER_LABEL.casefold():
+                if not _is_none_text(label.group(2)):
+                    data["remember"] = label.group(2)
+            else:
+                data["highlights"].append(text)
+        elif section == "meals":
+            label = _LABEL_RE.match(text)
+            meal_type, items = (label.group(1), label.group(2)) if label else ("snacks", text)
+            target = member["meals"] if member else unassigned
+            target.append({"type": meal_type, "items": [items]})
+        elif section == "memories":
+            if member:
+                member["moments"].append(text)
+            elif person is None or person.casefold() == TOGETHER.casefold():
+                data["memories"].append(text)
+            else:
+                stray.append(line)
+        elif section in ("health", "feelings"):
+            if member:
+                member[_PERSON_FIELD[section]].append(text)
+            else:
+                stray.append(line)
+        elif section == "weather":
+            data["weather"] = text
+        elif section == "activities":
+            activities.append(_parse_activity(text))
+        else:
+            data[section].append(text)
+    try:
+        facts = DayFacts.model_validate(
+            {
+                **data,
+                "meals": unassigned,
+                "activities": activities,
+                "family": list(members.values()),
+            }
+        )
+    except ValidationError as exc:
+        raise DayFileParseError(f"invalid facts: {exc}") from exc
+    return facts, "\n".join(stray)
+
+
+_V2_SECTION_ALIASES: dict[str, str] = {
+    "food": "meals",
+    "meals": "meals",
+    "places": "places",
+    "places visited": "places",
+    "people": "people",
+    "activities": "activities",
+    "family": "family",
+    "family events": "family",
+    "highlights": "highlights",
+}
+_V2_FAMILY_ALIASES: dict[str, str] = {
+    "mood": "mood",
+    "ate": "food",
+    "food": "food",
+    "meals": "food",
+    "went to": "places",
+    "places": "places",
+    "did": "activities",
+    "activities": "activities",
+    "moments": "moments",
+    "moment": "moments",
+    "milestones": "moments",
+    "health": "health",
+    "school/work": "school",
+    "school": "school",
+    "work": "school",
+    "school / work": "school",
+}
+
+
+def _parse_facts_v2(markdown: str) -> tuple[DayFacts, str]:
+    """Parse the facts of a format 2 file (Food lines, Places, People, Activities, Family
+    blocks, Highlights) and convert them to the current shape (see
+    :func:`_migrate_legacy_facts`). Same tolerance and stray handling as the current parser."""
     data: dict[str, Any] = {n: [] for n in ("people", "places", "highlights")}
     meals: list[dict[str, Any]] = []
     activities: list[dict[str, Any]] = []
@@ -969,7 +1241,7 @@ def parse_facts_section(markdown: str) -> tuple[DayFacts, str]:
         heading = _FACT_HEADING_RE.match(line)
         if heading:
             title = heading.group(1).strip()
-            known = _SECTION_ALIASES.get(title.casefold())
+            known = _V2_SECTION_ALIASES.get(title.casefold())
             if known is None and section == "family" and not unknown_section:
                 family.append({"name": title, "activities": []})
                 continue
@@ -985,7 +1257,7 @@ def parse_facts_section(markdown: str) -> tuple[DayFacts, str]:
             continue
         if section == "family":
             label = _LABEL_RE.match(text)
-            field = _FAMILY_ALIASES.get(label.group(1).casefold()) if label else None
+            field = _V2_FAMILY_ALIASES.get(label.group(1).casefold()) if label else None
             if not family or label is None or field is None:
                 stray.append(line)
             elif field == "mood":
@@ -997,18 +1269,7 @@ def parse_facts_section(markdown: str) -> tuple[DayFacts, str]:
             else:
                 family[-1].setdefault(field, []).append(label.group(2))
         elif section is None:
-            label = _LABEL_RE.match(text)
-            key = label.group(1).casefold() if label else None
-            if label and key == "mood":
-                mood = _MOOD_RE.match(label.group(2))
-                if mood:
-                    data["mood"] = mood.group(1) or None
-                    data["mood_score"] = int(mood.group(2))
-                else:
-                    data["mood"] = label.group(2)
-            elif label and key in ("city", "weather"):
-                data[key] = label.group(2)
-            else:
+            if not _parse_scalar(text, data):
                 stray.append(line)
         elif section == "meals":
             label = _LABEL_RE.match(text)
@@ -1076,7 +1337,11 @@ def parse(markdown: str, *, fallback_date: dt.date | None = None) -> DayFile:
             raise DayFileParseError(f"invalid facts in front matter: {exc}") from exc
         _add_unique(facts.highlights, _clean_list(family_events))
     else:
-        facts, facts_stray = parse_facts_section(facts_region)
+        try:
+            source_format = int(data.get(FORMAT_KEY) or 2)
+        except (TypeError, ValueError):
+            source_format = 2
+        facts, facts_stray = parse_facts_section(facts_region, source_format=source_format)
         if facts_stray:
             stray_parts.append(facts_stray)
     data[FORMAT_KEY] = FORMAT_VERSION
@@ -1204,6 +1469,15 @@ def _add_activities(target: list[Activity], new: Iterable[Activity]) -> None:
             kinds.add(activity.kind.casefold())
 
 
+def _add_meals(target: list[Meal], new: Iterable[Meal]) -> None:
+    for meal in new:
+        existing = next((m for m in target if m.type == meal.type), None)
+        if existing is None:
+            target.append(meal.model_copy(deep=True))
+        else:
+            _add_unique(existing.items, meal.items)
+
+
 def merge_generation_additive(
     day: DayFile,
     *,
@@ -1227,12 +1501,12 @@ def merge_generation_additive(
     was_edited = day.is_user_edited()
     result = day.model_copy(deep=True)
     current = result.facts
-    for name in ("mood", "mood_score", "city", "weather"):
+    for name in ("mood", "mood_score", "city", "weather", "remember"):
         if getattr(current, name) is None and getattr(facts, name) is not None:
             setattr(current, name, getattr(facts, name))
-    _add_unique(current.people, facts.people)
-    _add_unique(current.places, facts.places)
-    _add_unique(current.highlights, facts.highlights)
+    for name in ("people", "places", "highlights", "memories"):
+        _add_unique(getattr(current, name), getattr(facts, name))
+    _add_meals(current.meals, facts.meals)
     for member in facts.family:
         existing_member = next(
             (f for f in current.family if f.name.casefold() == member.name.casefold()), None
@@ -1240,19 +1514,9 @@ def merge_generation_additive(
         if existing_member is None:
             current.family.append(member.model_copy(deep=True))
             continue
-        if existing_member.mood is None:
-            existing_member.mood = member.mood
-        for name in ("food", "places", "moments", "health", "school"):
+        for name in ("health", "feelings", "moments"):
             _add_unique(getattr(existing_member, name), getattr(member, name))
-        _add_activities(existing_member.activities, member.activities)
-    for meal in facts.meals:
-        existing = next(
-            (m for m in current.meals if m.type.casefold() == meal.type.casefold()), None
-        )
-        if existing is None:
-            current.meals.append(meal.model_copy(deep=True))
-        else:
-            _add_unique(existing.items, meal.items)
+        _add_meals(existing_member.meals, member.meals)
     _add_activities(current.activities, facts.activities)
     result.facts = DayFacts.model_validate(current.model_dump())
     if journal_addendum and journal_addendum.strip():

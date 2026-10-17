@@ -30,22 +30,28 @@ def test_sample_day_passages(sample_day_markdown: str) -> None:
     facts = {p.heading: p.text for p in passages if p.section == "facts"}
     assert list(facts) == [
         None,
-        "Food",
-        "Places",
-        "People",
-        "Activities",
-        "Leo",
-        "Maya",
-        "Highlights",
+        "Highlight",
+        "Food · Sam",
+        "Food · Maya",
+        "Food · Leo",
+        "Places visited",
+        "People we met or visited",
+        "Feelings · Sam",
+        "Feelings · Leo",
+        "Memories · Together",
+        "Memories · Leo",
+        "Weather",
+        "Things we did",
     ]
-    assert [p.ordinal for p in passages if p.section == "facts"] == list(range(8))
-    assert (
-        facts["Leo"] == "- **Mood:** proud\n- **Ate:** pasta\n- **Moments:** lost his first tooth"
-    )
+    assert [p.ordinal for p in passages if p.section == "facts"] == list(range(13))
+    assert facts["Food · Leo"] == "- **Dinner:** pasta"
+    assert facts["Food · Maya"] == "- **Lunch:** fish tacos"
     assert "- **Mood:** happy (4/5)" in facts[None]
-    assert "- **Breakfast:** oatmeal, blueberries" in facts["Food"]
-    assert facts["Places"] == "- the river trail\n- the taco truck\n- home"
-    assert facts["Activities"] == "- run (40 min)\n- reading"
+    assert "- **Morning:** oatmeal, blueberries" in facts["Food · Sam"]
+    assert "- **Remember:** Leo lost his first tooth and was very proud" in facts["Highlight"]
+    assert facts["Places visited"].splitlines()[0] == "- the river trail (Sam)"
+    assert facts["Things we did"] == "- run (Sam) (40 min)\n- reading (Sam)"
+    assert facts["Weather"] == "- sunny, 24°C"
     assert all(len(p.text) <= MAX_CHARS for p in passages)
 
 

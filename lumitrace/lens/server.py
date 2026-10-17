@@ -28,9 +28,9 @@ logger = logging.getLogger(__name__)
 
 INSTRUCTIONS = """\
 Lumitrace is the owner's personal voice journal: one entry per day with a written journal, \
-structured facts (meals, places, activities, people, mood, highlights, and per family member \
-what they ate, where they went, what they did, moments, health, mood and school/work), the \
-owner's own notes and the raw transcripts of their recordings.
+structured facts (highlights and the one moment to remember, places visited, people met, things \
+done, mood, weather, and per family member what they ate at each meal, health, feelings and \
+memories), the owner's own notes and the raw transcripts of their recordings.
 
 How to answer:
 - Answer ONLY from what these tools return. Never fill gaps with guesses or general knowledge \
@@ -114,15 +114,19 @@ def register_tools(server: MCPServer, tools: LensTools) -> None:
         annotations=_READ_ONLY,
         description=(
             "List and count structured facts extracted from the journal. kind is one of: "
-            "meals (meal_type + item, e.g. breakfast: oatmeal), activities (kind + minutes), "
-            "people (names), places (places visited), family (per family member: person + "
-            "category + text + minutes, where category is mood, food, places, activities, "
-            "moments, health or school), mood (mood word + 1-5 score per day), highlights. "
+            "meals (person + meal_type + item, e.g. Leo breakfast: oatmeal; meal_type is "
+            "breakfast, lunch, dinner or snacks, and snacks also holds drinks and other food), "
+            "activities "
+            "(things we did: kind + minutes, with who in brackets), people (people met or "
+            "visited), places (places visited, with who went in brackets), family (per family "
+            "member: person + category + text, where category is feelings, health or moments; "
+            "memories shared by everyone have person Together), mood (mood word + 1-5 score per "
+            "day), highlights. A fact ending in [uncertain: ...] was not certain in the source. "
             "Returns matching rows (newest first, each with its date) plus counts (rows, days, "
             "first and last date) and aggregates over ALL matches (top items, minutes per "
             "activity, days per person or place, counts per family member and category, average "
             "mood). contains is a case-insensitive substring filter (for family it matches the "
-            "text or the category); person limits family facts to one family member. "
+            "text or the category); person limits family and meals facts to one family member. "
             f"Date filters are inclusive and take {DATE_HELP}."
         ),
     )
@@ -141,7 +145,7 @@ def register_tools(server: MCPServer, tools: LensTools) -> None:
         limit: Annotated[int, Field(description="Maximum rows (1-500).", ge=1, le=500)] = 50,
         person: Annotated[
             str | None,
-            Field(description="Only with kind 'family': one family member's name, e.g. 'Leo'."),
+            Field(description="Only with kind 'family' or 'meals': one family member, e.g. 'Leo'."),
         ] = None,
     ) -> dict[str, Any]:
         return _run(tools.query_facts, kind, contains, from_date, to_date, limit, person)

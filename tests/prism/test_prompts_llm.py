@@ -134,6 +134,23 @@ def test_extract_facts_sends_the_family_list(api_settings: Settings) -> None:
     assert "relation to the author (may be empty): Maya, Leo\n" in users["Maya, Leo"]
 
 
+def test_glossary_is_sent_to_every_prompt(api_settings: Settings) -> None:
+    at = dt.datetime(2026, 10, 10, 13, 5, tzinfo=api_settings.tz)
+    capture = Capture(id="c", kind="note", captured_at=at, text="x")
+    for glossary, expected in (("Leon is Leo's friend; potty not party", True), ("", False)):
+        settings = api_settings.model_copy(update={"glossary": glossary})
+        llm = FakeLLM()
+        gen = Generator(LLMClient(settings, completion_fn=llm), settings.prompts_dir)
+        facts, _ = gen.extract_facts(dt.date(2026, 10, 10), [capture])
+        gen.write_journal(dt.date(2026, 10, 10), [capture], facts.value)
+        gen.write_addendum(dt.date(2026, 10, 10), capture, "## Summary\n\nEarlier.")
+        for _, _, messages in llm.calls:
+            system = messages[0]["content"]
+            assert ("- Leon is Leo's friend\n- potty not party" in system) is expected
+            assert ("Names and spellings from the owner" in system) is True
+            assert ("(none)" in system) is (not expected)
+
+
 def test_captures_show_translation_and_original(api_settings: Settings) -> None:
     llm = FakeLLM()
     gen = Generator(LLMClient(api_settings, completion_fn=llm), api_settings.prompts_dir)

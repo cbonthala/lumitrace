@@ -125,3 +125,10 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
   A dry run on one real day (generate only, no writes) compared models and prompt versions
   side by side in minutes → prompts follow the original (ADR 0018), `gpt-4.1` for facts and
   journal; dry-run any prompt change on a real day before deploying it.
+- 2026-10-17 — A second agent reviewing Oct 12 to 15 found the same errors again: the machine
+  translation gave actions to the wrong person ("Nanna" as "my father"), misheard words (potty
+  → "party"), and mixed up similar names (a child and her daycare friend); the journal then
+  invented meals, visits and health facts, and facts counted deliveries as visits. Lesson: the
+  translation is a hint, the Telugu wins; relation words and names need a glossary; "unsure"
+  must be written as unsure. Captured in the day template and the `lumitrace-telugu-day-journal`
+  skill (ADR 0045); the prompts still need a version with the Nanna rules.

@@ -7,6 +7,32 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- **Day file format 3 and index schema 3** (ADR 0045, accepted): the facts are topic first
+  (Highlight with Remember, Food by person and meal, Places visited, People we met or visited,
+  Health and fitness, Feelings, Memories, Weather, Things we did) with a block per family
+  member, so new members appear everywhere. Formats 1 and 2 are still read and converted.
+  Spectrum indexes the new fields (`meals.person`, `days.remember`, family categories
+  `feelings`/`health`/`moments`, facts passages per section and person) and rebuilds old
+  indexes by itself; the Lens `query_facts` takes `person` for meals. `extract_facts-v6` writes
+  the new shape. `docs/templates/day-template.md` matches the real layout.
+
+### Prism
+
+- **`lumitrace-prism regenerate`** redoes past days from their transcripts with the current
+  prompts and format. Unedited days are replaced; edited days only gain the new facts
+  (`--dry-run`, `--from`, `--to`, `--nudge`). It calls the AI models, so check with `--dry-run`.
+
+- **Day template and Telugu journal skill** (ADR 0045, proposed): `docs/templates/day-template.md`
+  (topic-first, per-member subsections, Food by meal, People we met or visited, `Remember:`
+  recap) and the project skill `.cursor/skills/lumitrace-telugu-day-journal/` with a fictional
+  `glossary.example.md`; the real `glossary.local.md` is git-ignored. Not parsed by the code yet.
+- **Prompts use the Telugu day rules** (ADR 0045): `extract_facts-v5`, `write_journal-v4`,
+  `journal_addendum-v4` carry the rules of the `lumitrace-telugu-day-journal` skill (original
+  over translation, Nanna rules, known translation errors, no deliveries as visits, no shows as
+  people, high bar for health, keep small emotional moments, later recording wins). The journal
+  is bullets with a `**Remember:**` line. New setting `LUMITRACE_GLOSSARY` (`Settings.glossary`,
+  `glossary_lines`) feeds names and mishearings into `{{glossary}}`. Dry-run on a real day
+  before deploying.
 - `.env.example` matches production's providers: `openai/gpt-4.1` for fact extraction and
   journal writing, and Sarvam speech-to-text in Telugu (`LUMITRACE_STT_MODEL` commented out, as
   it is only read by the `litellm` provider).

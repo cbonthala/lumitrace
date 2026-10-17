@@ -1,4 +1,4 @@
-# Frames: day file format (format version 2)
+# Frames: day file format (format version 3)
 
 The Frames are the day files: one Markdown file per day, the source of truth. Code:
 `lumitrace/frames/dayfile.py` (format) and `lumitrace/frames/storage/` (where they live). Always use
@@ -32,14 +32,12 @@ All paths are relative to the `Lumitrace` root folder.
 
 ## At a glance
 
-<!-- lumitrace:facts:start (...) -->      DayFile.facts: always the same lines: mood, city,
-- **Mood:** happy (4/5)                   weather, then "###" sections Food (five meal
-### Food                                  lines), Places, People, Activities, Family
-- **Breakfast:** oatmeal, blueberries     (a "####" block of seven lines per family
-- **Snacks:** none                        member), Highlights; "none" when empty
-### Family
+<!-- lumitrace:facts:start (...) -->      DayFile.facts: Mood and City lines, then "###"
+- **Mood:** happy (4/5)                   topic sections; Food, Health and fitness,
+### Highlight                             Feelings and Memories hold one "####" block
+### Food                                  per family member
 #### Leo
-- **Ate:** pasta
+- **Morning:** oatmeal
 <!-- lumitrace:facts:end -->
 
 <!-- lumitrace:journal:start (...) -->    DayFile.journal: generated Markdown, "##" sections
@@ -88,62 +86,50 @@ The front matter holds only the date, the media and provenance. The facts are in
 | `models_used` | map task → model | e.g. `stt`, `extract_facts`, `write_journal` |
 | `generated_at` | ISO-8601 datetime or null | last generation |
 | `generated_hash` | string or null | edit detection, see below |
-| `lumitrace_format` | int | `2` (read from `lumen_format`, `bookshelf_format` or `lifelog_format` in files written under the earlier names) |
+| `lumitrace_format` | int | `3` (read from `lumen_format`, `bookshelf_format` or `lifelog_format` in files written under the earlier names) |
 | *anything else* | | preserved as is (e.g. Obsidian `tags`) |
 
 ### "At a glance": the facts (`DayFacts`)
 
 The Prism extracts these from the recordings; Spectrum indexes them exactly as they are written
-here (one row per item in the fact tables, see `docs/index-schema.md`).
+here (one row per item in the fact tables, see `docs/index-schema.md`). The layout is
+**topic first** (decision 0045): each topic is a `###` section and, where it differs per person,
+holds one `#### name` block per family member. A family member named in `LUMITRACE_FAMILY` gets
+a block in every such section on every generated day, in the configured order and spelling, so a
+new member appears everywhere without any change.
 
-**Every day file has exactly the same lines, in the same order**, whatever the day held: the
-Mood, City and Weather lines, all six `###` sections, all five Food lines and, for each family
-member, all seven labelled lines. Anything empty is written as `none` (`- **Snacks:** none`,
-`- none` under an empty section) and read back as empty. Search and the index never see the
-`none` lines (`render_facts_section(facts, include_empty=False)`).
+**The same lines every day.** Anything empty is written `not mentioned` (never left blank, so
+"nothing was said" is visible) and read back as empty; Weather says `not looked up` until a
+weather lookup fills it. Search and the index never see those lines
+(`render_facts_section(facts, include_empty=False)`).
 
-| Line or section | Field | Rendered as |
+| Section | Field | Rendered as |
 |---|---|---|
-| `- **Mood:** ...` | `mood` (string), `mood_score` (1–5) | `happy (4/5)`, `happy`, `4/5` or `none` |
-| `- **City:** ...`, `- **Weather:** ...` | `city`, `weather` | the text or `none` |
-| `### Food` | `meals`: list of `{type, items}` | always five lines in this order: `- **Breakfast:**`, `**Lunch:**`, `**Dinner:**`, `**Snacks:**`, `**Drinks:**`, each with comma-separated items or `none`. `MEAL_TYPES` are the only types: `snack`→snacks, `drink`/`beverage`→drinks, `supper`→dinner, `brunch`→lunch, anything else → snacks |
-| `### Places` | `places`: list of strings | one bullet per place visited |
-| `### People` | `people`: list of strings | one bullet per person |
-| `### Activities` | `activities`: list of `{kind, minutes}` | `- run (40 min)` or `- reading` |
-| `### Family` | `family`: list of `FamilyMember`, see below | one `#### name` block per member |
-| `### Highlights` | `highlights`: list of strings | one bullet each |
+| `- **Mood:**`, `- **City:**` | `mood`, `mood_score` (1-5), `city` | `happy (4/5)`, the city or `not mentioned` |
+| `### Highlight` | `highlights`, `remember` | one short bullet per highlight, then `- **Remember:** ...`, the one moment worth keeping |
+| `### Food` | `FamilyMember.meals`, `meals` | per person: `- **Morning:**`, `**Lunch:**`, `**Dinner:**`, `**Snacks / drinks / other:**` (`MEAL_TYPES` breakfast, lunch, dinner, snacks); `#### Everyone` for meals nobody is named for |
+| `### Places visited` | `places` | one bullet per place; add `(Name)` when only some went |
+| `### People we met or visited` | `people` | one bullet: `Rachel, friend - at the park (Maya)` |
+| `### Health and fitness` | `FamilyMember.health` | per person, one bullet per item (exercise, symptoms, sleep) |
+| `### Feelings` | `FamilyMember.feelings` | per person, one bullet per feeling |
+| `### Memories` | `FamilyMember.moments`, `memories` | per person; `#### Together` for memories the whole family shares |
+| `### Weather` | `weather` | the weather for the places visited, or `not looked up` |
+| `### Things we did` | `activities` | one bullet per thing (`grocery shopping`, `play area (Maya, Leo)`) |
 
-**Family.** Every family member named in `LUMITRACE_FAMILY` gets a `#### name` block under
-`### Family` on every generated day, in the configured order and spelling, even if the day says
-nothing about them (the Prism drops anyone else; the owner may add other names by hand). With
-no family configured, Family holds `- none`. A block always has these seven lines:
-
-| Line | `FamilyMember` field | Items separated by |
-|---|---|---|
-| `- **Mood:** proud` | `mood` (string) | |
-| `- **Ate:** pasta, apple juice` | `food` | `, ` |
-| `- **Went to:** school, the dentist` | `places` | `, ` |
-| `- **Did:** soccer (60 min); drawing` | `activities` (`{kind, minutes}`) | `; ` |
-| `- **Moments:** lost his first tooth` | `moments` | `; ` |
-| `- **Health:** a cold; saw the dentist` | `health` | `; ` |
-| `- **School/work:** spelling test` | `school` | `; ` |
+A fact the AI was not sure about ends with `[uncertain: why]` (no commas or semicolons inside
+the brackets). It stays ordinary text: it is indexed and searched like the rest, so the owner can
+see and fix it.
 
 Values are normalised so that rendering and parsing give back the same facts: each value is one
-line (whitespace collapsed); empty and `none` items and meals without items are dropped; meals
-of the same type are merged and kept in `MEAL_TYPES` order; family members without a name are
-dropped (members without facts are kept); items never contain their separator (`"eggs, toast"`
-becomes two items, and a `;` inside an activity becomes `,`).
+line (whitespace collapsed); empty and `not mentioned` items are dropped; meals of the same type
+are merged and kept in `MEAL_TYPES` order (`snack`, `drink`, `other` become snacks, `supper`
+dinner, `brunch` lunch); members without a name are dropped (members without facts are kept).
 
-Hand edits are tolerated: bullets (`-`, `*`, `+`) are optional, labels may be bold or not
-(`Mood: great`), headings may use any level, and `Meals`, `Places visited` and `Family events`
-are accepted as section names. Under Family, any heading that is not a section name starts a
-member's block, and `Food`/`Meals`, `Places`, `Activities`, `Moment`/`Milestones` and
-`School`/`Work` are accepted as labels. A food line without a label counts as Snacks; an
-activity ending in `(N min)` or `(N minutes)` gets its minutes. Lines that fit nowhere (an
-unknown label such as `- Sleep: 8 hours`, a line under Family before any name, an unknown
-heading outside Family and everything under it) are moved into `My notes` on the next system
-write, so nothing is lost. Hand edits are rewritten to the standard names and lines on the
-next system write.
+Hand edits are tolerated: bullets and bold are optional, headings may use any level, and
+common alternative names (`Meals`, `Places`, `People`, `Activities`) are accepted for the
+sections. A food line without a known label counts as snacks. Lines that fit nowhere are moved
+into `My notes` on the next system write, so nothing is lost. Hand edits are rewritten to the
+standard names and lines on the next system write.
 
 ### The journal
 
@@ -157,16 +143,21 @@ appears in. `Later` holds what is added after the owner edited the day
 `**22:15 · Quick Note**`, and a `## Later` heading is only opened when the journal does not
 already end with one. A journal the owner edited is never re-normalised.
 
-### Format 1 files
+### Older formats
 
-Format 1 (0.1.0) kept the facts in the front matter (`mood`, `mood_score`, `city`, `weather`,
-`people`, `meals`, `activities`, `family_events`, `highlights`) and had no facts region. `parse`
-reads those keys as the facts when the facts region is missing (`family_events`, which had no
-person, are added to `highlights`), and the next `render` writes format 2. If the file's
-`generated_hash` matches its format 1 content, `parse` re-stamps it with the format 2 hash, so an
-unedited day stays unedited; an edited day keeps its old hash and stays marked as edited. In a
-format 2 file, fact-named keys the owner adds to the front matter are ordinary extra keys: kept,
-but not read as facts.
+* **Format 2** (decision 0042 era) had `###` sections Food (five meal lines), Places, People,
+  Activities, Family and Highlights, with a seven-line `####` block per member. `parse` reads
+  it (`parse_facts_section(..., source_format=2)`) and converts it: a member's food becomes
+  that member's meals (snacks when no meal is known), their places and activities become day
+  places and things we did marked `(Name)`, school/work becomes things we did, moments become
+  memories, and the rest keep their names. The next `render` writes format 3.
+* **Format 1** (0.1.0) kept the facts in the front matter and had no facts region; `parse` reads
+  those keys as the facts and the next `render` writes format 3.
+
+**Edit detection across formats.** `generated_hash` covers the rendered facts, so a day written
+in format 1 or 2 cannot reproduce its old hash and looks edited after migration. To redo old
+days safely, compare the live file with its `_system/generated` snapshot: identical means the
+owner never edited it (`lumitrace-prism regenerate` does exactly this, `docs/prism.md`).
 
 ### Capture metadata
 
@@ -220,7 +211,7 @@ it writes a day file; Spectrum diffs the live file against that snapshot to reco
 ## Example
 
 Fictional data (also `tests/fixtures/sample-day.md`, which is the canonical rendering; the same
-day in format 1 is `tests/fixtures/sample-day-v1.md`):
+day in format 2 is `tests/fixtures/sample-day-v2.md` and in format 1 `tests/fixtures/sample-day-v1.md`):
 
 ```markdown
 ---
@@ -236,8 +227,8 @@ models_used:
   extract_facts: openai/gpt-4o-mini
   write_journal: openai/gpt-4o
 generated_at: '2026-10-11T00:41:00-05:00'
-generated_hash: 2c4980bf67ca8a30
-lumitrace_format: 2
+generated_hash: 66bd9471a8c0b8c9
+lumitrace_format: 3
 ---
 
 # Saturday, October 10, 2026 · First tooth
@@ -247,58 +238,102 @@ lumitrace_format: 2
 <!-- lumitrace:facts:start (found by Lumitrace; if you edit them, your edits are kept) -->
 - **Mood:** happy (4/5)
 - **City:** Austin
-- **Weather:** sunny, 24°C
+
+### Highlight
+
+- Morning run by the river
+- Fish tacos from the taco truck
+- Leo lost his first tooth
+- Finished a book late at night
+- **Remember:** Leo lost his first tooth and was very proud
 
 ### Food
 
-- **Breakfast:** oatmeal, blueberries
+#### Sam
+
+- **Morning:** oatmeal, blueberries
 - **Lunch:** fish tacos
 - **Dinner:** pasta
-- **Snacks:** none
-- **Drinks:** horchata
-
-### Places
-
-- the river trail
-- the taco truck
-- home
-
-### People
-
-- Maya
-- Leo
-
-### Activities
-
-- run (40 min)
-- reading
-
-### Family
-
-#### Leo
-
-- **Mood:** proud
-- **Ate:** pasta
-- **Went to:** none
-- **Did:** none
-- **Moments:** lost his first tooth
-- **Health:** none
-- **School/work:** none
+- **Snacks / drinks / other:** horchata
 
 #### Maya
 
-- **Mood:** none
-- **Ate:** fish tacos
-- **Went to:** the taco truck
-- **Did:** none
-- **Moments:** none
-- **Health:** none
-- **School/work:** none
+- **Morning:** not mentioned
+- **Lunch:** fish tacos
+- **Dinner:** not mentioned
+- **Snacks / drinks / other:** not mentioned
 
-### Highlights
+#### Leo
 
-- Leo lost his first tooth
-- Finished a book
+- **Morning:** not mentioned
+- **Lunch:** not mentioned
+- **Dinner:** pasta
+- **Snacks / drinks / other:** not mentioned
+
+### Places visited
+
+- the river trail (Sam)
+- the taco truck (Sam, Maya)
+- home (Sam, Maya, Leo)
+
+### People we met or visited
+
+- Ravi, neighbour - at the river trail (Sam)
+
+### Health and fitness
+
+#### Sam
+
+- not mentioned
+
+#### Maya
+
+- not mentioned
+
+#### Leo
+
+- not mentioned
+
+### Feelings
+
+#### Sam
+
+- happy
+
+#### Maya
+
+- not mentioned
+
+#### Leo
+
+- proud
+
+### Memories
+
+#### Together
+
+- Leo's first tooth came out at bedtime
+
+#### Sam
+
+- not mentioned
+
+#### Maya
+
+- not mentioned
+
+#### Leo
+
+- lost his first tooth
+
+### Weather
+
+- sunny, 24°C
+
+### Things we did
+
+- run (Sam) (40 min)
+- reading (Sam)
 <!-- lumitrace:facts:end -->
 
 <!-- lumitrace:journal:start (written by Lumitrace; if you edit it, your edits are kept) -->

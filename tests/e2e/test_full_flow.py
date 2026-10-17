@@ -63,8 +63,7 @@ def fake_extract_facts(*, model: str, messages: list[dict[str, str]], **_: Any) 
         "meals": [{"type": "Lunch", "items": ["fish tacos"]}] if "tacos" in lower else [],
         "activities": [{"kind": "run", "minutes": 40}] if " run " in lower else [],
         "highlights": ["Pumpkin patch"] if "pumpkin" in lower else [],
-        "family": ([{"name": "Maya", "food": ["fish tacos"]}] if "tacos" in lower else [])
-        + (
+        "family": (
             [{"name": "leo", "activities": [{"kind": "walk"}], "moments": ["saw the stars"]}]
             if "Leo" in entries
             else []
@@ -262,9 +261,10 @@ def test_full_flow(stack: Stack) -> None:
         "only LUMITRACE_FAMILY members get a block"
     )
     text = storage.read_text(day_path)
-    assert "### Places\n\n- the lake" in text
-    assert "#### Leo\n\n- **Mood:** none\n- **Ate:** none\n" in text
-    assert "- **Snacks:** none" in text
+    assert "### Places visited\n\n- the lake" in text
+    assert "#### Leo\n\n- **Morning:** not mentioned\n- **Lunch:** not mentioned\n" in text
+    assert "- **Snacks / drinks / other:** not mentioned" in text
+    assert "#### Everyone\n\n- **Lunch:** fish tacos" in text
     assert "Fish tacos for lunch" in day.journal
     assert storage.exists("2026/10/2026-10-10/2026-10-10-2130.wav")
     assert not storage.list("_system/inbox")
@@ -312,7 +312,9 @@ def test_full_flow(stack: Stack) -> None:
     assert get_day["audio"][0]["link"].startswith("file://")
     assert get_day["photos"][0]["name"] == "photo-01.jpg"
 
-    assert meals["rows"] == [{"date": "2026-10-10", "meal_type": "lunch", "item": "fish tacos"}]
+    assert meals["rows"] == [
+        {"date": "2026-10-10", "person": "", "meal_type": "lunch", "item": "fish tacos"}
+    ]
     assert runs["rows"] == [{"date": "2026-10-10", "kind": "run", "minutes": 40}]
     assert places["rows"] == [{"date": "2026-10-10", "name": "the lake"}]
     assert [d["date"] for d in on_this_day["days"]] == ["2025-10-10"]
@@ -370,16 +372,15 @@ def test_full_flow(stack: Stack) -> None:
     assert storage.read_text(generated_snapshot_path(DAY)) == storage.read_text(day_path)
 
     stack.wait_indexed(DAY)
-    stars, people, leo = stack.mcp(
+    stars, people, leo, activities = stack.mcp(
         ("search", {"query": "stars", "from_date": "2026-10-10", "to_date": "2026-10-10"}),
         ("query_facts", {"kind": "people", "contains": "leo"}),
         ("query_facts", {"kind": "family", "person": "leo"}),
+        ("query_facts", {"kind": "activities"}),
     )
     assert stars["results"][0]["date"] == "2026-10-10"
     assert people["rows"] == [{"date": "2026-10-10", "name": "Leo"}]
-    assert [(r["category"], r["text"]) for r in leo["rows"]] == [
-        ("activities", "walk"),
-        ("moments", "saw the stars"),
-    ]
+    assert [(r["category"], r["text"]) for r in leo["rows"]] == [("moments", "saw the stars")]
+    assert "walk (leo)" in [a["kind"] for a in activities["rows"]]
     kept = {(s["section"], s["field"]) for s in signals()}
     assert {("facts", "mood"), ("journal", None)} <= kept, "earlier edit signals were lost"

@@ -85,14 +85,15 @@ passages and vectors replaced, edit signals. The MCP server always sees a whole 
 
 Facts come from the day file's "At a glance" section (`DayFile.facts`, parsed by
 `lumitrace.frames.dayfile`); Spectrum copies them and never re-derives facts from the text.
-`meals.meal_type` is one of `breakfast`, `lunch`, `dinner`, `snacks`, `drinks`, one `meals` row
-per item, `none` placeholders never become rows, one `places` row
-per place, one `family_facts` row per item of a family member's block (`category` = `mood`,
-`food`, `places`, `activities`, `moments`, `health` or `school`), and `position` keeps the order
-in the file. `days.user_edited` is `DayFile.is_user_edited()`.
+Day file format 3 (topic first): `meals.meal_type` is one of `breakfast`, `lunch`, `dinner`,
+`snacks`; one `meals` row per item with the `person` whose block it is under (`''` for
+`Everyone`); `not mentioned` placeholders never become rows; one `places`, `people` and
+`activities` row per bullet; one `family_facts` row per item under a person (`category` =
+`feelings`, `health` or `moments`; `person` = `Together` for the shared memories);
+`days.remember` is the Remember line; and `position` keeps the order in the file. `days.user_edited` is `DayFile.is_user_edited()`.
 
 **Schema changes:** if the index's `meta.schema_version` differs from `SCHEMA_VERSION` (for
-example an index made before `places` and `family_facts` existed), `sync` and `run` rebuild
+example an index made before day file format 3 changed the fact tables), `sync` and `run` rebuild
 automatically, like an embedding model change below.
 
 ## Passages and embeddings
