@@ -224,9 +224,8 @@ photos:
 - photo-02.jpg
 prompt_version: journal-v1
 models_used:
-  stt: openai/gpt-4o-transcribe
-  extract_facts: openai/gpt-4o-mini
-  write_journal: openai/gpt-4o
+  stt: sarvam/saaras:v4
+  fill_day: gemini/gemini-3.8-flash
 generated_at: '2026-10-11T00:41:00-05:00'
 generated_hash: 66bd9471a8c0b8c9
 lumitrace_format: 3
