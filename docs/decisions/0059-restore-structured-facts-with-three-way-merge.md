@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-10-18
+- Superseded in part by: 0060 (no append-only facts merge; the same fact is kept once)
 
 ## Context
 

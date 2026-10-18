@@ -317,16 +317,19 @@ models set to `fake`, the whole API runs offline.
 
 ### Regenerating days
 
-`lumitrace-prism regenerate [--from D] [--to D] [--dry-run] [--nudge]` (code:
-`lumitrace/prism/regenerate.py`) runs the same action as the Flash **Generate** button for each
-stored day. The first generation fills the title, journal and facts. A day that already has a
-journal, including one you edited, gets the safe update: new journal bullets and the three-way
-facts merge. Notes, transcripts, audio and photos are never touched. It writes the day file,
-the identical snapshot and the generated-facts base, like the button does. `--nudge` asks
-Spectrum to index each written day. It calls the AI models (cost), so start with `--dry-run`
-and a short date range. A dry run reports `would full` or `would update`. Days without source
-text are `skipped`. A day already generated from the current source and facts base is
-`unchanged`.
+`lumitrace-prism regenerate [--from D] [--to D] [--dry-run] [--nudge] [--replace-generated]`
+(code: `lumitrace/prism/regenerate.py`) runs the same action as the Flash **Generate** button
+for each stored day. The first generation fills the title, journal and facts. A later run
+rewrites the journal when it still matches the saved model text, and otherwise corrects a
+generated sentence a newer source contradicts and adds missing bullets. Facts are the new
+complete list, with your additions, changes and removals kept and each fact kept once. Notes,
+transcripts, audio and photos are never touched. It writes the day file, the identical snapshot
+and the generated-facts base, like the button does. `--nudge` asks Spectrum to index each
+written day. `--replace-generated` runs the update even when the recordings are unchanged, so a
+prompt fix can rewrite model-owned text; a journal you edited is still kept. It calls the AI
+models (cost), so start with `--dry-run` and a short date range. A dry run reports `would full`
+or `would update`. Days without source text are `skipped`. A day already generated from the
+current source and facts base is `unchanged`, unless `--replace-generated` is set.
 
 ### Prompts
 

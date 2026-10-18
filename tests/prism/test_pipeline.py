@@ -85,13 +85,16 @@ def test_edit_during_generation_is_not_overwritten(
     processor.process(make_request(api_settings, api_storage, "a", spoken="Run with Maya."))
 
     def edit_once(task: str) -> None:
-        if task == "update_day" and fake_llm.before_reply is not None:
-            fake_llm.before_reply = None
+        if task != "fill_day" or fake_llm.before_reply is None:
+            return
+        if len(fake_llm.calls) < 2:
+            return
+        fake_llm.before_reply = None
 
-            def change(day) -> None:
-                day.journal = "Typed while the AI was busy."
+        def change(day) -> None:
+            day.journal = "Typed while the AI was busy."
 
-            owner_edits(api_storage, change)
+        owner_edits(api_storage, change)
 
     fake_llm.before_reply = edit_once
     result = processor.process(
@@ -99,8 +102,7 @@ def test_edit_during_generation_is_not_overwritten(
     )
     assert result.generation == "update"
     day = parse(api_storage.read_text(day_file_path(OCT10)))
-    assert day.journal.startswith("Typed while the AI was busy.")
-    assert day.journal.endswith("## Evening\n\n- You added another detail to the day.")
+    assert day.journal == "Typed while the AI was busy."
     assert "## Later" not in day.journal
     assert len(day.captures) == 2
 

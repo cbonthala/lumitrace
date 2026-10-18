@@ -48,12 +48,12 @@ component docs).
    rebuilt (except the `feedback` and `edit_signals` tables, which `reset_derived` keeps).
 2. **Do not overwrite the owner's edits after the day is written.** Use
    `lumitrace.frames.dayfile` helpers: `merge_capture`, `apply_generation` and
-   `merge_generation_additive`. Never write a day file by string manipulation. The one exception
- is the first journal generation (Generate or 4:05), which uses
- `apply_generation(..., force=True)` and may replace a journal typed before that run. Once
- `generated_at` is set, changed recordings or My notes only add section-classified bullets
- through the safe section merge; complete facts use `merge_generation_three_way`, with the
- previous model reply under `_system/generated-facts/` as base (ADR 0058, 0059).
+   `merge_generation_three_way`. Never write a day file by string manipulation. The first
+   journal generation (Generate or 4:05) uses `apply_generation(..., force=True)` and may
+   replace a journal typed before that run. Once `generated_at` is set, a new recording
+   replaces model-owned facts (one line per fact) and rewrites the journal when it still
+   matches the saved model text. A sentence or fact you changed stays. The previous model
+   reply, including that journal, is under `_system/generated-facts/` (ADR 0058, 0059, 0060).
 3. **Keep the raw transcript and the audio.**
 4. **Storage, speech-to-text and AI models are swappable through config** (`lumitrace/config.py`).
    Never import a backend directly; use `get_storage(settings)` and LiteLLM model strings.

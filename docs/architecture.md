@@ -91,7 +91,7 @@ Lumitrace/
     inbox/<capture id>/    raw uploads waiting for the worker (deleted when done)
     captures/<id>.json     capture status, no journal content
     generated/YYYY/MM/     exact copy of each day file as the system last wrote it
-    generated-facts/YYYY/MM/ previous complete model facts for three-way merging
+    generated-facts/YYYY/MM/ previous model facts and journal for owner-safe merges
     activity/YYYY/MM.jsonl activity records: models, timings, cost, errors
     feedback/YYYY/MM/      one JSON file per MCP feedback call
     index-backup/          daily copy of the SQLite index
@@ -112,10 +112,12 @@ Lumitrace/
 5. One LiteLLM call (`LUMITRACE_LLM_WRITE_JOURNAL_MODEL`, prompts in `prompts/`). At 4:05, or
    the first write of a day that has already closed, `fill_day` then
    `apply_generation(..., force=True)` uses every recording plus My notes and returns the journal
-   plus complete structured facts. Once a journal exists, `update_day` returns missing journal
-   bullets plus complete facts. Journal bullets are inserted without rewriting existing words;
-   facts use a three-way merge whose base is `_system/generated-facts/`, so owner additions,
-   changes and removals win. A missing base repairs a format-4 day.
+   plus complete structured facts. Once a journal exists, a journal that still matches the saved
+   model text is rewritten from every recording when the source changes. An edited journal uses
+   `update_day`: a contradicted model sentence can be replaced, and missing bullets are inserted
+   without a second copy. Facts use a three-way merge whose base is `_system/generated-facts/`
+   (the snapshot until that file exists). The same fact is kept once. Owner additions, changes
+   and removals win. A missing base repairs a format-4 day.
 6. Write the day file, exact snapshot and generated-facts base, nudge Spectrum, append an
    activity record and mark the capture `done`. `generated_source_hash` plus the facts base make
    unchanged Generate calls and capture replays no-ops.

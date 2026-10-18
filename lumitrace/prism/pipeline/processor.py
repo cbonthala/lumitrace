@@ -42,8 +42,10 @@ from lumitrace.frames.dayfile import (
     entry_date,
     generated_facts_path,
     generated_snapshot_path,
+    journals_match,
     merge_capture,
     merge_generation_three_way,
+    next_model_journal,
     next_photo_names,
     parse,
     render,
@@ -119,6 +121,8 @@ class _Generated(BaseModel):
     journal: str | None = None
     headline: str = ""
     journal_sections: dict[str, list[str]] = Field(default_factory=dict)
+    replacements: list[tuple[str, str]] = Field(default_factory=list)
+    rewrite_journal: bool = False
     models: dict[str, str] = Field(default_factory=dict)
     prompt_labels: list[str] = Field(default_factory=list)
 
@@ -170,18 +174,23 @@ class CaptureProcessor:
         with self._day_lock:
             return self._generate_pending_locked()
 
-    def generate_day(self, day_date: dt.date, *, nudge: bool = True) -> str:
-        """Generate or safely update one day from its transcripts and My notes.
+    def generate_day(
+        self, day_date: dt.date, *, nudge: bool = True, replace_generated: bool = False
+    ) -> str:
+        """Generate or update one day from its transcripts and My notes.
 
-        The first call fills the title and journal. Later calls process changed source material
-        and insert new bullets into their natural sections without rewriting existing words.
+        The first call fills the title and journal. A later call with new recordings or notes
+        rewrites the journal when it is still the model's, and otherwise corrects contradicted
+        model sentences and adds what is missing. Facts follow the new complete reply except
+        where the owner changed them. ``replace_generated`` runs that update even when the
+        source was already processed, so a prompt fix can rewrite model-owned text.
         ``skipped`` means there is no source material; ``unchanged`` means it was already used.
         ``failed`` keeps the due marker so a later run tries again.
         """
         with self._day_lock:
-            return self._generate_closed(day_date, nudge=nudge)
+            return self._generate_closed(day_date, nudge=nudge, replace_generated=replace_generated)
 
-    def generation_mode(self, day_date: dt.date) -> str:
+    def generation_mode(self, day_date: dt.date, *, replace_generated: bool = False) -> str:
         """Return ``full``, ``update``, ``unchanged`` or ``skipped`` without calling the model."""
         day = self._read_day(day_date)
         if day is None or not (day.notes.strip() or any(c.text.strip() for c in day.captures)):
@@ -189,7 +198,8 @@ class CaptureProcessor:
         source_hash = day.compute_source_hash()
         facts_state = self._read_generated_facts(day_date)
         if (
-            day.meta.generated_at is not None
+            not replace_generated
+            and day.meta.generated_at is not None
             and day.meta.generated_source_hash == source_hash
             and facts_state is not None
             and facts_state.source_hash == source_hash
@@ -229,6 +239,9 @@ class CaptureProcessor:
     ) -> ProcessResult:
         day_path = day_file_path(day_date)
         existing = self._read_day(day_date)
+        # Read before the capture write. That write copies the live file, including hand
+        # edits, over the snapshot, and the update still needs the previous model text.
+        baseline = self._read_snapshot(day_date)
         capture = next((c for c in existing.captures if c.id == req.id), None) if existing else None
         if capture is None:
             capture = self._build_capture(req, local, day_date, record)
@@ -251,7 +264,7 @@ class CaptureProcessor:
             generation = "deferred"
         else:
             self._mark_due(day_date)
-            generation = self._generate(day_date, record)
+            generation = self._generate(day_date, record, baseline=baseline)
             if generation != "failed":
                 self._clear_due(day_date)
         record.generation = generation
@@ -404,8 +417,10 @@ class CaptureProcessor:
             outcomes.append((day_date, self._generate_closed(day_date)))
         return outcomes
 
-    def _generate_closed(self, day_date: dt.date, *, nudge: bool = True) -> str:
-        if self.generation_mode(day_date) == "skipped":
+    def _generate_closed(
+        self, day_date: dt.date, *, nudge: bool = True, replace_generated: bool = False
+    ) -> str:
+        if self.generation_mode(day_date, replace_generated=replace_generated) == "skipped":
             self._clear_due(day_date)
             return "skipped"
         record = ActivityRecord(
@@ -415,7 +430,7 @@ class CaptureProcessor:
             received_at=self._now(),
         )
         try:
-            generation = self._generate(day_date, record)
+            generation = self._generate(day_date, record, replace_generated=replace_generated)
         except Exception as exc:
             record.errors.append(f"fatal: {safe_error(exc)}")
             record.finish("failed")
@@ -461,15 +476,28 @@ class CaptureProcessor:
         self,
         day_date: dt.date,
         record: ActivityRecord,
+        *,
+        baseline: DayFile | None = None,
+        replace_generated: bool = False,
     ) -> str:
-        mode = self.generation_mode(day_date)
+        mode = self.generation_mode(day_date, replace_generated=replace_generated)
         if mode in ("skipped", "unchanged"):
             return mode
         day = self._read_day(day_date)
         assert day is not None
         source_hash = day.compute_source_hash()
         facts_state = self._read_generated_facts(day_date)
-        generated = self._run_ai(mode, day, record)
+        snapshot = baseline if baseline is not None else self._read_snapshot(day_date)
+        base_facts = self._base_facts(facts_state, snapshot)
+        model_journal = self._model_journal(facts_state, snapshot)
+        source_changed = day.meta.generated_source_hash != source_hash
+        journal_clean = self._journal_is_model_owned(day, model_journal)
+        rewrite_journal = mode == "full" or (
+            journal_clean and (source_changed or replace_generated)
+        )
+        generated = self._run_ai(
+            mode, day, record, rewrite_journal=rewrite_journal and mode != "full"
+        )
         if generated is None:
             return "failed"
         with record.step("write_day") as step:
@@ -479,12 +507,8 @@ class CaptureProcessor:
                 fresh,
                 generated,
                 record.models.get("stt"),
-                base_facts=(
-                    facts_state.facts
-                    if facts_state is not None
-                    and facts_state.source_hash == fresh.meta.generated_source_hash
-                    else None
-                ),
+                base_facts=base_facts,
+                model_journal=model_journal,
                 generated_source_hash=source_hash,
             )
             self._write_day(updated)
@@ -492,13 +516,70 @@ class CaptureProcessor:
                 day_date,
                 source_hash=source_hash,
                 facts=generated.facts,
+                journal=self._stored_journal(fresh, updated, generated, model_journal),
             )
-            step.detail = {"mode": mode}
+            step.detail = {"mode": mode, "rewrite_journal": generated.rewrite_journal}
         return mode
 
-    def _run_ai(self, mode: str, day: DayFile, record: ActivityRecord) -> _Generated | None:
+    @staticmethod
+    def _base_facts(
+        facts_state: GeneratedFactsState | None, snapshot: DayFile | None
+    ) -> DayFacts | None:
+        """Previous model facts. The snapshot stands in until a facts file exists."""
+        if facts_state is not None:
+            return facts_state.facts
+        if snapshot is not None:
+            return snapshot.facts
+        return None
+
+    @staticmethod
+    def _model_journal(
+        facts_state: GeneratedFactsState | None, snapshot: DayFile | None
+    ) -> str | None:
+        if facts_state is not None and facts_state.journal:
+            return facts_state.journal
+        if snapshot is not None and snapshot.journal.strip():
+            return snapshot.journal
+        return None
+
+    @staticmethod
+    def _journal_is_model_owned(day: DayFile, model_journal: str | None) -> bool:
+        if model_journal is not None:
+            return journals_match(day.journal, model_journal)
+        return not day.is_user_edited()
+
+    @staticmethod
+    def _stored_journal(
+        before: DayFile,
+        updated: DayFile,
+        generated: _Generated,
+        model_journal: str | None,
+    ) -> str | None:
+        """Model journal to save. Hand-edited sentences are not copied into it."""
+        if generated.mode == "full":
+            return updated.journal
+        if generated.rewrite_journal and (
+            model_journal is None or journals_match(before.journal, model_journal)
+        ):
+            return updated.journal
+        if not generated.rewrite_journal:
+            return next_model_journal(
+                model_journal,
+                replacements=generated.replacements,
+                sections=generated.journal_sections,
+            )
+        return model_journal or None
+
+    def _run_ai(
+        self,
+        mode: str,
+        day: DayFile,
+        record: ActivityRecord,
+        *,
+        rewrite_journal: bool,
+    ) -> _Generated | None:
         gen = self.generator
-        if mode == "full":
+        if mode == "full" or rewrite_journal:
             filled = self._llm_step(
                 record,
                 "fill_day",
@@ -512,6 +593,7 @@ class CaptureProcessor:
                 facts=draft.facts,
                 journal=draft.journal,
                 headline=draft.headline,
+                rewrite_journal=rewrite_journal,
                 models={"fill_day": filled[0].model},
                 prompt_labels=[filled[1].label],
             )
@@ -531,6 +613,7 @@ class CaptureProcessor:
             mode=mode,
             facts=addition.facts,
             journal_sections=sections,
+            replacements=[(item.find, item.replace) for item in addition.replacements],
             models={"update_day": updated[0].model},
             prompt_labels=[updated[1].label],
         )
@@ -566,6 +649,7 @@ class CaptureProcessor:
         stt_model: str | None,
         *,
         base_facts: DayFacts | None,
+        model_journal: str | None,
         generated_source_hash: str,
     ) -> DayFile:
         models_used = {**day.meta.models_used, **generated.models}
@@ -586,11 +670,17 @@ class CaptureProcessor:
                 generated_source_hash=generated_source_hash,
                 force=True,
             )
+        still_model_journal = generated.rewrite_journal and (
+            model_journal is None or journals_match(day.journal, model_journal)
+        )
         return merge_generation_three_way(
             day,
             base_facts=base_facts,
             facts=generated.facts,
-            journal_sections=generated.journal_sections,
+            journal_sections=None if still_model_journal else generated.journal_sections,
+            journal_replacements=None if still_model_journal else generated.replacements,
+            replacement_journal=generated.journal if still_model_journal else None,
+            model_journal=model_journal,
             prompt_version=prompt_version,
             models_used=models_used,
             generated_source_hash=generated_source_hash,
@@ -605,6 +695,16 @@ class CaptureProcessor:
         except FileNotFoundError:
             return None
         return parse(text, fallback_date=day_date)
+
+    def _read_snapshot(self, day_date: dt.date) -> DayFile | None:
+        path = generated_snapshot_path(day_date)
+        if not self.storage.exists(path):
+            return None
+        try:
+            return parse(self.storage.read_text(path), fallback_date=day_date)
+        except Exception as exc:
+            log.warning("cannot read generated snapshot for %s: %s", day_date, safe_error(exc))
+            return None
 
     def _read_generated_facts(self, day_date: dt.date) -> GeneratedFactsState | None:
         path = generated_facts_path(day_date)
@@ -630,8 +730,11 @@ class CaptureProcessor:
         *,
         source_hash: str,
         facts: DayFacts,
+        journal: str | None,
     ) -> None:
-        state = GeneratedFactsState(date=day_date, source_hash=source_hash, facts=facts)
+        state = GeneratedFactsState(
+            date=day_date, source_hash=source_hash, facts=facts, journal=journal
+        )
         self.storage.write_text(
             generated_facts_path(day_date),
             state.model_dump_json(indent=2) + "\n",

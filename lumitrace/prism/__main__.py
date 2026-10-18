@@ -23,8 +23,9 @@ def _parser() -> argparse.ArgumentParser:
         "regenerate",
         help="regenerate past days from their transcripts with the current prompts and format",
         description="Run the same Generate action as the Flash button for each stored day. "
-        "The first generation fills the day; later ones update the journal and facts without "
-        "rewriting your words. Notes, transcripts, audio and photos are never touched.",
+        "The first generation fills the day. Later ones rewrite a journal that is still the "
+        "model's and merge facts without dropping your edits. Notes, transcripts, audio and "
+        "photos are never touched.",
     )
     regen.add_argument("--from", dest="start", type=dt.date.fromisoformat, metavar="YYYY-MM-DD")
     regen.add_argument("--to", dest="end", type=dt.date.fromisoformat, metavar="YYYY-MM-DD")
@@ -32,6 +33,11 @@ def _parser() -> argparse.ArgumentParser:
         "--dry-run", action="store_true", help="list what would change; write nothing"
     )
     regen.add_argument("--nudge", action="store_true", help="ask Spectrum to index the changes now")
+    regen.add_argument(
+        "--replace-generated",
+        action="store_true",
+        help="rewrite model-owned journal text even when the recordings are unchanged",
+    )
     return parser
 
 
@@ -51,6 +57,7 @@ def _regenerate(args: argparse.Namespace) -> None:
         end=args.end,
         dry_run=args.dry_run,
         nudge=args.nudge,
+        replace_generated=args.replace_generated,
         on_outcome=lambda o: print(f"{o.date}  {o.status}  {o.detail}".rstrip()),
     )
     counts: dict[str, int] = {}

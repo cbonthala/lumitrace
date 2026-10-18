@@ -190,18 +190,17 @@ def test_note_merges_into_the_same_day(
     wait_idle(app)
     day = read_day(api_storage)
     assert [c.kind for c in day.captures] == ["note", "recording"]  # sorted by time
-    assert day.journal.startswith("## Summary\n\nA day with 1 entries.")
-    assert day.journal.endswith("## Evening\n\n- You added another detail to the day.")
+    assert day.journal == "## Summary\n\nA day with 2 entries."
     assert "## Later" not in day.journal
     assert day.facts.people == ["Priya"]
     assert [activity.kind for activity in day.facts.activities] == ["run"]
     assert day.meta.models_used["stt"] == "fake"
-    assert [c[0] for c in fake_llm.calls] == ["fill_day", "update_day"]
-    fill, update = fake_llm.calls
-    assert "Morning run" in fill[2][1]["content"]
-    update_input = update[2][1]["content"]
-    assert "Tacos with Priya." in update_input
-    assert "Morning run" in update_input
+    assert [c[0] for c in fake_llm.calls] == ["fill_day", "fill_day"]
+    first, second = fake_llm.calls
+    assert "Morning run" in first[2][1]["content"]
+    second_input = second[2][1]["content"]
+    assert "Tacos with Priya." in second_input
+    assert "Morning run" in second_input
 
 
 def test_note_as_form_and_as_audio_clip(app: FastAPI, client: TestClient, api_storage) -> None:

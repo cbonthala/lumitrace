@@ -32,6 +32,12 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Prism
 
+- **A later recording replaces model facts and corrects the journal** (ADR 0060). The same fact
+  is kept once, so a reworded gloss does not sit beside the old line. A journal that is still
+  the model's is rewritten from every recording; a sentence you changed stays, and a generated
+  sentence a newer recording contradicts can be replaced. `activities.minutes` is only a number
+  you stated. `lumitrace-prism regenerate --replace-generated` runs that update even when the
+  recordings are unchanged.
 - **Bulk regenerate uses the Flash Generate button** (ADR 0059). `lumitrace-prism regenerate`
   calls `generate_day` for each day. An existing journal is updated safely, including a day you
   edited. It no longer skips edited days or replaces an unedited journal from scratch.

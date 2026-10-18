@@ -2,8 +2,10 @@
 
 ``lumitrace-prism regenerate`` walks stored day files and calls
 :meth:`lumitrace.prism.pipeline.processor.CaptureProcessor.generate_day`. The first generation
-fills the day. Later generations use the safe journal update and the three-way facts merge,
-including days the owner edited. Notes, transcripts, audio and photos are never touched.
+fills the day. Later generations rewrite a journal that is still the model's and merge facts
+without dropping owner edits, including on days the owner edited. ``replace_generated`` runs
+that update even when the recordings are unchanged. Notes, transcripts, audio and photos are
+never touched.
 """
 
 from __future__ import annotations
@@ -41,6 +43,7 @@ def regenerate_days(
     end: dt.date | None = None,
     dry_run: bool = False,
     nudge: bool = False,
+    replace_generated: bool = False,
     on_outcome: Callable[[DayOutcome], None] | None = None,
 ) -> list[DayOutcome]:
     """Regenerate every day file in ``[start, end]`` (inclusive; omit either end for no limit).
@@ -57,13 +60,13 @@ def regenerate_days(
             on_outcome(outcome)
 
     for day in _days(storage, start, end):
-        mode = processor.generation_mode(day)
+        mode = processor.generation_mode(day, replace_generated=replace_generated)
         if dry_run:
             status = mode if mode in ("skipped", "unchanged") else f"would {mode}"
             done(DayOutcome(day, status))
             continue
         try:
-            status = processor.generate_day(day, nudge=nudge)
+            status = processor.generate_day(day, nudge=nudge, replace_generated=replace_generated)
         except Exception as exc:
             log.warning("regenerate %s failed: %s", day, type(exc).__name__)
             done(DayOutcome(day, "failed", type(exc).__name__))

@@ -81,10 +81,39 @@ class JournalAddition(BaseModel):
         return value
 
 
+class JournalReplacement(BaseModel):
+    """One generated sentence a newer recording or My notes contradict."""
+
+    section: Literal["Summary", "Morning", "Afternoon", "Evening", "Thoughts"] = "Summary"
+    find: str = ""
+    replace: str = ""
+
+    @field_validator("find", "replace", mode="before")
+    @classmethod
+    def _strip(cls, value: Any) -> Any:
+        if value is None:
+            return ""
+        if not isinstance(value, str):
+            return value
+        return " ".join(value.removeprefix("-").split())
+
+    @field_validator("find", "replace")
+    @classmethod
+    def _not_empty(cls, value: str) -> str:
+        if not value:
+            raise ValueError("journal replacement is empty")
+        return value
+
+
 class DayUpdate(BaseModel):
-    """New journal bullets plus a complete facts candidate for owner-safe merging."""
+    """Journal edits plus a complete facts candidate for owner-safe merging.
+
+    ``additions`` are bullets the page does not already contain. ``replacements`` correct a
+    generated sentence that a newer source contradicts. Facts are the whole day, not a delta.
+    """
 
     additions: list[JournalAddition] = Field(default_factory=list, max_length=20)
+    replacements: list[JournalReplacement] = Field(default_factory=list, max_length=20)
     facts: DayFacts = Field(default_factory=DayFacts)
 
 
@@ -95,7 +124,13 @@ def parse_day_update(raw: Any, members: Sequence[str]) -> DayUpdate:
     if not isinstance(raw.get("facts"), dict):
         raise ValueError("update reply has no facts object")
     facts = with_day_meals(keep_family(parse_facts(raw["facts"]), members))
-    return DayUpdate.model_validate({"additions": raw.get("additions") or [], "facts": facts})
+    return DayUpdate.model_validate(
+        {
+            "additions": raw.get("additions") or [],
+            "replacements": raw.get("replacements") or [],
+            "facts": facts,
+        }
+    )
 
 
 def parse_facts(raw: Any) -> DayFacts:
@@ -286,7 +321,7 @@ class Generator:
         notes: str,
         journal: str,
     ) -> tuple[LLMResult[DayUpdate], Prompt]:
-        """Return missing journal bullets and complete facts without rewriting the journal."""
+        """Return journal corrections, missing bullets and complete facts."""
         prompt = self.prompt("update_day")
         family = self.settings.family_members
         messages = prompt.render(

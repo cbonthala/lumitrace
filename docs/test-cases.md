@@ -210,7 +210,7 @@ File: `tests/prism/test_capture_api.py`
 
 File: `tests/prism/test_capture_api.py`
 
-- Checks that a typed note sent after the journal exists joins the same day file, entries stay in time order, the first journal stays, complete facts are refreshed, and a missing bullet is inserted under Evening with no Later section. <sub>`test_note_merges_into_the_same_day`</sub>
+- Checks that a typed note sent after the journal exists joins the same day file, entries stay in time order, and the journal is rewritten from every recording because it was still the model's, with the facts refreshed and no Later section. <sub>`test_note_merges_into_the_same_day`</sub>
 - Checks that a note can be sent as a web form with text, or as a short audio clip that is transcribed and keeps its audio file. <sub>`test_note_as_form_and_as_audio_clip`</sub>
 - Checks that a note with only a photo is accepted: the photo is saved and listed on the day, and the AI writing step is skipped because there are no words. <sub>`test_photo_only_note`</sub>
 
@@ -247,7 +247,7 @@ File: `tests/prism/test_journal_schedule.py`
 - Checks that Generate again after the owner edits the title, journal and facts and changes My notes sends all source plus the authoritative journal to update-day, preserves every edit through the facts merge, inserts the returned bullet into Evening without a Later section, and then returns unchanged without another model call. <sub>`test_generate_now_preserves_edits_and_uses_changed_notes`</sub>
 - Checks that deleting the generated-facts base (as on a format-4 day) makes Generate run one safe update to restore facts and the base, after which another click returns unchanged. <sub>`test_generate_repairs_facts_when_the_generated_facts_base_is_missing`</sub>
 - Checks that repairing an edited format-4-style day restores empty facts while preserving the owner's title and journal corrections and leaving the day marked edited. <sub>`test_format_4_facts_repair_keeps_owner_title_and_journal_edits`</sub>
-- Checks that a recording saved after Generate stays waiting, and that the 4:05 run safely inserts its update into Evening instead of rewriting the first journal. <sub>`test_morning_run_merges_new_audio_after_generate_now`</sub>
+- Checks that a recording saved after Generate stays waiting, and that the 4:05 run rewrites the journal from every recording when nobody has edited it. <sub>`test_morning_run_merges_new_audio_after_generate_now`</sub>
 - Checks that the morning thread stops when the Prism stops, instead of waiting until 4:05. <sub>`test_scheduler_stops_while_it_is_waiting`</sub>
 
 ### Never overwriting your edits
@@ -255,7 +255,7 @@ File: `tests/prism/test_journal_schedule.py`
 File: `tests/prism/test_pipeline.py`
 
 - Checks that after the journal exists, a later note sends every recording, My notes and the authoritative current journal to update-day; the returned facts merge while the owner's mood stays, and the bullet goes under Evening while the owner's wording and notes stay and no Later section appears. <sub>`test_edited_day_gets_section_update`</sub>
-- Checks that if you edit the journal while an update is running, the fresh words stay and the returned bullet is inserted under Evening without a Later section. <sub>`test_edit_during_generation_is_not_overwritten`</sub>
+- Checks that if you edit the journal while a rewrite is running, the fresh words stay and the new journal is not written over them. <sub>`test_edit_during_generation_is_not_overwritten`</sub>
 
 ### When speech or AI services fail
 
@@ -340,7 +340,7 @@ File: `tests/prism/test_prompts_llm.py`
 - Checks that the AI's structured (JSON) reply is understood even when wrapped in code fences or surrounded by chatty text, and refused when there is no data at all. <sub>`test_extract_json_tolerates_fences_and_chatter`</sub>
 - Checks that extracted facts are held to the day-file format: a reply wrapped in a "facts" object is unwrapped, an out-of-range mood score and empty values are dropped, and badly shaped replies (not an object, a meal without a type) are refused. <sub>`test_parse_facts_validates_against_dayfacts`</sub>
 - Checks that the AI client passes the timeout, retry and "reply in JSON" settings to the provider, switches to the backup model when the main one fails, records each attempt, tries a model only once when it is also the backup, and gives a clear error naming both models when all fail. <sub>`test_llm_client_passes_config_and_falls_back`</sub>
-- Checks that the fill-day and update-day prompts, and the day template, tell the model to cover each recording through its last sentence (including the final third) and to give an item to a person only when the transcript names them or says "we" ("I drank coffee" stays with the author). <sub>`test_fill_day_prompt_covers_the_ending_and_keeps_an_i_item_with_the_author`</sub>
+- Checks that the fill-day and update-day prompts, and the day template, tell the model to cover each recording through its last sentence (including the final third), to keep "I drank coffee" with the author, to record a stated absence, and not to turn "two or three episodes, half an hour each" into 90 minutes. <sub>`test_fill_day_prompt_covers_the_ending_and_keeps_an_i_item_with_the_author`</sub>
 - Checks that after a fill-day reply, the day's own meals are the union of each family member's meals, each item tagged with who had it ("coffee (Sam)", "Oatmeal (Maya, Leo)"), a meal the model put on the day itself is replaced, an unknown person is dropped, and a reply with no per-person meals keeps the day-level list it did return. <sub>`test_day_level_meals_are_the_union_of_each_persons_meals`</sub>
 - Checks that a long transcript is sent to the model in full, through its last sentence, and that the log records the captures length, the transcript length, that nothing was cut, and the model's maximum output tokens. <sub>`test_fill_day_sends_the_whole_transcript`</sub>
 - Checks that a journal call asks for the model's maximum output tokens. <sub>`test_journal_call_asks_for_the_model_max_output_tokens`</sub>
@@ -672,6 +672,10 @@ File: `tests/frames/test_dayfile.py`
 - Checks that adding AI output to an edited day keeps the existing facts and notes, merges new fact values without duplicates, inserts repeated journal additions into Evening without creating Later, and leaves the day marked as edited. <sub>`test_section_merge_on_edited_day_keeps_edits`</sub>
 - Checks that adding AI output to an unedited day keeps it counted as unedited. <sub>`test_additive_merge_on_clean_day_refreshes_hash`</sub>
 - Checks that a complete incoming facts reply follows model changes for untouched values while preserving owner scalar changes, list additions and removals, meal edits, activity minutes and per-person food and feelings. <sub>`test_three_way_facts_merge_keeps_owner_additions_changes_and_removals`</sub>
+- Checks that a restated fact is kept once ("Sulemani chai" and "Sulemani chai (spiced black tea)" collapse, a computed 90-minute activity is replaced by the new wording, and a line you added stays). <sub>`test_three_way_keeps_one_wording_of_the_same_fact`</sub>
+- Checks that a journal replacement corrects a generated sentence and leaves a sentence you rewrote unchanged. <sub>`test_journal_replacement_corrects_a_model_sentence_and_keeps_an_edit`</sub>
+- Checks that a journal which still matches the model text is replaced, and an edited journal keeps your sentence, gains a new bullet, and does not gain a duplicate of your sentence. <sub>`test_clean_journal_is_replaced_and_an_edited_one_keeps_its_words`</sub>
+- Checks that a journal update does not insert a bullet the section already contains. <sub>`test_section_merge_skips_a_bullet_already_on_the_page`</sub>
 - Checks that journal additions create missing sections in Summary/Morning/Afternoon/Evening/Thoughts order, preserve existing section text and never create Later. <sub>`test_section_merge_inserts_missing_sections_in_journal_order`</sub>
 - Checks that updating a legacy journal renames its Later heading to Evening, preserves the old content and appends the new bullet there. <sub>`test_section_merge_moves_legacy_later_content_to_evening`</sub>
 
@@ -820,6 +824,7 @@ File: `tests/test_entrypoints.py`
 
 File: `tests/prism/test_regenerate.py`
 
-- Checks that bulk regenerate uses the same safe update as Flash Generate on an older day that already has a journal: the title, mood and journal words stay, a new bullet can be added, notes and transcripts stay, and a second run does nothing. <sub>`test_regenerate_updates_an_existing_format_2_day_like_generate`</sub>
+- Checks that bulk regenerate rewrites an older day's model-owned journal and facts, keeps the title, notes and transcripts, and a second run does nothing. <sub>`test_regenerate_updates_an_existing_format_2_day_like_generate`</sub>
+- Checks that `--replace-generated` rewrites a clean journal even when the recordings are unchanged, and still keeps a journal you edited. <sub>`test_replace_generated_rewrites_a_clean_journal_and_keeps_an_edit`</sub>
 - Checks that bulk regenerate updates a day you edited instead of skipping it: your mood and journal words stay, and a new bullet can be added. <sub>`test_regenerate_leaves_a_day_the_owner_edited`</sub>
 - Checks that a dry run lists `would update` without writing anything or calling the AI, that a day without any transcript text is skipped, and that a date range limits which days are processed. <sub>`test_regenerate_dry_run_range_and_days_without_text`</sub>

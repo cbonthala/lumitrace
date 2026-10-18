@@ -77,7 +77,8 @@ description: Fill a Lumitrace day file (prompts/day-template.md) from Telugu cod
 - **Food**
   - Split by person, then breakfast, lunch, dinner, snacks, drinks.
   - "We" means everyone present. A named person means only that person.
-  - Give an item to a person only if the transcript names them or uses 'we' for it. 'I drank coffee' is the author only.
+  - Give an item to a person only if the transcript names them or uses 'we' for it. 'I drank coffee' is the author only. A first-person verb (నేను … తాగాను) stays with the author even when someone else was in the room.
+  - A stated absence is a fact ("ate no vegetables").
   - Delivery is food, not a visit.
 - **Places visited**
   - Only places someone physically went.
@@ -85,6 +86,7 @@ description: Fill a Lumitrace day file (prompts/day-template.md) from Telugu cod
   - Keep spoken names ("Ravi's house").
 - **People we met or visited**
   - Real people only, with relation and who met them.
+  - A named person who took part in the day goes here. A household member who was only mentioned does not.
   - Daycare friends and relatives go here.
   - A TV show is not a person.
 - **Health and fitness**
@@ -92,6 +94,7 @@ description: Fill a Lumitrace day file (prompts/day-template.md) from Telugu cod
   - A guess is not a health fact.
 - **Feelings**
   - Stated emotions only, per person.
+  - Keep the phrase that was said. Do not shorten it to one adjective.
   - Behaviour is not a feeling.
   - No invented cause.
 - **Memories**
@@ -102,6 +105,7 @@ description: Fill a Lumitrace day file (prompts/day-template.md) from Telugu cod
   - The transcript does not set the weather.
 - **Things we did**
   - One activity per bullet, with who.
+  - Minutes only when that number was spoken. Do not multiply or pick a midpoint. "Two or three episodes, half an hour each" is not 90: leave the number out and end with [uncertain: why]. The same for a nap whose length was not stated.
 - **Audio and transcript**
   - Telugu untouched. Do not add an English translation.
 

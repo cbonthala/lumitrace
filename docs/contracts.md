@@ -92,8 +92,8 @@ Models (pydantic):
   schema of fact extraction. Values are normalised (one line; a comma splits meal items except
   inside parentheses) so
   render and parse agree. `FACT_FIELDS`.
-* `GeneratedFactsState`: `date`, `source_hash`, `facts`; the model-owned base for facts
-  three-way merging.
+* `GeneratedFactsState`: `date`, `source_hash`, `facts`, `journal` (optional); the model-owned
+  base for facts three-way merging and for telling a generated journal sentence from a hand edit.
 * `FrontMatter`: `date`, `audio`, `photos`, `prompt_version`, `models_used` (task → model),
   `generated_at`, `generated_hash`, `generated_source_hash`, `lumitrace_format` (read from `lumen_format`,
   `bookshelf_format` or `lifelog_format` in files written under the earlier names); unknown keys preserved. Facts are
@@ -124,8 +124,13 @@ Functions:
   Summary, Morning, Afternoon, Evening or Thoughts without changing existing words)
 * `merge_generation_additive(day, *, facts, journal_sections=None, prompt_version=None,
   models_used=None, generated_at=None, generated_source_hash=None) -> DayFile`
+* `fact_key(text) -> str` (one fact, ignoring a parenthetical gloss and `[uncertain: ...]`)
+* `journals_match(left, right) -> bool`
+* `apply_journal_replacements(journal, replacements, *, model_journal) -> str`
+* `next_model_journal(previous, *, replaced_with=None, replacements=None, sections=None) -> str | None`
 * `merge_facts_three_way(base, current, incoming) -> DayFacts`
 * `merge_generation_three_way(day, *, base_facts, facts, journal_sections=None,
+  journal_replacements=None, replacement_journal=None, model_journal=None,
   prompt_version=None, models_used=None, generated_at=None,
   generated_source_hash=None) -> DayFile`
 
@@ -181,7 +186,7 @@ Everything here lives in the owner's storage, never in the repository. `classify
 | `_system/inbox/<capture id>/` | Prism | raw uploads (`audio.<ext>`, `photo-NN.<ext>`, `manifest.json` last) waiting to be processed; deleted when the capture is `done` |
 | `_system/captures/<capture id>.json` | Prism | capture status (`queued` / `processing` / `done` / `failed`), no journal content; kept for `GET /captures/{id}` |
 | `_system/generated/YYYY/MM/YYYY-MM-DD.md` | Prism | exact day file as last written by the system (`generated_snapshot_path`); written right after every day-file write, same text and `generated_at` |
-| `_system/generated-facts/YYYY/MM/YYYY-MM-DD.json` | Prism | previous complete model facts and source hash; base for owner-safe three-way fact merges |
+| `_system/generated-facts/YYYY/MM/YYYY-MM-DD.json` | Prism | previous complete model facts, source hash and model journal; base for owner-safe fact merges and journal corrections |
 | `_system/journal-due/YYYY-MM-DD.txt` | Prism | a day whose transcripts are saved and whose journal has not been written yet; removed when the morning run, Generate in Flash, or a late capture for a closed day finishes (ADR 0046, 0055) |
 | `_system/activity/YYYY/MM.jsonl` | Prism | activity records, one JSON line per processing attempt: models, per-step time/cost, errors; no journal content |
 | `_system/feedback/YYYY/MM/<UTC timestamp>-<id>.json` | Lens | copy of each `feedback` call (also a row in the index) |

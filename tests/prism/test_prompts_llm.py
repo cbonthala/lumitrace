@@ -268,9 +268,12 @@ def test_fill_day_prompt_covers_the_ending_and_keeps_an_i_item_with_the_author()
         assert "check the final third of each" in text
         assert "uses 'we' for it." in text
         assert "'I drank coffee' is the author only." in text
+        assert "is not 90" in text
+        assert "ate no vegetables" in text
     template = (ROOT / "prompts" / "day-template.md").read_text(encoding="utf-8")
     assert "Cover the transcript to its last sentence." in template
     assert "'I drank coffee' is the author only." in template
+    assert "is not 90" in template
 
 
 def test_day_level_meals_are_the_union_of_each_persons_meals() -> None:

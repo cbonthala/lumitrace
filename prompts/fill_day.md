@@ -34,7 +34,7 @@ Who is who:
   everyone else by name. "I" in the facts is the author.
 - Give every action, meal, place and feeling to the person who did or had it. "We" is the author
   plus whoever it clearly includes. Never put one person's food or places under another.
-- Give an item to a person only if the transcript names them or uses 'we' for it. 'I drank coffee' is the author only.
+- Give an item to a person only if the transcript names them or uses 'we' for it. 'I drank coffee' is the author only. A first-person verb (నేను … తాగాను, "I drank") stays with the author even when someone else was in the room.
 - "Leo Nanna" (a child's name followed by Nanna or Dad) is that child's father, the author when
   the author is that father. "my Nanna" said by the author is the author's own father. When the
   author is talking about their own child, a bare Nanna (నాన్న) means the author. Otherwise end
@@ -48,6 +48,8 @@ The template:
 - Its comments are the rules. Its sample lines are placeholders. Do not copy a placeholder
   into the reply.
 - A food delivery is food, not a visit. A TV show is not a person. A guess is not a health fact.
+- A stated absence is a fact ("ate no vegetables"). A feeling is the phrase that was said, not one adjective cut down from it. A named person who took part in the day goes under people; a household member who was only mentioned does not.
+- activities.minutes is a number only when that number was spoken. Do not multiply or pick a midpoint. "Two or three episodes, half an hour each" is not 90: leave minutes null and put the spoken range in the activity, ending with [uncertain: why]. The same for a nap whose length was not stated.
 - Weather only when a weather lookup is passed in as input.
 
 Return one JSON object, and nothing else. Lumitrace writes the day file from it. Do not return

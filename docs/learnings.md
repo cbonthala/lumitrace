@@ -116,6 +116,12 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 ## Models and prompts
 
+- 2026-10-18 — Appending a complete new fact list onto an edited day, and refusing to change any
+  journal sentence, left duplicate facts and a journal that contradicted the facts. The same
+  fact has to collapse to one line, and a generated sentence a newer recording contradicts has
+  to be replaceable, while a sentence the owner rewrote stays (ADR 0060). A duration the speaker
+  gave as a range ("two or three episodes, half an hour each") was being stored as 90 minutes;
+  minutes are only a number that was spoken.
 - 2026-10-17 — Two model calls (facts, then journal) let the journal copy a bad fact list. One
   call should see the transcript and the day template and fill both (ADR 0049).
 - 2026-10-17 — Sarvam's English translation kept assigning actions to the wrong person, so the

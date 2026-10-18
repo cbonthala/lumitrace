@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-10-18
+- Superseded in part by: 0060 (a later recording may replace a generated sentence it contradicts)
 
 ## Context
 

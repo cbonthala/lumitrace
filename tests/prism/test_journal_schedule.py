@@ -5,7 +5,14 @@ from __future__ import annotations
 import datetime as dt
 
 from lumitrace.config import Settings
-from lumitrace.frames.dayfile import DayFacts, day_file_path, generated_facts_path, parse, render
+from lumitrace.frames.dayfile import (
+    DayFacts,
+    day_file_path,
+    generated_facts_path,
+    generated_snapshot_path,
+    parse,
+    render,
+)
 from lumitrace.frames.storage.local import LocalStorage
 from lumitrace.prism.journal_schedule import JournalScheduler, next_journal_at
 from lumitrace.prism.pipeline.processor import CaptureProcessor
@@ -199,7 +206,9 @@ def test_format_4_facts_repair_keeps_owner_title_and_journal_edits(
     legacy = parse(api_storage.read_text(day_file_path(OCT10)))
     legacy.facts = DayFacts()
     legacy.meta.generated_hash = legacy.compute_generated_hash()
-    api_storage.write_text(day_file_path(OCT10), render(legacy))
+    emptied = render(legacy)
+    api_storage.write_text(day_file_path(OCT10), emptied)
+    api_storage.write_text(generated_snapshot_path(OCT10), emptied)
     api_storage.delete(generated_facts_path(OCT10))
 
     def edit(day) -> None:
@@ -231,12 +240,11 @@ def test_morning_run_merges_new_audio_after_generate_now(
 
     clock[0] = dt.datetime(2026, 10, 11, 4, 6, tzinfo=api_settings.tz)
     assert processor.generate_pending() == [(OCT10, "update")]
-    assert fake_llm.tasks() == ["fill_day", "update_day"]
+    assert fake_llm.tasks() == ["fill_day", "fill_day"]
     second = fake_llm.calls[1][2][1]["content"]
     assert "Run with Maya." in second and "Tacos with Leo." in second
     journal = parse(api_storage.read_text(day_file_path(OCT10))).journal
-    assert journal.startswith("## Summary\n\nA day with 1 entries.")
-    assert journal.endswith("## Evening\n\n- You added another detail to the day.")
+    assert journal == "## Summary\n\nA day with 2 entries."
     assert "## Later" not in journal
 
 

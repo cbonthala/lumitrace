@@ -619,6 +619,11 @@ class GeneratedFactsState(BaseModel):
     date: dt.date
     source_hash: str
     facts: DayFacts
+    journal: str | None = None
+    """Journal text last produced from the model, without later hand edits.
+
+    Missing on files written before a correction could replace a generated sentence.
+    """
 
 
 FACT_FIELDS: tuple[str, ...] = tuple(DayFacts.model_fields)
@@ -1042,7 +1047,12 @@ def merge_journal_sections(markdown: str, additions: dict[str, list[str]]) -> st
     for name in JOURNAL_SECTIONS:
         if not by_section[name]:
             continue
-        block = "\n".join(by_section[name])
+        block = _without_duplicate_bullets(
+            _journal_section_body(result, name),
+            "\n".join(by_section[name]),
+        )
+        if not block:
+            continue
         matches = list(_JOURNAL_HEADING_RE.finditer(result))
         target_index = next(
             (
@@ -1077,6 +1087,89 @@ def merge_journal_sections(markdown: str, additions: dict[str, list[str]]) -> st
         if after:
             result += f"\n\n{after}"
     return result
+
+
+def _bullet_key(text: str) -> str:
+    return " ".join(text.removeprefix("-").split()).casefold()
+
+
+def _journal_section_body(markdown: str, name: str) -> str:
+    matches = list(_JOURNAL_HEADING_RE.finditer(markdown))
+    for index, match in enumerate(matches):
+        if _JOURNAL_ALIASES.get(match.group(1).strip().casefold()) != name:
+            continue
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(markdown)
+        return markdown[match.end() : end]
+    return ""
+
+
+def _without_duplicate_bullets(existing: str, block: str) -> str:
+    """Drop bullets the section already contains, comparing normalized text."""
+    found = {_bullet_key(line) for line in existing.splitlines() if line.strip().startswith("-")}
+    kept: list[str] = []
+    for line in block.splitlines():
+        key = _bullet_key(line)
+        if key and key in found:
+            continue
+        kept.append(line)
+        if key:
+            found.add(key)
+    return "\n".join(kept)
+
+
+def journals_match(left: str, right: str) -> bool:
+    """True when two journals are the same words, ignoring repeated spaces."""
+    return " ".join(left.split()) == " ".join(right.split())
+
+
+def apply_journal_replacements(
+    journal: str,
+    replacements: list[tuple[str, str]],
+    *,
+    model_journal: str | None,
+) -> str:
+    """Replace generated sentences a newer source contradicts.
+
+    ``find`` is applied only when that sentence is still in ``model_journal``, so a sentence
+    the owner rewrote is left as they wrote it. A missing model journal replaces nothing.
+    """
+    if not replacements or not model_journal:
+        return journal
+    allowed = {_bullet_key(line) for line in model_journal.splitlines() if line.strip()}
+    lines = journal.split("\n")
+    for find, repl in replacements:
+        find_key = _bullet_key(find)
+        if not find_key or find_key not in allowed:
+            continue
+        replacement = " ".join(repl.split()).strip()
+        if not replacement:
+            continue
+        if not replacement.startswith("- "):
+            replacement = f"- {replacement.removeprefix('-').strip()}"
+        for index, line in enumerate(lines):
+            if _bullet_key(line) == find_key:
+                lines[index] = replacement
+                allowed.discard(find_key)
+                break
+    return "\n".join(lines)
+
+
+def next_model_journal(
+    previous: str | None,
+    *,
+    replaced_with: str | None = None,
+    replacements: list[tuple[str, str]] | None = None,
+    sections: dict[str, list[str]] | None = None,
+) -> str | None:
+    """The model-owned journal after this update, excluding hand-edited sentences."""
+    if replaced_with is not None:
+        return normalize_journal(replaced_with)
+    if not previous:
+        return None
+    text = apply_journal_replacements(previous, replacements or [], model_journal=previous)
+    if sections:
+        text = merge_journal_sections(text, sections)
+    return text
 
 
 def render(day: DayFile) -> str:
@@ -1588,20 +1681,50 @@ def apply_generation(
     return result
 
 
-def _add_unique(target: list[str], items: Iterable[str]) -> None:
-    seen = {t.casefold() for t in target}
+_FACT_PAREN_RE = re.compile(r"\s*\([^)]*\)")
+_FACT_UNCERTAIN_RE = re.compile(r"\s*\[uncertain:[^\]]*\]", re.IGNORECASE)
+
+
+def fact_key(text: str) -> str:
+    """Identity of one fact line, ignoring a parenthetical gloss and an uncertainty note.
+
+    ``Sulemani chai`` and ``Sulemani chai (spiced black tea)`` are one fact. A longer wording
+    wins when both are present, so a restatement does not become a second bullet.
+    """
+    cleaned = _FACT_UNCERTAIN_RE.sub("", text or "")
+    cleaned = _FACT_PAREN_RE.sub("", cleaned)
+    return " ".join(cleaned.casefold().split())
+
+
+def _keyed_items(items: Iterable[str]) -> dict[str, str]:
+    """One display string per :func:`fact_key`, preferring the longer wording."""
+    chosen: dict[str, str] = {}
     for item in items:
-        if item.casefold() not in seen:
+        key = fact_key(item)
+        if not key:
+            continue
+        current = chosen.get(key)
+        if current is None or len(item) > len(current):
+            chosen[key] = item
+    return chosen
+
+
+def _add_unique(target: list[str], items: Iterable[str]) -> None:
+    seen = {fact_key(t) for t in target}
+    for item in items:
+        key = fact_key(item)
+        if key and key not in seen:
             target.append(item)
-            seen.add(item.casefold())
+            seen.add(key)
 
 
 def _add_activities(target: list[Activity], new: Iterable[Activity]) -> None:
-    kinds = {a.kind.casefold() for a in target}
+    kinds = {fact_key(a.kind) for a in target}
     for activity in new:
-        if activity.kind.casefold() not in kinds:
+        key = fact_key(activity.kind)
+        if key and key not in kinds:
             target.append(activity.model_copy(deep=True))
-            kinds.add(activity.kind.casefold())
+            kinds.add(key)
 
 
 def _add_meals(target: list[Meal], new: Iterable[Meal]) -> None:
@@ -1614,17 +1737,26 @@ def _add_meals(target: list[Meal], new: Iterable[Meal]) -> None:
 
 
 def _merge_text_items(base: list[str], current: list[str], incoming: list[str]) -> list[str]:
-    """Three-way merge one normalized text list, with owner additions and removals winning."""
-    base_keys = {item.casefold() for item in base}
-    current_keys = {item.casefold() for item in current}
-    removed = base_keys - current_keys
-    result = [item for item in incoming if item.casefold() not in removed]
-    result_keys = {item.casefold() for item in result}
-    for item in current:
-        key = item.casefold()
-        if key not in base_keys and key not in result_keys:
+    """Three-way merge one text list. The same fact is kept once.
+
+    Untouched model lines follow ``incoming``, including a reworded gloss of the same fact.
+    A line the owner added stays. A line the owner removed stays removed.
+    """
+    base_map = _keyed_items(base)
+    current_map = _keyed_items(current)
+    incoming_map = _keyed_items(incoming)
+    removed = set(base_map) - set(current_map)
+    result: list[str] = []
+    seen: set[str] = set()
+    for key, item in incoming_map.items():
+        if key in removed:
+            continue
+        result.append(item)
+        seen.add(key)
+    for key, item in current_map.items():
+        if key not in base_map and key not in seen:
             result.append(item)
-            result_keys.add(key)
+            seen.add(key)
     return result
 
 
@@ -1654,31 +1786,46 @@ def _merge_meal_items(base: list[Meal], current: list[Meal], incoming: list[Meal
     return result
 
 
+def _activity_map(items: list[Activity]) -> dict[str, Activity]:
+    chosen: dict[str, Activity] = {}
+    for item in items:
+        key = fact_key(item.kind)
+        if not key:
+            continue
+        current = chosen.get(key)
+        if current is None or len(item.kind) > len(current.kind):
+            chosen[key] = item
+    return chosen
+
+
 def _merge_activities(
     base: list[Activity], current: list[Activity], incoming: list[Activity]
 ) -> list[Activity]:
-    """Three-way merge activities by kind, including owner changes to minutes."""
-    base_by_kind = {item.kind.casefold(): item for item in base}
-    current_by_kind = {item.kind.casefold(): item for item in current}
+    """Three-way merge activities by kind, including owner changes to minutes.
+
+    A restated kind (``Netflix`` and ``Netflix (you)``) is one activity. Minutes the owner
+    changed stay; otherwise the incoming minutes are kept, including a cleared guess.
+    """
+    base_by_kind = _activity_map(base)
+    current_by_kind = _activity_map(current)
     removed = set(base_by_kind) - set(current_by_kind)
     result: list[Activity] = []
     handled: set[str] = set()
     for new in incoming:
-        key = new.kind.casefold()
+        key = fact_key(new.kind)
+        if not key or key in handled:
+            continue
         handled.add(key)
         if key in removed:
             continue
         before = base_by_kind.get(key)
         local = current_by_kind.get(key)
-        if local is None:
+        if local is None or before is None:
             result.append(new.model_copy(deep=True))
-        elif before is None:
-            result.append(local.model_copy(deep=True))
-        else:
-            minutes = new.minutes if local.minutes == before.minutes else local.minutes
-            result.append(new.model_copy(update={"minutes": minutes}, deep=True))
-    for local in current:
-        key = local.kind.casefold()
+            continue
+        minutes = local.minutes if local.minutes != before.minutes else new.minutes
+        result.append(new.model_copy(update={"minutes": minutes}, deep=True))
+    for key, local in current_by_kind.items():
         before = base_by_kind.get(key)
         if key not in handled and (before is None or local != before):
             result.append(local.model_copy(deep=True))
@@ -1808,36 +1955,49 @@ def merge_generation_three_way(
     base_facts: DayFacts | None,
     facts: DayFacts,
     journal_sections: dict[str, list[str]] | None = None,
+    journal_replacements: list[tuple[str, str]] | None = None,
+    replacement_journal: str | None = None,
+    model_journal: str | None = None,
     prompt_version: str | None = None,
     models_used: dict[str, str] | None = None,
     generated_at: dt.datetime | None = None,
     generated_source_hash: str | None = None,
 ) -> DayFile:
-    """Apply complete new facts and additive journal bullets without losing owner edits.
+    """Apply a complete facts reply and a journal update without losing owner edits.
 
-    A missing base occurs for days written before generated-facts state existed. Edited legacy
-    days use the older additive facts merge for that first update; clean days can safely accept
-    the complete reply. Every later update has a base and uses :func:`merge_facts_three_way`.
+    ``base_facts`` is the previous model reply. Untouched facts follow ``facts``. Lines the
+    owner added, changed or removed stay. With no base and no separate owner delta, an edited
+    day treats the live facts as that base, so a complete reply replaces stacked model lines
+    and there is nothing further to protect.
+
+    ``replacement_journal`` replaces the page when it still matches ``model_journal``.
+    Otherwise ``journal_replacements`` may change a sentence that is still the model's, and
+    ``journal_sections`` inserts bullets that are not already there. Notes and transcripts
+    are untouched. The generated hash is refreshed only when the owner had not edited.
     """
     was_edited = day.is_user_edited()
-    if base_facts is None and was_edited:
-        return merge_generation_additive(
-            day,
-            facts=facts,
-            journal_sections=journal_sections,
-            prompt_version=prompt_version,
-            models_used=models_used,
-            generated_at=generated_at,
-            generated_source_hash=generated_source_hash,
-        )
     result = day.model_copy(deep=True)
+    if base_facts is None and was_edited:
+        base_facts = result.facts
     result.facts = (
         facts.model_copy(deep=True)
         if base_facts is None
         else merge_facts_three_way(base_facts, result.facts, facts)
     )
-    if journal_sections is not None:
-        result.journal = merge_journal_sections(result.journal, journal_sections)
+    replace_page = replacement_journal is not None and (
+        not model_journal or journals_match(result.journal, model_journal)
+    )
+    if replace_page:
+        result.journal = normalize_journal(replacement_journal or "")
+    else:
+        if journal_replacements:
+            result.journal = apply_journal_replacements(
+                result.journal,
+                journal_replacements,
+                model_journal=model_journal,
+            )
+        if journal_sections is not None:
+            result.journal = merge_journal_sections(result.journal, journal_sections)
     _set_provenance(result, prompt_version, models_used, generated_at)
     if generated_source_hash is not None:
         result.meta.generated_source_hash = generated_source_hash

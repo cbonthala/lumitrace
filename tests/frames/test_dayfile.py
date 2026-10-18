@@ -944,6 +944,95 @@ def test_three_way_facts_merge_keeps_owner_additions_changes_and_removals() -> N
     assert merged.family[0].feelings == ["sleepy", "proud"]
 
 
+def test_three_way_keeps_one_wording_of_the_same_fact() -> None:
+    base = D.DayFacts(highlights=["Sulemani chai", "Walk"])
+    current = D.DayFacts(
+        highlights=[
+            "Sulemani chai",
+            "Sulemani chai (spiced black tea)",
+            "Walk",
+            "A note I added",
+        ]
+    )
+    incoming = D.DayFacts(
+        highlights=["Sulemani chai (spiced black tea)", "Movie night"],
+        activities=[
+            D.Activity(kind="Netflix, two or three episodes [uncertain: count]", minutes=None)
+        ],
+    )
+    current.activities = [D.Activity(kind="Netflix", minutes=90)]
+    base.activities = [D.Activity(kind="Netflix", minutes=90)]
+    merged = D.merge_facts_three_way(base, current, incoming)
+    assert merged.highlights == [
+        "Sulemani chai (spiced black tea)",
+        "Movie night",
+        "A note I added",
+    ]
+    assert [(item.kind, item.minutes) for item in merged.activities] == [
+        ("Netflix, two or three episodes [uncertain: count]", None)
+    ]
+
+
+def test_journal_replacement_corrects_a_model_sentence_and_keeps_an_edit() -> None:
+    model = "## Evening\n\n- mushroom masala curry, okayish.\n\n- You went to bed."
+    live = "## Evening\n\n- mushroom masala curry, okayish.\n\n- I rewrote the bedtime line."
+    replaced = D.apply_journal_replacements(
+        live,
+        [
+            ("mushroom masala curry, okayish.", "meal maker curry."),
+            ("I rewrote the bedtime line.", "The model tried to undo the edit."),
+        ],
+        model_journal=model,
+    )
+    assert "meal maker curry." in replaced
+    assert "mushroom masala" not in replaced
+    assert "I rewrote the bedtime line." in replaced
+    assert "undo the edit" not in replaced
+
+
+def test_clean_journal_is_replaced_and_an_edited_one_keeps_its_words() -> None:
+    day = D.DayFile.new(DAY)
+    day.journal = "## Summary\n\n- Old sentence."
+    day.meta.generated_hash = day.compute_generated_hash()
+    base = D.DayFacts(highlights=["Old"])
+    incoming = D.DayFacts(highlights=["New"])
+    rewritten = D.merge_generation_three_way(
+        day,
+        base_facts=base,
+        facts=incoming,
+        replacement_journal="## Summary\n\n- New sentence.",
+        model_journal=day.journal,
+    )
+    assert rewritten.journal == "## Summary\n\n- New sentence."
+    assert rewritten.facts.highlights == ["New"]
+    assert not rewritten.is_user_edited()
+
+    edited = day.model_copy(deep=True)
+    edited.journal = "## Summary\n\n- My sentence."
+    kept = D.merge_generation_three_way(
+        edited,
+        base_facts=base,
+        facts=incoming,
+        replacement_journal="## Summary\n\n- New sentence.",
+        model_journal=day.journal,
+        journal_sections={"Summary": ["A new bullet.", "My sentence."]},
+    )
+    assert kept.journal.count("My sentence.") == 1
+    assert "A new bullet." in kept.journal
+    assert "New sentence." not in kept.journal
+    assert kept.facts.highlights == ["New"]
+    assert kept.is_user_edited()
+
+
+def test_section_merge_skips_a_bullet_already_on_the_page() -> None:
+    merged = D.merge_journal_sections(
+        "## Evening\n\n- Ate dinner.",
+        {"Evening": ["Ate dinner.", "A late walk."]},
+    )
+    assert merged.count("Ate dinner.") == 1
+    assert "A late walk." in merged
+
+
 def test_section_merge_inserts_missing_sections_in_journal_order() -> None:
     journal = "## Summary\n\n- Started the day.\n\n## Evening\n\n- Ate dinner."
     merged = D.merge_journal_sections(

@@ -51,7 +51,9 @@ lumitrace_format: 5
      - "We had X"           -> everyone who was there
      - "Leo had X"          -> only Leo
      - Give an item to a person only if the transcript names them or uses 'we' for it.
-       'I drank coffee' is the author only.
+       'I drank coffee' is the author only. A first-person verb stays with the author
+       even when someone else was in the room.
+     - A stated absence is a fact ("ate no vegetables").
      - Delivery / takeout   -> food only, NOT a place visited
      - Name the dish as said; keep Telugu food words with English in brackets
      - Meal type is breakfast, lunch, dinner, snacks, or drinks
@@ -82,6 +84,8 @@ lumitrace_format: 5
 
 ### People we met or visited
 <!-- Real people only.
+     - A named person who took part in the day goes here. A household member who was
+       only mentioned does not.
      - Format: <name>, <relation if said> - <where> (<which family members were there>)
      - Daycare friends, relatives, neighbours, friends' houses all go here
      - A TV show or character is NOT a person (put it under Things we did) -->
@@ -101,6 +105,7 @@ lumitrace_format: 5
 
 ### Feelings
 <!-- Per person, in the speaker's own words ("tired", "excited", "sad").
+     - Keep the phrase that was said. Do not shorten it to one adjective.
      - A behaviour is not a feeling: "cried at bedtime" stays "cried at bedtime"
      - No cause ("sad because of X") unless the speaker gave it
      - Telugu idioms can read as the wrong feeling in translation: check the original -->
@@ -135,7 +140,10 @@ lumitrace_format: 5
 ### Things we did
 <!-- One bullet per activity, with who did it.
      - Grocery shopping, play area, potty training, a show watched, a video call...
-     - Format: <activity> (<who>) -->
+     - Format: <activity> (<who>)
+     - Minutes only when that number was spoken. Do not multiply or pick a midpoint.
+       "Two or three episodes, half an hour each" is not 90. Leave the number out and
+       end the line with [uncertain: why]. The same for a nap whose length was not stated. -->
 - not mentioned
 
 ## Thoughts
