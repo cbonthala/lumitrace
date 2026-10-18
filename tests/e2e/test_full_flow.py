@@ -3,8 +3,8 @@
 All three programs run in-process on one ``LocalStorage`` in a temp folder:
 
 * the recording API (``create_app``) with fake speech to text (uploaded UTF-8 bytes become the
-  transcript), a scripted LiteLLM stand-in for fact extraction, the built-in ``fake`` journal
-  model, and the real compressor forced onto its keep-the-original fallback;
+  transcript), a scripted LiteLLM stand-in that fills the day file in one reply, and the real
+  compressor forced onto its keep-the-original fallback;
 * the indexer service (worker thread + ``POST /nudge``), nudged by the API through
   ``nudge_indexer`` exactly as in production;
 * the MCP server, called through an MCP client.
@@ -33,6 +33,7 @@ from PIL import Image
 from lumitrace.config import Settings
 from lumitrace.frames.dayfile import FamilyMember, day_file_path, generated_snapshot_path, parse
 from lumitrace.frames.storage.local import LocalStorage
+from lumitrace.household import Household, Person
 from lumitrace.index.schema import connect
 from lumitrace.lens.server import build_server
 from lumitrace.nudge import nudge_indexer
@@ -51,11 +52,9 @@ DAY = dt.date(2026, 10, 10)
 LAST_YEAR = dt.date(2025, 10, 10)
 
 
-def fake_extract_facts(*, model: str, messages: list[dict[str, str]], **_: Any) -> Any:
-    """Stands in for ``litellm.completion`` on the fact-extraction model (keyword based)."""
-    entries = messages[1]["content"].split("Journal entries for this day", 1)[-1]
+def _keyword_facts(entries: str) -> dict[str, Any]:
     lower = entries.lower()
-    facts: dict[str, Any] = {
+    return {
         "mood": "content",
         "mood_score": 4,
         "people": [n for n in ("Maya", "Leo") if n in entries],
@@ -69,7 +68,26 @@ def fake_extract_facts(*, model: str, messages: list[dict[str, str]], **_: Any) 
             else []
         ),
     }
-    content = json.dumps(facts)
+
+
+def fake_extract_facts(*, model: str, messages: list[dict[str, str]], **_: Any) -> Any:
+    """Stands in for ``litellm.completion``: one reply fills the day, or adds a later recording."""
+    system, user = messages[0]["content"], messages[1]["content"]
+    entries = user.split("Journal entries for this day", 1)[-1]
+    if "update an existing day" in system:
+        lines = [
+            line.strip()
+            for line in entries.splitlines()
+            if line.strip() and not line.startswith("#") and not line.startswith("###")
+        ]
+        payload: Any = {"facts": _keyword_facts(entries), "text": lines[-1] if lines else ""}
+    else:
+        payload = {
+            "headline": "",
+            "journal": "## Summary\n\n" + entries.strip(),
+            "facts": _keyword_facts(entries),
+        }
+    content = json.dumps(payload)
     return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
 
 
@@ -128,6 +146,7 @@ class Stack:
             llm=LLMClient(settings, completion_fn=fake_extract_facts),
             nudge=nudge,
             compress=keep_original,
+            now=lambda: dt.datetime(2026, 10, 17, 15, tzinfo=settings.tz),
         )
         self.api = TestClient(create_api_app(settings, processor=processor, retry_delays=(0.05,)))
 
@@ -200,14 +219,12 @@ def e2e_settings(settings: Settings) -> Settings:
         update={
             "api_token": settings.api_token.__class__(TOKEN),
             "prompts_dir": ROOT / "prompts",
-            "llm_extract_facts_model": "test/extract-facts",
-            "llm_write_journal_model": "fake",
+            "llm_write_journal_model": "test/fill-day",
             "llm_fallback_model": "fake",
             "indexer_nudge_url": "http://testserver/nudge",
             "indexer_backup_interval_hours": 0,
-            "family": "Leo",
         }
-    )
+    ).with_household(Household(people=(Person("Leo"),)))
 
 
 @pytest.fixture
@@ -247,7 +264,7 @@ def test_full_flow(stack: Stack) -> None:
     assert any("audio kept uncompressed" in w for w in recording["warnings"])
 
     note = stack.note("e2e-note-1", "Fish tacos for lunch with Maya.", "2026-10-10T13:05:00-05:00")
-    assert note["generation"] == "full"
+    assert note["generation"] == "update"
     stack.note("e2e-old-note", "Pumpkin patch trip, lovely day.", "2025-10-10T19:00:00-05:00")
     assert all(stack.nudges), "the indexer refused a nudge"
 
@@ -258,7 +275,7 @@ def test_full_flow(stack: Stack) -> None:
     assert day.facts.mood == "content"
     assert day.facts.places == ["the lake"]
     assert day.facts.family == [FamilyMember(name="Leo")], (
-        "only LUMITRACE_FAMILY members get a block"
+        "only members in the family file get a block"
     )
     text = storage.read_text(day_path)
     assert "### Places visited\n\n- the lake" in text
@@ -359,11 +376,11 @@ def test_full_flow(stack: Stack) -> None:
     late = stack.note(
         "e2e-note-2", "Late walk with Leo under the stars.", "2026-10-10T22:15:00-05:00"
     )
-    assert late["generation"] == "additive"
+    assert late["generation"] == "update"
     day = parse(storage.read_text(day_path))
     assert day.facts.mood == "great"
     assert "Best tacos in town, honestly." in day.journal
-    assert "## Later\n\n**22:15 · Quick Note**" in day.journal
+    assert "**22:15 · Quick Note**" in day.journal
     assert "Late walk with Leo under the stars." in day.journal
     assert day.facts.people == ["Maya", "Leo"]
     assert [(m.name, m.moments) for m in day.facts.family] == [("Leo", ["saw the stars"])]

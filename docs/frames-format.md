@@ -82,8 +82,8 @@ The front matter holds only the date, the media and provenance. The facts are in
 |---|---|---|
 | `date` | date | the entry date |
 | `audio`, `photos` | list of file names | in the day folder, in capture order |
-| `prompt_version` | string or null | prompts used for the last generation |
-| `models_used` | map task → model | e.g. `stt`, `extract_facts`, `write_journal` |
+| `prompt_version` | string or null | prompt task for the last generation (`fill_day` or `update_day`). Older files may still say `fill_day-v1` or `journal-v1` |
+| `models_used` | map task → model | e.g. `stt`, `fill_day`, `update_day` |
 | `generated_at` | ISO-8601 datetime or null | last generation |
 | `generated_hash` | string or null | edit detection, see below |
 | `lumitrace_format` | int | `3` (read from `lumen_format`, `bookshelf_format` or `lifelog_format` in files written under the earlier names) |
@@ -94,7 +94,7 @@ The front matter holds only the date, the media and provenance. The facts are in
 The Prism extracts these from the recordings; Spectrum indexes them exactly as they are written
 here (one row per item in the fact tables, see `docs/index-schema.md`). The layout is
 **topic first** (decision 0045): each topic is a `###` section and, where it differs per person,
-holds one `#### name` block per family member. A family member named in `LUMITRACE_FAMILY` gets
+holds one `#### name` block per family member. A family member named in `secrets/family.md` gets
 a block in every such section on every generated day, in the configured order and spelling, so a
 new member appears everywhere without any change.
 
@@ -166,10 +166,10 @@ existing id is a no-op, so retries from the offline inbox are safe), `kind` (`re
 `note`), `captured_at` (ISO-8601 with offset), `audio`, `photos`, `location`. The heading and
 embed lines are regenerated from it; the text below them is the transcript and may be edited.
 
-**English translation** (`Capture.translation`, ADR 0043). When the speech-to-text provider
-also translated the recording (Sarvam, `docs/prism.md`), the block continues after the
-transcript with the `<!-- lumitrace:translation (...) -->` marker, a `#### English translation`
-heading and the translated text. The raw transcript above it is kept as spoken. On parsing,
+**English translation** (`Capture.translation`, ADR 0043). Older recordings that were translated
+keep the block after the transcript: the `<!-- lumitrace:translation (...) -->` marker, a
+`#### English translation` heading and the translated text. New recordings do not get one
+(ADR 0048). The raw transcript above it is kept as spoken. On parsing,
 everything after the marker is the translation (the heading is dropped if present, so deleting
 it by hand is harmless); a block without the marker has no translation. The translation may be
 edited like the transcript. Spectrum indexes it as extra transcript passages headed
@@ -196,9 +196,10 @@ We went to the park, and Leo played on the slide for a long time.
   hash of exactly what
   the system wrote. `DayFile.is_user_edited()` compares it with the current content.
   * `apply_generation(...)` replaces facts/title/journal, and raises `UserEditsDetected` if the
-    owner edited them (unless `force=True`, reserved for an explicit owner request).
-  * `merge_generation_additive(...)` only adds: fills empty facts, adds new list items, appends a
-    journal addendum. On an edited day it keeps the old hash, so the day stays marked as edited.
+    owner edited them (unless `force=True`). The 4:05 a.m. fill uses `force=True` (ADR 0050).
+  * `merge_generation_additive(...)` only adds: fills empty facts, adds new list items, appends
+    journal lines under `## Later`. A recording that arrives after the journal exists uses this,
+    whether or not the owner edited the file. On an edited day it keeps the old hash.
 * **Stray text** typed outside the regions (or a region whose markers were deleted) is moved into
   `My notes` on the next system write, so nothing is lost.
 * Provenance fields (`prompt_version`, `models_used`, `generated_at`) and transcript text are not
@@ -390,10 +391,12 @@ day_date = entry_date(captured_at, settings.tz, settings.day_rollover_hour)
 path = day_file_path(day_date)
 day = parse(storage.read_text(path), fallback_date=day_date) if storage.exists(path) else None
 day = merge_capture(day, capture, day_date)
-if day.is_user_edited():
-    day = merge_generation_additive(day, facts=new_facts, journal_addendum=..., ...)
+if day.meta.generated_at is None:
+    day = apply_generation(
+        day, facts=facts_for_whole_day, journal=journal, title=title, force=True, ...
+    )
 else:
-    day = apply_generation(day, facts=facts_for_whole_day, journal=journal, title=title, ...)
+    day = merge_generation_additive(day, facts=new_facts, journal_addendum=..., ...)
 text = render(day)
 storage.write_text(path, text)
 storage.write_text(generated_snapshot_path(day_date), text)

@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 import logging
 import math
+from types import SimpleNamespace
 
 import httpx
+import pytest
 
 from lumitrace.config import Settings
 from lumitrace.embeddings import embed_texts, fake_embedding
@@ -20,6 +22,50 @@ def test_fake_embeddings_are_deterministic_unit_vectors(settings: Settings) -> N
     assert a != c
     assert embed_texts([], settings) == []
     assert fake_embedding("", 4) == [1.0, 0.0, 0.0, 0.0]
+
+
+def test_provider_embeddings_ask_for_the_configured_size(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict[str, object] = {}
+
+    def _embed(**kwargs: object) -> SimpleNamespace:
+        seen.update(kwargs)
+        return SimpleNamespace(
+            data=[
+                SimpleNamespace(index=1, embedding=[0.2] * 8),
+                SimpleNamespace(index=0, embedding=[0.1] * 8),
+            ]
+        )
+
+    import litellm
+
+    monkeypatch.setattr(litellm, "embedding", _embed)
+    configured = settings.model_copy(
+        update={"embedding_model": "gemini/gemini-embedding-2", "embedding_dimension": 8}
+    )
+    vectors = embed_texts(["second", "first"], configured)
+    assert seen["model"] == "gemini/gemini-embedding-2"
+    assert seen["dimensions"] == 8
+    assert seen["input"] == ["second", "first"]
+    assert vectors == [[0.1] * 8, [0.2] * 8]
+
+
+def test_provider_embeddings_refuse_the_wrong_size(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import litellm
+
+    monkeypatch.setattr(
+        litellm,
+        "embedding",
+        lambda **kwargs: SimpleNamespace(data=[SimpleNamespace(index=0, embedding=[1.0, 0.0])]),
+    )
+    configured = settings.model_copy(
+        update={"embedding_model": "gemini/gemini-embedding-2", "embedding_dimension": 8}
+    )
+    with pytest.raises(ValueError, match="returned 2 dims"):
+        embed_texts(["hello"], configured)
 
 
 def test_fake_embeddings_rank_shared_words_closer(settings: Settings) -> None:

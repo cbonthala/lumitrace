@@ -1,4 +1,4 @@
-"""Versioned prompt files (``prompts/<task>/<version>.md``, see ``prompts/README.md``).
+"""Prompt files (``prompts/<task>.md``, see ``prompts/README.md``).
 
 A prompt file has a system part and a user part, separated by marker comments::
 
@@ -10,6 +10,7 @@ A prompt file has a system part and a user part, separated by marker comments::
 
 ``{{name}}`` placeholders in either part are replaced by :meth:`Prompt.render`. Unknown
 placeholders raise ``KeyError`` so a prompt and its caller cannot silently drift apart.
+The day template Gemini also sees is ``prompts/day-template.md``, filled in by the caller.
 """
 
 from __future__ import annotations
@@ -21,12 +22,8 @@ from pathlib import Path
 
 import lumitrace
 
-PROMPT_VERSIONS: dict[str, str] = {
-    "extract_facts": "v6",
-    "write_journal": "v4",
-    "journal_addendum": "v4",
-}
-"""Current version of each task's prompt. Bump together with a new file in ``prompts/``."""
+PROMPT_TASKS = ("fill_day", "update_day")
+"""The prompt files under ``prompts/``. Edit the file; git keeps the history."""
 
 _MARKER_RE = re.compile(r"^<!--\s*lumitrace-prompt:\s*(system|user)\s*-->[ \t]*$", re.MULTILINE)
 _PLACEHOLDER_RE = re.compile(r"\{\{\s*([a-z_]+)\s*\}\}")
@@ -40,14 +37,13 @@ class PromptError(ValueError):
 @dataclass(frozen=True)
 class Prompt:
     task: str
-    version: str
     system: str
     user: str
 
     @property
     def label(self) -> str:
-        """``extract_facts-v1``: how the prompt is named in front matter and activity records."""
-        return f"{self.task}-{self.version}"
+        """``fill_day``: the name stored in the day file's ``prompt_version``."""
+        return self.task
 
     def render(self, **values: str) -> list[dict[str, str]]:
         """Chat messages with the placeholders filled in."""
@@ -75,33 +71,39 @@ def resolve_prompts_dir(prompts_dir: Path) -> Path:
     return candidate if candidate.is_dir() else prompts_dir
 
 
-def parse_prompt(task: str, version: str, text: str) -> Prompt:
+def day_template_path(prompts_dir: Path) -> Path:
+    """``prompts/day-template.md``: the shape pasted into the fill-day user message."""
+    return resolve_prompts_dir(prompts_dir) / "day-template.md"
+
+
+def parse_prompt(task: str, text: str) -> Prompt:
     parts: dict[str, str] = {}
     matches = list(_MARKER_RE.finditer(text))
     for i, m in enumerate(matches):
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         parts[m.group(1)] = text[m.end() : end].strip()
     if not parts.get("system") or not parts.get("user"):
-        raise PromptError(f"prompt {task}/{version} needs system and user parts")
-    return Prompt(task=task, version=version, system=parts["system"], user=parts["user"])
+        raise PromptError(f"prompt {task} needs system and user parts")
+    return Prompt(task=task, system=parts["system"], user=parts["user"])
 
 
 @lru_cache(maxsize=32)
-def _load_cached(directory: str, task: str, version: str) -> Prompt:
-    path = Path(directory) / task / f"{version}.md"
+def _load_cached(directory: str, task: str) -> Prompt:
+    path = Path(directory) / f"{task}.md"
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError as exc:
         raise PromptError(f"prompt file not found: {path}") from exc
-    return parse_prompt(task, version, text)
+    return parse_prompt(task, text)
 
 
-def load_prompt(prompts_dir: Path, task: str, version: str | None = None) -> Prompt:
-    """Load ``<prompts_dir>/<task>/<version>.md`` (default: the current version)."""
-    version = version or PROMPT_VERSIONS[task]
-    return _load_cached(str(resolve_prompts_dir(prompts_dir)), task, version)
+def load_prompt(prompts_dir: Path, task: str) -> Prompt:
+    """Load ``<prompts_dir>/<task>.md``."""
+    if task not in PROMPT_TASKS:
+        raise PromptError(f"unknown prompt task: {task}")
+    return _load_cached(str(resolve_prompts_dir(prompts_dir)), task)
 
 
-def combined_version(labels: list[str]) -> str:
-    """``extract_facts-v1+write_journal-v1``: the ``prompt_version`` stored in front matter."""
+def join_prompt_labels(labels: list[str]) -> str:
+    """``fill_day`` or ``update_day``: the ``prompt_version`` stored in front matter."""
     return "+".join(dict.fromkeys(labels))

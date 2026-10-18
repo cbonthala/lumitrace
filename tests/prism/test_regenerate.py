@@ -46,17 +46,17 @@ def test_regenerate_replaces_an_unedited_format_2_day_and_keeps_notes_and_transc
     assert api_storage.read_text(generated_snapshot_path(DAY)) == live
     day = parse(live)
     assert day.meta.lumitrace_format == FORMAT_VERSION
-    assert day.meta.prompt_version == "extract_facts-v6+write_journal-v4"
+    assert day.meta.prompt_version == "fill_day"
     assert day.title == "Saturday, October 10, 2026 · Taco day"
     assert day.journal.startswith("## Summary")
     assert not day.is_user_edited()
     assert day.notes == before.notes
     assert [c.text for c in day.captures] == [c.text for c in before.captures]
     assert day.meta.audio == before.meta.audio
-    assert fake_llm.tasks() == ["extract_facts", "write_journal"]
+    assert fake_llm.tasks() == ["fill_day"]
 
 
-def test_regenerate_only_adds_facts_to_a_day_the_owner_edited(
+def test_regenerate_leaves_a_day_the_owner_edited(
     api_settings: Settings, api_storage: LocalStorage, fake_llm: FakeLLM, sample_day_markdown: str
 ) -> None:
     edited = sample_day_markdown.replace("**Mood:** happy", "**Mood:** great").replace(
@@ -68,13 +68,13 @@ def test_regenerate_only_adds_facts_to_a_day_the_owner_edited(
 
     outcomes = regenerate_days(api_settings, api_storage, _generator(api_settings, fake_llm))
 
-    assert [o.status for o in outcomes] == ["merged"]
+    assert [o.status for o in outcomes] == ["skipped"]
     day = parse(api_storage.read_text(path))
     assert day.facts.mood == "great"
     assert "My own words." in day.journal
     assert day.journal == parse(edited).journal
     assert day.is_user_edited()
-    assert fake_llm.tasks() == ["extract_facts"]
+    assert fake_llm.tasks() == []
 
 
 def test_regenerate_dry_run_range_and_days_without_text(

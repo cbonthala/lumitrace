@@ -15,12 +15,12 @@ Tests construct `Settings(_env_file=None, ...)` directly; the `settings` fixture
 
 | Group | Fields |
 |---|---|
-| General | `log_level`, `timezone` (`"America/Chicago"`), `day_rollover_hour` (4), `prompts_dir`, property `tz -> ZoneInfo`, `family` (comma-separated names, each optionally `Name (relation)`, the owner marked `(me)`; `""`), properties `family_members -> list[str]` (names only, trimmed, duplicates dropped ignoring case), `family_relations -> dict[str, str]` (name → relation, `""` if none), `owner_name -> str \| None` (the `(me)`/`(self)` member) |
+| General | `log_level`, `timezone` (`"America/Chicago"`), `day_rollover_hour` (4), `prompts_dir`, property `tz -> ZoneInfo`. Family is not a setting: `get_settings()` reads `secrets/family.md` (or `/secrets/family.md` in Docker) into properties `family_members -> list[str]`, `family_relations -> dict[str, str]`, `owner_name -> str \| None` (relation `me` or `self`), and `glossary_text -> str` (the Markdown notes, or `(none)`). `Settings()` in tests does not read that file; pass `household=` |
 | API (Prism) | `api_token: SecretStr`, `api_host`, `api_port` (8000), `api_max_upload_mb`, `audio_bitrate_kbps` (32), `photo_max_dimension` (2048), `photo_jpeg_quality` (85) |
 | Storage | `storage_backend: "local" \| "gdrive"`, `local_root` (`data/Lumitrace`), `gdrive_client_secrets_file`, `gdrive_token_file`, `gdrive_root_folder` (`"Lumitrace"`) |
-| Speech | `stt_provider: "litellm" \| "aws_transcribe" \| "sarvam" \| "fake"`, `stt_model`, `stt_language`, `stt_keyterms` (comma-separated; property `stt_keyterm_list` = family names + these), `aws_region`, `aws_transcribe_bucket`, `sarvam_api_key: SecretStr`, `sarvam_model` (`saaras:v4`), `sarvam_mode: "transcribe" \| "codemix" \| "verbatim" \| "translit"` (`codemix`), `sarvam_translate` (`True`) |
-| LLM | `llm_extract_facts_model`, `llm_write_journal_model`, `llm_fallback_model` (LiteLLM strings), `llm_timeout_seconds`, `llm_max_retries` |
-| Embeddings | `embedding_model` (`"fake"` = offline), `embedding_dimension` |
+| Speech | `stt_provider: "litellm" \| "aws_transcribe" \| "sarvam" \| "fake"`, `stt_model`, `stt_language`, `stt_keyterms` (comma-separated; property `stt_keyterm_list` = family-file names + these), `aws_region`, `aws_transcribe_bucket`, `sarvam_api_key: SecretStr`, `sarvam_model` (`saaras:v4`), `sarvam_mode: "transcribe" \| "codemix" \| "verbatim" \| "translit"` (`codemix`). One Sarvam job, the transcript (ADR 0048) |
+| LLM | `llm_write_journal_model`, `llm_fallback_model` (LiteLLM strings), `llm_timeout_seconds`, `llm_max_retries`. The journal model fills the day at 4:05 a.m. and updates it when a later recording arrives (ADR 0050) |
+| Embeddings | `embedding_model` (`"fake"` = offline; default `gemini/gemini-embedding-2`), `embedding_dimension` (1536). The call asks the provider for that many values (ADR 0053) |
 | Index (Spectrum) | `index_path` (`data/index/lumitrace.sqlite`), `indexer_host`, `indexer_port` (8001), `indexer_poll_interval_seconds` (300), `indexer_nudge_url`, `indexer_backup_interval_hours` (24) |
 | MCP (Lens) | `mcp_transport: "stdio" \| "streamable-http"`, `mcp_host`, `mcp_port` (8002), `mcp_path` (`/mcp`), `mcp_public_url`, `mcp_auth_mode: "oauth" \| "none"` (`oauth`), `mcp_owner_password: SecretStr`, `mcp_session_days` (7), `mcp_admin_host` (`127.0.0.1`), `mcp_admin_port` (8003, 0 = off), `mcp_admin_url` (`http://127.0.0.1:8003`, read by the Prism) |
 
@@ -132,7 +132,8 @@ writes the index, the Lens reads it.
 ## Embeddings: `lumitrace.embeddings`
 
 `embed_texts(texts, settings, batch_size=64) -> list[list[float]]` (LiteLLM, or deterministic
-`fake_embedding` when `embedding_model == "fake"`). Spectrum embeds passages and the Lens embeds queries with this same function.
+`fake_embedding` when `embedding_model == "fake"`). The provider is asked for
+`embedding_dimension` values. Spectrum embeds passages and the Lens embeds queries with this same function.
 
 ## Spectrum nudge: `lumitrace.nudge`
 
@@ -167,7 +168,8 @@ Everything here lives in the owner's storage, never in the repository. `classify
 | `_system/inbox/<capture id>/` | Prism | raw uploads (`audio.<ext>`, `photo-NN.<ext>`, `manifest.json` last) waiting to be processed; deleted when the capture is `done` |
 | `_system/captures/<capture id>.json` | Prism | capture status (`queued` / `processing` / `done` / `failed`), no journal content; kept for `GET /captures/{id}` |
 | `_system/generated/YYYY/MM/YYYY-MM-DD.md` | Prism | exact day file as last written by the system (`generated_snapshot_path`); written right after every day-file write, same text and `generated_at` |
-| `_system/activity/YYYY/MM.jsonl` | Prism | activity records, one JSON line per processing attempt: models, prompt versions, per-step time/cost, errors; no journal content |
+| `_system/journal-due/YYYY-MM-DD.txt` | Prism | a day whose transcripts are saved and whose journal has not been written yet; removed when the morning run (or a late capture for a closed day) finishes (ADR 0046) |
+| `_system/activity/YYYY/MM.jsonl` | Prism | activity records, one JSON line per processing attempt: models, per-step time/cost, errors; no journal content |
 | `_system/feedback/YYYY/MM/<UTC timestamp>-<id>.json` | Lens | copy of each `feedback` call (also a row in the index) |
 | `_system/index-backup/lumitrace.sqlite` | Spectrum | daily index backup (includes `feedback` and `edit_signals`) |
 | `_system/reports/` | weekly report job (later) | self-improvement reports |

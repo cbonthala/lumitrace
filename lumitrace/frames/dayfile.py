@@ -418,7 +418,7 @@ def _normalise_meals(meals: list[Meal]) -> list[Meal]:
 class FamilyMember(BaseModel):
     """One family member's day: a ``#### name`` block in each per-person section of "At a
     glance" (Food, Health and fitness, Feelings, Memories). The Prism writes a block for every
-    configured member (``LUMITRACE_FAMILY``), with nothing in it when the day says nothing about
+    configured member (`secrets/family.md`), with nothing in it when the day says nothing about
     them; the owner may add others by hand."""
 
     model_config = ConfigDict(extra="ignore")

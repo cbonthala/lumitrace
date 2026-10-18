@@ -9,12 +9,13 @@ import pytest
 
 from lumitrace.config import Settings
 from lumitrace.frames.dayfile import Capture, DayFacts, FamilyMember
+from lumitrace.household import Household, Person
 from lumitrace.prism.pipeline.generate import Generator, keep_family, parse_facts
 from lumitrace.prism.pipeline.llm import LLMClient, LLMError, extract_json
 from lumitrace.prism.pipeline.prompts import (
-    PROMPT_VERSIONS,
+    PROMPT_TASKS,
     PromptError,
-    combined_version,
+    join_prompt_labels,
     load_prompt,
     parse_prompt,
     resolve_prompts_dir,
@@ -33,10 +34,9 @@ def test_every_current_prompt_exists_and_renders(api_settings: Settings) -> None
         text="Tacos with Maya.",
         location="Austin",
     )
-    facts, _ = gen.extract_facts(day, [capture])
-    gen.write_journal(day, [capture], facts.value)
-    gen.write_addendum(day, capture, "## Summary\n\nEarlier.")
-    assert sorted({c[0] for c in llm.calls}) == sorted(PROMPT_VERSIONS)
+    gen.fill_day(day, [capture])
+    gen.update_day(day, capture, "## Summary\n\nEarlier.", DayFacts())
+    assert sorted({c[0] for c in llm.calls}) == sorted(PROMPT_TASKS)
     for _, _, messages in llm.calls:
         for message in messages:
             assert "{{" not in message["content"]
@@ -46,25 +46,28 @@ def test_every_current_prompt_exists_and_renders(api_settings: Settings) -> None
 
 
 def test_prompt_files_follow_the_layout() -> None:
-    for task, version in PROMPT_VERSIONS.items():
-        path = ROOT / "prompts" / task / f"{version}.md"
+    for task in PROMPT_TASKS:
+        path = ROOT / "prompts" / f"{task}.md"
         text = path.read_text(encoding="utf-8")
-        prompt = parse_prompt(task, version, text)
-        assert prompt.label == f"{task}-{version}"
+        prompt = parse_prompt(task, text)
+        assert prompt.label == task
         assert re.search(r"(?i)never (invent|guess)", prompt.system), task
+    template = ROOT / "prompts" / "day-template.md"
+    assert template.is_file()
+    assert "### Food" in template.read_text(encoding="utf-8")
 
 
 def test_prompt_errors(tmp_path: Path) -> None:
     with pytest.raises(PromptError):
-        parse_prompt("x", "v1", "no markers here")
+        parse_prompt("x", "no markers here")
     prompt = parse_prompt(
-        "x", "v1", "<!-- lumitrace-prompt: system -->\nS {{a}}\n<!-- lumitrace-prompt: user -->\nU"
+        "x", "<!-- lumitrace-prompt: system -->\nS {{a}}\n<!-- lumitrace-prompt: user -->\nU"
     )
     with pytest.raises(KeyError):
         prompt.render()
     assert prompt.render(a="1")[0]["content"] == "S 1"
     with pytest.raises(PromptError):
-        load_prompt(tmp_path, "extract_facts")
+        load_prompt(tmp_path, "fill_day")
 
 
 def test_relative_prompts_dir_falls_back_to_repository(tmp_path: Path, monkeypatch) -> None:
@@ -72,11 +75,10 @@ def test_relative_prompts_dir_falls_back_to_repository(tmp_path: Path, monkeypat
     assert resolve_prompts_dir(Path("prompts")) == ROOT / "prompts"
 
 
-def test_combined_version() -> None:
-    assert combined_version(["extract_facts-v1", "write_journal-v2"]) == (
-        "extract_facts-v1+write_journal-v2"
-    )
-    assert combined_version([]) == ""
+def test_join_prompt_labels() -> None:
+    assert join_prompt_labels(["fill_day", "update_day"]) == "fill_day+update_day"
+    assert join_prompt_labels(["fill_day", "fill_day"]) == "fill_day"
+    assert join_prompt_labels([]) == ""
 
 
 def test_extract_json_tolerates_fences_and_chatter() -> None:
@@ -115,46 +117,62 @@ def test_keep_family_drops_unknown_names_and_uses_configured_spelling() -> None:
     assert padded == [FamilyMember(name="Maya"), FamilyMember(name="Leo")]
 
 
-def test_extract_facts_sends_the_family_list(api_settings: Settings) -> None:
+def test_fill_day_sends_the_family_list(api_settings: Settings) -> None:
     at = dt.datetime(2026, 10, 10, 13, 5, tzinfo=api_settings.tz)
     capture = Capture(id="c", kind="note", captured_at=at, text="x")
+    with_owner_household = Household(
+        people=(
+            Person("Sam", "me"),
+            Person("Maya", "wife", dt.date(1990, 4, 12)),
+            Person("Leo"),
+        )
+    )
+    no_owner = Household(people=(Person("Maya"), Person("Leo")))
     users = {}
-    for family in ("Sam (me), Maya (wife), Leo", "Maya, Leo"):
-        settings = api_settings.model_copy(update={"family": family})
+    for key, household in (("owner", with_owner_household), ("none", no_owner)):
         llm = FakeLLM()
-        gen = Generator(LLMClient(settings, completion_fn=llm), settings.prompts_dir)
-        gen.extract_facts(dt.date(2026, 10, 10), [capture])
-        users[family] = llm.calls[0][2][1]["content"]
-    with_owner = users["Sam (me), Maya (wife), Leo"]
+        gen = Generator(
+            LLMClient(api_settings.with_household(household), completion_fn=llm),
+            api_settings.prompts_dir,
+        )
+        gen.fill_day(dt.date(2026, 10, 10), [capture])
+        users[key] = llm.calls[0][2][1]["content"]
+    with_owner = users["owner"]
     assert "The author (the person speaking): Sam\n" in with_owner
     assert (
-        "relation to the author (may be empty): Sam (the author), Maya (the author's wife), Leo\n"
+        "relation to the author (may be empty): "
+        "Sam (the author), Maya (the author's wife, born 1990-04-12), Leo\n"
     ) in with_owner
-    assert "The author (the person speaking): (not given)\n" in users["Maya, Leo"]
-    assert "relation to the author (may be empty): Maya, Leo\n" in users["Maya, Leo"]
+    assert "The author (the person speaking): (not given)\n" in users["none"]
+    assert "relation to the author (may be empty): Maya, Leo\n" in users["none"]
 
 
 def test_glossary_is_sent_to_every_prompt(api_settings: Settings) -> None:
     at = dt.datetime(2026, 10, 10, 13, 5, tzinfo=api_settings.tz)
     capture = Capture(id="c", kind="note", captured_at=at, text="x")
-    for glossary, expected in (("Leon is Leo's friend; potty not party", True), ("", False)):
-        settings = api_settings.model_copy(update={"glossary": glossary})
+    notes = "## Other people\n- Leon: Leo's daycare friend."
+    for glossary, expected in ((notes, True), ("", False)):
+        settings = api_settings.with_household(Household(notes=glossary))
         llm = FakeLLM()
         gen = Generator(LLMClient(settings, completion_fn=llm), settings.prompts_dir)
-        facts, _ = gen.extract_facts(dt.date(2026, 10, 10), [capture])
-        gen.write_journal(dt.date(2026, 10, 10), [capture], facts.value)
-        gen.write_addendum(dt.date(2026, 10, 10), capture, "## Summary\n\nEarlier.")
+        gen.fill_day(dt.date(2026, 10, 10), [capture])
+        gen.update_day(dt.date(2026, 10, 10), capture, "## Summary\n\nEarlier.", DayFacts())
         for _, _, messages in llm.calls:
             system = messages[0]["content"]
-            assert ("- Leon is Leo's friend\n- potty not party" in system) is expected
-            assert ("Names and spellings from the owner" in system) is True
+            assert (notes in system) is expected
+            assert "Background from the owner's family file" in system
             assert ("(none)" in system) is (not expected)
 
 
-def test_captures_show_translation_and_original(api_settings: Settings) -> None:
+def test_journal_gets_the_transcript_and_keyterms_not_a_translation(
+    api_settings: Settings,
+) -> None:
+    settings = api_settings.model_copy(update={"stt_keyterms": "Corner Bakery"}).with_household(
+        Household(people=(Person("Sam", "me"), Person("Maya", "wife")), notes="Leon is a friend.")
+    )
     llm = FakeLLM()
-    gen = Generator(LLMClient(api_settings, completion_fn=llm), api_settings.prompts_dir)
-    at = dt.datetime(2026, 10, 10, 21, 30, tzinfo=api_settings.tz)
+    gen = Generator(LLMClient(settings, completion_fn=llm), settings.prompts_dir)
+    at = dt.datetime(2026, 10, 10, 21, 30, tzinfo=settings.tz)
     capture = Capture(
         id="c",
         kind="recording",
@@ -162,12 +180,17 @@ def test_captures_show_translation_and_original(api_settings: Settings) -> None:
         text="mana park ki vellam",
         translation="We went to the park.",
     )
-    gen.extract_facts(dt.date(2026, 10, 10), [capture])
-    assert (
-        "### 21:30 · Log My Day\n\n"
-        "English translation (machine-made from the audio):\nWe went to the park.\n\n"
-        "Original transcript (as spoken):\nmana park ki vellam"
-    ) in llm.calls[0][2][1]["content"]
+    gen.fill_day(dt.date(2026, 10, 10), [capture])
+    gen.update_day(dt.date(2026, 10, 10), capture, "## Summary\n\nEarlier.", DayFacts())
+    assert [c[0] for c in llm.calls] == ["fill_day", "update_day"]
+    for _, _, messages in llm.calls:
+        user = messages[1]["content"]
+        assert "mana park ki vellam" in user
+        assert "Sam, Maya, Corner Bakery" in user
+        assert "We went to the park." not in user
+        assert "English translation" not in user
+        assert "Leon is a friend." in messages[0]["content"]
+    assert "Facts already extracted" not in llm.calls[0][2][1]["content"]
 
 
 def test_llm_client_passes_config_and_falls_back(api_settings: Settings) -> None:

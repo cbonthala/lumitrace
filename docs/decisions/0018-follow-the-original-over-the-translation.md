@@ -1,6 +1,6 @@
 # 0018. Follow the original transcript over the translation; fill the author's block
 
-- Status: accepted (refines 0016)
+- Status: accepted (refines 0016; the journal no longer reads a translation, ADR 0048)
 - Date: 2026-10-13
 
 ## Context

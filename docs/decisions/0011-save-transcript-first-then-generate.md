@@ -1,6 +1,6 @@
 # 0011. Save the transcript first, generate second, re-check edits before writing
 
-- Status: accepted
+- Status: accepted; the edited-day branch is superseded by 0046 and 0050
 - Date: 2026-10-10
 
 ## Context

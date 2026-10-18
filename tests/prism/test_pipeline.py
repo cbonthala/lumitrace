@@ -60,7 +60,7 @@ def test_edited_day_gets_additive_update(
     second = processor.process(
         make_request(api_settings, api_storage, "b", hour=22, kind="note", text="Tacos with Leo.")
     )
-    assert second.generation == "additive"
+    assert second.generation == "update"
     day = parse(api_storage.read_text(day_file_path(OCT10)))
     assert day.journal.startswith("## Summary\n\nMy own words about the run.")
     assert day.journal.endswith(
@@ -70,13 +70,13 @@ def test_edited_day_gets_additive_update(
     assert day.facts.people == ["Maya", "Leo"]
     assert day.notes == "Private thought."
     assert day.is_user_edited()
-    assert day.meta.prompt_version == "extract_facts-v6+journal_addendum-v4"
-    assert day.meta.models_used["journal_addendum"] == "test/journal"
+    assert day.meta.prompt_version == "update_day"
+    assert day.meta.models_used["update_day"] == "test/journal"
     assert day.meta.models_used["stt"] == "fake"
-    addendum_call = next(c for c in fake_llm.calls if c[0] == "journal_addendum")
-    assert "My own words about the run." in addendum_call[2][1]["content"]
-    facts_call = [c for c in fake_llm.calls if c[0] == "extract_facts"][-1]
-    assert "Run with Maya." not in facts_call[2][1]["content"]  # only the new entry
+    update_call = next(c for c in fake_llm.calls if c[0] == "update_day")
+    assert "My own words about the run." in update_call[2][1]["content"]
+    assert "Tacos with Leo." in update_call[2][1]["content"]
+    assert "Run with Maya." not in update_call[2][1]["content"]
 
 
 def test_edit_during_generation_is_not_overwritten(
@@ -85,7 +85,7 @@ def test_edit_during_generation_is_not_overwritten(
     processor.process(make_request(api_settings, api_storage, "a", spoken="Run with Maya."))
 
     def edit_once(task: str) -> None:
-        if task == "write_journal" and fake_llm.before_reply is not None:
+        if task == "update_day" and fake_llm.before_reply is not None:
             fake_llm.before_reply = None
 
             def change(day) -> None:
@@ -97,44 +97,39 @@ def test_edit_during_generation_is_not_overwritten(
     result = processor.process(
         make_request(api_settings, api_storage, "b", hour=22, kind="note", text="Tacos.")
     )
-    assert result.generation == "additive"
+    assert result.generation == "update"
     day = parse(api_storage.read_text(day_file_path(OCT10)))
     assert day.journal.startswith("Typed while the AI was busy.")
+    assert "## Later" in day.journal
     assert len(day.captures) == 2
 
 
 def test_fallback_model_is_used_and_recorded(
     processor: CaptureProcessor, api_settings: Settings, api_storage: LocalStorage, fake_llm
 ) -> None:
-    fake_llm.fail_models.add("test/extract")
     fake_llm.bad_json_models.add("test/journal")
     result = processor.process(make_request(api_settings, api_storage, "a", spoken="Maya."))
     assert result.generation == "full"
     day = parse(api_storage.read_text(day_file_path(OCT10)))
-    assert day.meta.models_used["extract_facts"] == "test/fallback"
-    assert day.meta.models_used["write_journal"] == "test/fallback"
+    assert day.meta.models_used["fill_day"] == "test/fallback"
     assert day.facts.people == ["Maya"]
     record = json.loads(api_storage.read_text("_system/activity/2026/10.jsonl").splitlines()[-1])
     steps = {s["name"]: s for s in record["steps"]}
-    attempts = steps["extract_facts"]["detail"]["attempts"]
+    attempts = steps["fill_day"]["detail"]["attempts"]
     assert [(a["model"], a["ok"]) for a in attempts] == [
-        ("test/extract", False),
+        ("test/journal", False),
         ("test/fallback", True),
     ]
-    assert attempts[0]["error"] == "RuntimeError: provider unavailable"
-    assert "invalid JSON" in steps["write_journal"]["detail"]["attempts"][0]["error"]
+    assert "invalid JSON" in attempts[0]["error"]
 
 
 def test_ai_failure_still_saves_the_transcript(
     processor: CaptureProcessor, api_settings: Settings, api_storage: LocalStorage, fake_llm
 ) -> None:
-    fake_llm.fail_models |= {"test/extract", "test/journal", "test/fallback"}
+    fake_llm.fail_models |= {"test/journal", "test/fallback"}
     result = processor.process(make_request(api_settings, api_storage, "a", spoken="Run."))
     assert result.generation == "failed"
-    assert result.errors == [
-        "extract_facts: all models failed",
-        "write_journal: all models failed",
-    ]
+    assert result.errors == ["fill_day: all models failed"]
     day = parse(api_storage.read_text(day_file_path(OCT10)))
     assert day.captures[0].text == "Run."
     assert day.journal == ""
@@ -228,7 +223,6 @@ def test_fake_llm_model_runs_offline(
 ) -> None:
     settings = api_settings.model_copy(
         update={
-            "llm_extract_facts_model": "fake",
             "llm_write_journal_model": "fake",
             "llm_fallback_model": "fake",
         }
@@ -240,4 +234,4 @@ def test_fake_llm_model_runs_offline(
     assert result.generation == "full"
     day = parse(api_storage.read_text(day_file_path(OCT10)))
     assert day.journal == "## Summary\n\nQuiet day."
-    assert day.meta.models_used == {"extract_facts": "fake", "write_journal": "fake"}
+    assert day.meta.models_used == {"fill_day": "fake"}

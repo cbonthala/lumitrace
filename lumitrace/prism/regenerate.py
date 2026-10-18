@@ -4,8 +4,7 @@
 
 * a day the owner has not edited gets its facts, title and journal replaced (the owner's notes,
   the transcripts, the audio and the photos are never touched);
-* a day the owner edited keeps every word they wrote: the new facts are only added to it
-  (:func:`~lumitrace.frames.dayfile.merge_generation_additive`), the journal is not changed;
+* a day the owner edited is left as it is (a later recording updates that day on its own);
 * a day without any transcript text is skipped.
 
 A day counts as unedited when its generated hash matches, or when the file is identical to the
@@ -30,7 +29,6 @@ from lumitrace.frames.dayfile import (
     apply_generation,
     default_title,
     generated_snapshot_path,
-    merge_generation_additive,
     parse,
     parse_day_file_path,
     render,
@@ -39,13 +37,11 @@ from lumitrace.frames.storage.base import Storage
 from lumitrace.nudge import nudge_indexer
 from lumitrace.prism.pipeline.generate import Generator
 from lumitrace.prism.pipeline.llm import LLMError
-from lumitrace.prism.pipeline.prompts import combined_version
 
 log = logging.getLogger(__name__)
 
 Status = str
-"""``regenerated`` | ``merged`` (edited day, facts added only) | ``skipped`` | ``failed``;
-``would regenerate`` and ``would merge`` in a dry run."""
+"""``regenerated`` | ``skipped`` | ``failed``; ``would regenerate`` in a dry run."""
 
 
 @dataclass
@@ -109,39 +105,26 @@ def regenerate_days(
         snapshot_path = generated_snapshot_path(date)
         snapshot = storage.read_text(snapshot_path) if storage.exists(snapshot_path) else None
         edited = _is_edited(day, live, snapshot)
+        if edited:
+            done(DayOutcome(date, "skipped", "edited by the owner"))
+            continue
         if dry_run:
-            done(DayOutcome(date, "would merge" if edited else "would regenerate"))
+            done(DayOutcome(date, "would regenerate"))
             continue
         try:
-            facts_result, facts_prompt = generator.extract_facts(date, day.captures)
-            labels = [facts_prompt.label]
-            models = {**day.meta.models_used, "extract_facts": facts_result.model}
-            if edited:
-                updated = merge_generation_additive(
-                    day,
-                    facts=facts_result.value,
-                    prompt_version=combined_version(labels),
-                    models_used=models,
-                )
-                status = "merged"
-            else:
-                journal_result, journal_prompt = generator.write_journal(
-                    date, day.captures, facts_result.value
-                )
-                labels.append(journal_prompt.label)
-                models["write_journal"] = journal_result.model
-                headline = journal_result.value.headline
-                title = default_title(date) + (f" · {headline}" if headline else "")
-                updated = apply_generation(
-                    day,
-                    facts=facts_result.value,
-                    journal=journal_result.value.journal,
-                    title=title,
-                    prompt_version=combined_version(labels),
-                    models_used=models,
-                    force=True,  # only reached for a day that is unedited
-                )
-                status = "regenerated"
+            filled, prompt = generator.fill_day(date, day.captures)
+            headline = filled.value.headline
+            title = default_title(date) + (f" · {headline}" if headline else "")
+            updated = apply_generation(
+                day,
+                facts=filled.value.facts,
+                journal=filled.value.journal,
+                title=title,
+                prompt_version=prompt.label,
+                models_used={**day.meta.models_used, "fill_day": filled.model},
+                force=True,  # only reached for a day that is unedited
+            )
+            status = "regenerated"
         except LLMError as exc:
             log.warning("regenerate %s: all models failed", date)
             done(DayOutcome(date, "failed", f"all models failed: {exc}"))

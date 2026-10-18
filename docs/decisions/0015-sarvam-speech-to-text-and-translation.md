@@ -1,6 +1,6 @@
 # 0015. Sarvam batch speech to text: code-mixed transcript plus an English translation
 
-- Status: accepted
+- Status: accepted (the translate job is superseded by 0048)
 - Date: 2026-10-12
 
 ## Context

@@ -2,20 +2,24 @@
   LUMITRACE DAY TEMPLATE (day file format 3, ADR 0045). The real file wraps these sections in the
   "## At a glance" facts region; see docs/frames-format.md and tests/fixtures/sample-day.md.
   Topic sections are "###", per-person blocks "####". "Audio and transcript" is the Transcript
-  region of the real file (raw text plus English translation per recording).
+  region of the real file (the code-mixed transcript per recording).
 
   HOW TO READ THIS FILE
   - Everything in <!-- comments --> is an instruction for whoever fills the file. Delete none of it.
-  - Names below (Sam, Maya, Leo, Ravi) are fictional. Use the real names from LUMITRACE_FAMILY.
-  - One subsection per family member in every section that has people, in the configured order.
-    A new family member in LUMITRACE_FAMILY gets a subsection in every such section.
+  - Names below (Sam, Maya, Leo, Ravi) are fictional. Use the real names from `secrets/family.md`.
+  - One subsection per family member in every section that has people, in the file's order.
+    A new family member in `secrets/family.md` gets a subsection in every such section.
   - Audio is mostly Telugu. The journal below is written in ENGLISH.
-    Source order: the Telugu original wins; the machine English translation is only a hint.
-    (ADR 0018.) Keep Telugu words that have no clean English, e.g. "thotakura (amaranth leaves)".
+    Source: the Telugu code-mixed transcript (ADR 0048). Keep Telugu words that have no clean
+    English, e.g. "thotakura (amaranth leaves)".
   - THE RULE: every line needs a phrase in the transcript behind it.
-      * Not said          -> write: not mentioned
-      * Said but unclear  -> end the line with: [uncertain: <why>]
+      * If you cannot tell what happened, drop it.
+      * If you can tell what happened but not a detail, keep it and end with [uncertain: why].
       * Never guess, never fill a gap to make a section look complete.
+  - Keep events in the order they were spoken. Reorder only when a time is stated.
+  - నిన్న or "yesterday" belongs to the previous date, not today.
+  - Every proper noun must appear in the transcript, keyterms, or glossary. Otherwise
+    [uncertain: name unclear]. Never invent a name.
   - STYLE: short bullets. One fact per bullet. No paragraphs. Plain words.
     Someone should get the whole day in under a minute.
 -->
@@ -45,7 +49,8 @@ lumitrace_format: 3
      - "Leo had X"          -> only Leo
      - Delivery / takeout   -> food only, NOT a place visited
      - Name the dish as said; keep Telugu food words with English in brackets
-     - Unsure which category (e.g. dal type) -> [uncertain: ...] -->
+     - Meal type is breakfast, lunch, dinner, snacks, or drinks
+     - Unsure which type (e.g. dal type) -> [uncertain: why] -->
 #### Leo
 - **Morning:** not mentioned
 - **Lunch:** not mentioned
@@ -116,10 +121,10 @@ lumitrace_format: 3
 - not mentioned
 
 ### Weather
-<!-- From a lookup for the place and date. The transcript never tells the weather.
-     - Format: <condition>, <temp> (<service>, <place>, <date>)
-     - No lookup done -> "not looked up (<city if known>)"
-     - Words like "nice day" are not weather data -->
+<!-- Null unless a weather lookup is passed in as input.
+     The transcript does not set the weather. "Nice day" is not a lookup.
+     When a lookup is in the input: <condition>, <temp> (<service>, <place>, <date>).
+     No lookup -> null. The file shows "not looked up". -->
 - not looked up
 
 ### Things we did
@@ -128,10 +133,15 @@ lumitrace_format: 3
      - Format: <activity> (<who>) -->
 - not mentioned
 
+## Thoughts
+<!-- Journal heading. What the author said they thought or felt.
+     Only when the transcript states it. Drop it when you cannot tell.
+     A thought you can tell, with an unclear detail, ends with [uncertain: why]. -->
+- <what the author said they thought>
+
 ## Audio and transcript
 <!-- Raw, never edited. One block per recording, oldest first.
-     - Telugu stays exactly as spoken
-     - English translation sits right under it (machine-made; may contain errors)
+     - Telugu stays exactly as spoken. Do not add a translation.
      - If a newer recording corrects an older one, the newer one wins in the sections above;
        keep both here -->
 ### 21:30 · Log My Day
@@ -140,7 +150,3 @@ lumitrace_format: 3
 **Telugu (as spoken)**
 
 <original transcript>
-
-**English translation**
-
-<translation>

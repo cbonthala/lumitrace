@@ -42,6 +42,7 @@ from lumitrace.frames.storage import Storage, get_storage
 from lumitrace.prism.auth import login_problem, require_auth, token_problem
 from lumitrace.prism.flash import register_flash
 from lumitrace.prism.inbox import CAPTURE_ID_RE, CaptureStatus, Inbox, inbox_dir, now_utc
+from lumitrace.prism.journal_schedule import JournalScheduler
 from lumitrace.prism.pipeline.processor import CaptureProcessor, CaptureRequest, UploadedFile
 from lumitrace.prism.worker import DEFAULT_RETRY_DELAYS, CaptureWorker
 
@@ -59,6 +60,7 @@ class Services:
     inbox: Inbox
     processor: CaptureProcessor
     worker: CaptureWorker
+    scheduler: JournalScheduler
 
 
 class AcceptedResponse(BaseModel):
@@ -352,9 +354,11 @@ def create_app(
             proc = processor or CaptureProcessor(settings, store)
             inbox = Inbox(store)
             worker = CaptureWorker(proc, inbox, retry_delays=retry_delays)
-            built = Services(settings, store, inbox, proc, worker)
+            scheduler = JournalScheduler(proc, worker)
+            built = Services(settings, store, inbox, proc, worker, scheduler)
             app.state.services = built
             worker.start()
+            scheduler.start()
             return built
 
     @asynccontextmanager
@@ -374,6 +378,7 @@ def create_app(
         try:
             yield
         finally:
+            await anyio.to_thread.run_sync(built.scheduler.stop)
             await anyio.to_thread.run_sync(built.worker.stop)
             app.state.services = None
 

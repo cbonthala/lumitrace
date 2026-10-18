@@ -2,7 +2,7 @@
 .tools/
 .venv/
 .tmp-skill/
-# Real names and corrections for the day-journal skill (personal; see glossary.example.md)
+# Real names live in secrets/family.md (personal; see docs/templates/family.example.md)
 .cursor/skills/lumitrace-telugu-day-journal/glossary.local.md
 __pycache__/
 *.py[cod]

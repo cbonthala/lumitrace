@@ -7,18 +7,15 @@ not modelled here. `.env.example` documents every variable; keep the two in sync
 
 from __future__ import annotations
 
-import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, PrivateAttr, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-OWNER_RELATIONS = frozenset({"me", "self"})
-"""Relations in ``LUMITRACE_FAMILY`` that mark the owner (``Sam (me)``)."""
-_FAMILY_ENTRY_RE = re.compile(r"^([^()]*?)\s*(?:\(([^()]*)\))?$")
+from lumitrace.household import Household, load_household
 
 
 class Settings(BaseSettings):
@@ -34,15 +31,7 @@ class Settings(BaseSettings):
     timezone: str = "America/Chicago"
     day_rollover_hour: int = Field(default=4, ge=0, le=23)
     prompts_dir: Path = Path("prompts")
-    family: str = ""
-    """Comma-separated names of the family members who get their own "Family" sub-section in
-    each day file, each optionally followed by its relation to the owner in parentheses, e.g.
-    ``Sam (me), Maya (wife), Leo (son)``; ``(me)`` marks the owner. Use :attr:`family_members`,
-    :attr:`family_relations` and :attr:`owner_name`."""
-    glossary: str = ""
-    """Notes for the AI prompts, separated by ``;``: names, relation words and known
-    mishearings, e.g. ``Leon is Leo's daycare friend; "Leo Nanna" means Sam; potty not party``.
-    Use :attr:`glossary_lines`."""
+    _household: Household = PrivateAttr(default_factory=Household)
 
     # --- Recording API -------------------------------------------------------------------
     api_token: SecretStr = SecretStr("")
@@ -70,8 +59,8 @@ class Settings(BaseSettings):
     stt_model: str = "openai/gpt-4o-transcribe"
     stt_language: str = "en"
     stt_keyterms: str = ""
-    """Comma-separated names, places and brands to bias recognition toward (Sarvam only). The
-    family names are always added. Use :attr:`stt_keyterm_list`."""
+    """Comma-separated names, places and brands to bias recognition toward (Sarvam only). Names
+    from the family file are always added. Use :attr:`stt_keyterm_list`."""
     aws_region: str = "us-east-1"
     aws_transcribe_bucket: str = ""
     sarvam_api_key: SecretStr = SecretStr("")
@@ -79,19 +68,18 @@ class Settings(BaseSettings):
     sarvam_mode: Literal["transcribe", "codemix", "verbatim", "translit"] = "codemix"
     """Output of the transcript kept in the day file; ``codemix`` keeps English words in English
     and the rest in its own script."""
-    sarvam_translate: bool = True
-    """Also translate each recording to English (stored next to the transcript and used by the
-    AI steps)."""
 
     # --- LLMs (LiteLLM model strings) ----------------------------------------------------
-    llm_extract_facts_model: str = "openai/gpt-4o-mini"
-    llm_write_journal_model: str = "openai/gpt-4o"
-    llm_fallback_model: str = "openai/gpt-4o-mini"
+    llm_write_journal_model: str = "gemini/gemini-3.8-flash"
+    """Fills the day file at 4:05 a.m., and updates it when a later recording arrives."""
+    llm_fallback_model: str = "gemini/gemini-3.6-flash"
     llm_timeout_seconds: int = 120
     llm_max_retries: int = 2
 
     # --- Embeddings ----------------------------------------------------------------------
-    embedding_model: str = "openai/text-embedding-3-small"
+    embedding_model: str = "gemini/gemini-embedding-2"
+    """Search vectors. The call asks for ``embedding_dimension`` values.
+    Gemini's full size is 3072."""
     embedding_dimension: int = Field(default=1536, gt=0)
 
     # --- Index / indexer -----------------------------------------------------------------
@@ -128,40 +116,44 @@ class Settings(BaseSettings):
     def tz(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)
 
+    def __init__(self, **kwargs: Any) -> None:
+        household = kwargs.pop("household", None)
+        super().__init__(**kwargs)
+        if household is not None:
+            if not isinstance(household, Household):
+                raise TypeError("household must be a Household")
+            self._household = household
+
+    def with_household(self, household: Household) -> Settings:
+        """A copy of these settings that uses ``household`` instead of an empty family."""
+        copied = self.model_copy()
+        copied._household = household
+        return copied
+
+    @property
+    def household(self) -> Household:
+        """Family members and notes. Empty unless passed in or loaded by :func:`get_settings`."""
+        return self._household
+
     @property
     def family_members(self) -> list[str]:
-        """:attr:`family` names as a list: relations dropped, trimmed, empty names dropped,
-        duplicates (any case) removed."""
-        return list(self.family_relations)
+        """Names from the family file, in file order."""
+        return self._household.members
 
     @property
     def family_relations(self) -> dict[str, str]:
-        """``{name: relation}`` from :attr:`family`, in order; ``""`` when no relation is given.
-        ``Maya (wife)`` gives ``{"Maya": "wife"}``."""
-        relations: dict[str, str] = {}
-        seen: set[str] = set()
-        for raw in self.family.split(","):
-            match = _FAMILY_ENTRY_RE.match(" ".join(raw.split()))
-            if not match or not match.group(1):
-                continue
-            name, relation = match.group(1).strip(), (match.group(2) or "").strip()
-            if name.casefold() not in seen:
-                seen.add(name.casefold())
-                relations[name] = relation
-        return relations
-
-    @property
-    def glossary_lines(self) -> list[str]:
-        """:attr:`glossary` notes as a list: split on ``;``, whitespace collapsed, empty dropped."""
-        return [" ".join(part.split()) for part in self.glossary.split(";") if part.strip()]
+        """``{name: relation}`` from the family file; ``""`` when no relation is given."""
+        return self._household.relations
 
     @property
     def owner_name(self) -> str | None:
-        """The family member marked ``(me)`` or ``(self)``: the person who keeps the journal."""
-        for name, relation in self.family_relations.items():
-            if relation.casefold() in OWNER_RELATIONS:
-                return name
-        return None
+        """The family member marked ``me`` or ``self``: the person who keeps the journal."""
+        return self._household.owner_name
+
+    @property
+    def glossary_text(self) -> str:
+        """Markdown notes from the family file, or ``(none)``."""
+        return self._household.glossary
 
     @property
     def stt_keyterm_list(self) -> list[str]:
@@ -176,5 +168,11 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Process-wide settings singleton. Tests should construct `Settings(...)` directly."""
-    return Settings()
+    """Process-wide settings singleton. Loads ``secrets/family.md`` when that file exists.
+
+    Tests should construct ``Settings(...)`` directly. That does not read the family file,
+    so a checkout with real names in ``secrets/`` cannot leak into tests.
+    """
+    settings = Settings()
+    settings._household = load_household()
+    return settings

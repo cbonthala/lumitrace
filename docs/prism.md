@@ -58,11 +58,12 @@ Response `202 Accepted` (new) or `200 OK` (this `capture_id` was already receive
 
 `message` is meant to be shown as the Shortcut's notification.
 
-### `POST /notes` (Quick Note)
+### `POST /notes` (a photo with no recording)
 
 Same fields, but `audio` is optional and `text` is added; at least one of `text`, `audio` or a
-photo is required (text and audio: the transcript is appended after the text; photos only: e.g.
-photos shared from the Photos app). Accepts `multipart/form-data`,
+photo is required (text and audio: the transcript is appended after the text; photos only: the
+Log My Day **Send** button, or photos shared from the Photos app). The Flash web app no longer
+has a typed Quick Note. Accepts `multipart/form-data`,
 `application/x-www-form-urlencoded` or `application/json` (text-only notes, e.g.
 `{"text": "...", "captured_at": "...", "date": "2026-10-08", "capture_id": "..."}`). Same
 response.
@@ -91,9 +92,10 @@ response.
 
 * `status`: `queued` → `processing` → `done`, or `failed` after the automatic retries. While an
   automatic retry is waiting, `status` is `queued` and `retry_at` is set.
-* `generation`: `full` (facts, title and journal regenerated for the whole day), `additive` (the
-  day was edited by the owner, so only additions; see below), `skipped` (no words), or `failed`
-  (the transcript is saved but every AI model failed; `errors` says which step).
+* `generation`: `deferred` (transcript saved; the journal waits until 4:05 a.m.),
+  `full` (facts, title and journal written from every transcript), `update` (a recording that
+  arrived after that write; only that recording is added), `skipped` (no words), or `failed`
+  (the transcript is saved but the model failed).
 * `404` for an unknown id.
 
 ### `POST /captures/{capture_id}/retry`
@@ -216,27 +218,25 @@ activity record.
      `en-US` (also `es`, `fr`, `de`, ... mapped; `xx-YY` codes are used as-is; anything else uses
      language identification). Turn on the **AWS Organizations AI services opt-out policy** so
      AWS does not use the audio to improve its models. Needs `boto3` and AWS credentials.
-   * `sarvam` (ADR 0015): Sarvam's Saaras batch API (`https://api.sarvam.ai`, header
-     `api-subscription-key: LUMITRACE_SARVAM_API_KEY`; recordings up to 2 hours). Two jobs run at
-     the same time on the same audio: the **transcript** in `LUMITRACE_SARVAM_MODE` (default
-     `codemix`: English words in English, Telugu or other Indian-language words in their own
-     script) and, with `LUMITRACE_SARVAM_TRANSLATE=true`, an **English translation** (`translate`
-     mode). Each job: create (`POST /speech-to-text/job/v1` with `model`, `mode`,
-     `language_code`, `keyterms`), get a presigned upload URL, `PUT` the audio
-     (`x-ms-blob-type: BlockBlob`; the API key is never sent to the storage URL), start, poll the
-     status, then download the result JSON and read `transcript`. `LUMITRACE_STT_LANGUAGE=te`
-     becomes `te-IN` (`xx-YY` is used as-is, empty means `unknown` = detect). `keyterms` (only
-     sent to `saaras:v4`) are the `LUMITRACE_FAMILY` names plus `LUMITRACE_STT_KEYTERMS`, at most
-     50, each cut to 64 characters; they help the names come out right. A failed transcript job
-     fails the capture (it is retried); a failed translation job only adds a
-     `transcribe: translation: ...` warning and the capture keeps its transcript. Errors never
-     echo the presigned URLs (they carry access tokens). Sarvam has no endpoint to delete a job;
-     check its data-retention terms before sending private audio. `models_used.stt` is
-     `sarvam/<model>`; no cost is recorded (Sarvam prices in rupees per hour of audio).
+   * `sarvam` (ADR 0015, translate job removed by ADR 0048): Sarvam's Saaras batch API
+     (`https://api.sarvam.ai`, header `api-subscription-key: LUMITRACE_SARVAM_API_KEY`; recordings
+     up to 2 hours). One job: the **transcript** in `LUMITRACE_SARVAM_MODE` (default `codemix`:
+     English words in English, Telugu or other Indian-language words in their own script). Create
+     (`POST /speech-to-text/job/v1` with `model`, `mode`, `language_code`, `keyterms`), get a
+     presigned upload URL, `PUT` the audio (`x-ms-blob-type: BlockBlob`; the API key is never
+     sent to the storage URL), start, poll the status, then download the result JSON and read
+     `transcript`. `LUMITRACE_STT_LANGUAGE=te` becomes `te-IN` (`xx-YY` is used as-is, empty means
+     `unknown` = detect). `keyterms` (only sent to `saaras:v4`) are the names from
+     `secrets/family.md` plus `LUMITRACE_STT_KEYTERMS`, at most 50, each cut to 64 characters;
+     they help the names come out right. A failed transcript job fails the capture (it is
+     retried). Errors never echo the presigned URLs (they carry access tokens). Sarvam has no
+     endpoint to delete a job; check its data-retention terms before sending private audio.
+     `models_used.stt` is `sarvam/<model>`; no cost is recorded (Sarvam prices in rupees per hour
+     of audio).
    * `fake`: offline; uploaded bytes that are UTF-8 text become the transcript.
-   If transcription fails nothing has been written yet, so the capture is simply retried. A
-   translation is stored in the capture block below the transcript (`Capture.translation`,
-   `docs/frames-format.md` → Capture metadata).
+   If transcription fails nothing has been written yet, so the capture is simply retried. New
+   recordings have no English translation. A translation already stored on an older capture
+   (`Capture.translation`, `docs/frames-format.md`) is left in the file.
 4. **Photos** (`pipeline/photos.py`): Pillow + pillow-heif (HEIC); rotated upright from EXIF,
    fitted within `LUMITRACE_PHOTO_MAX_DIMENSION`, saved as JPEG at `LUMITRACE_PHOTO_JPEG_QUALITY`
    without EXIF (no GPS or device data in the copy). Named with `next_photo_names()` after the
@@ -247,39 +247,48 @@ activity record.
    is re-read and `merge_capture` adds the transcript block; the day file and its
    `_system/generated/` snapshot are written. From here on the capture is safe even if the AI
    steps fail (ADR 0011).
-6. **AI steps** (`pipeline/generate.py`, `pipeline/llm.py`), only if the day has any words:
-   * Day **not** edited by the owner → **full**: `extract_facts` over all of the day's captures
-     (JSON validated against `DayFacts`; `keep_family` gives every `LUMITRACE_FAMILY` member a block,
-     empty if the day says nothing about them, spelled as configured, and drops anyone else;
-     meal types are mapped to the five fixed ones), then `write_journal` (JSON
-     `{headline, journal}`), then `apply_generation` with the title
-     `"<Weekday, Month D, YYYY> · <headline>"`, which gives the journal the fixed headings
-     (`normalize_journal`, `docs/frames-format.md` → The journal).
-   * Day **edited** (`DayFile.is_user_edited()`) → **additive**: `extract_facts` over the new
-     capture only, `journal_addendum` (a short paragraph about the new entry, given the edited
-     journal as context), then `merge_generation_additive`, which appends the paragraph under
-     `## Later` with the label `**HH:MM · Quick Note**`.
-     Existing facts, title and journal are never changed; new places, people, highlights and
-     family items are appended.
-   * Before writing, the day file is read **again**. If the owner edited it while the AI was
-     working, a full result is thrown away and the additive path runs instead, so a concurrent
-     edit is never overwritten.
-   * If one step fails on every model, the other step's result is still applied (facts without a
-     new journal, or a journal with the old facts). If both fail, the day keeps the transcript
-     and `generation` is `failed`.
-   * Front matter: `prompt_version` (e.g. `extract_facts-v6+write_journal-v4`) and `models_used`
-     (`stt`, `extract_facts`, `write_journal` or `journal_addendum`: the models that actually
-     answered), merged with what was there.
-7. **Write** the day file and its snapshot again.
-8. **Nudge** the indexer (`nudge_indexer` with the day file, audio and photo paths). A failed or
+6. **Journal timing** (`pipeline/processor.py`, `journal_schedule.py`, ADR 0046). The facts and
+   journal are written **once per day**, not on every recording.
+   * While the day is still open (before `LUMITRACE_DAY_ROLLOVER_HOUR`, 4 a.m. in the owner's
+     timezone) the capture is saved and `generation` is `deferred`. A marker is left at
+     `_system/journal-due/YYYY-MM-DD.txt`.
+   * Five minutes after the rollover (4:05 a.m.), and again whenever the Prism starts, every
+     closed day that still has a marker is written. The run waits until the capture worker is
+     idle, so a recording from just before 4 a.m. is included. One write sees every recording;
+     a later recording still overrides an earlier one.
+   * A capture for a day that has **already** closed (uploaded after 4 a.m., or sent with an
+     earlier `date`) is written immediately, because the morning run has passed.
+   * If that run fails, the marker stays and the next start tries again.
+7. **AI steps** (`pipeline/generate.py`, `pipeline/llm.py`), when the journal is written and the
+   day has any words:
+   * The day's journal does not exist yet → **full**: one `fill_day` call (ADR 0049, 0050).
+     The model sees every Telugu transcript, the family-file glossary, the keyterms, and
+     `prompts/day-template.md`. It returns JSON `{headline, journal, facts}`. Facts are
+     validated against `DayFacts` (`keep_family` gives every member in `secrets/family.md` a
+     block). `apply_generation` writes the day file, title
+     `"<Weekday, Month D, YYYY> · <headline>"`, and the fixed journal headings
+     (`normalize_journal`, `docs/frames-format.md` → The journal). This is the 4:05 a.m. write.
+     It replaces a journal typed earlier that same night. Notes and transcripts stay.
+   * The journal was already written, and a **new** recording arrives → **update**: one
+     `update_day` call. The model sees that recording only, plus the journal and facts already
+     on the page. It returns new facts and a few lines. `merge_generation_additive` adds the
+     facts and appends the lines under `## Later` with the label `**HH:MM · Quick Note**`.
+     Words already on the page, including your edits, stay. This happens whether or not you
+     edited the file.
+   * If the call fails on every model, the day keeps the transcript and `generation` is `failed`.
+   * Front matter: `prompt_version` (`fill_day` or `update_day`) and `models_used`
+     (`stt`, `fill_day` or `update_day`: the model that answered), merged with what was there.
+8. **Write** the day file and its snapshot again.
+9. **Nudge** the indexer (`nudge_indexer` with the day file, audio and photo paths). A capture
+   nudges as soon as its transcript is saved, and the morning journal nudges again. A failed or
    refused nudge is recorded but never fails the capture; the indexer also polls.
-9. **Activity record** appended (also for failed attempts); the worker then marks the status
-   `done` and deletes the inbox folder.
+10. **Activity record** appended (also for failed attempts); the worker then marks the status
+    `done` and deletes the inbox folder. The morning run appends its own record with capture id
+    `journal-YYYY-MM-DD`.
 
 ### Models and fallback
 
-Each AI call goes to the task's model (`LUMITRACE_LLM_EXTRACT_FACTS_MODEL`,
-`LUMITRACE_LLM_WRITE_JOURNAL_MODEL`; the addendum uses the journal model) with
+Each AI call goes to `LUMITRACE_LLM_WRITE_JOURNAL_MODEL` with
 `response_format={"type": "json_object"}`, `timeout=LUMITRACE_LLM_TIMEOUT_SECONDS`,
 `num_retries=LUMITRACE_LLM_MAX_RETRIES` and `drop_params=True` (LiteLLM drops parameters a provider
 does not support). A provider error, a reply that is not JSON (code fences and chatter around the
@@ -288,7 +297,7 @@ same request goes to `LUMITRACE_LLM_FALLBACK_MODEL` (ADR 0014). An out-of-range 
 to null instead of rejecting the whole reply.
 
 The model string **`fake`** never calls a provider: facts come back empty and the journal is the
-day's text under `## Summary`. With `LUMITRACE_STT_PROVIDER=fake` and the three `LUMITRACE_LLM_*`
+day's text under `## Summary`. With `LUMITRACE_STT_PROVIDER=fake` and both `LUMITRACE_LLM_*`
 models set to `fake`, the whole API runs offline.
 
 ### Regenerating days
@@ -296,55 +305,56 @@ models set to `fake`, the whole API runs offline.
 `lumitrace-prism regenerate [--from D] [--to D] [--dry-run] [--nudge]` (code:
 `lumitrace/prism/regenerate.py`) redoes past days from their stored transcripts with the current
 prompts and the current day format. A day you did not edit (its hash matches, or the file equals
-its `_system/generated` snapshot) gets new facts, title and journal; an edited day only gains
-the new facts. Notes, transcripts, audio and photos are never touched. It writes the day file
+its `_system/generated` snapshot) gets new facts, title and journal. A day you edited is left
+alone. Notes, transcripts, audio and photos are never touched. It writes the day file
 and the identical snapshot, like the Prism does. It calls the AI models for every day (cost),
-so start with `--dry-run` and a short date range. Days without transcript text are skipped.
+so start with `--dry-run` and a short date range. Days without transcript text, and days you
+edited, are skipped.
 
 ### Prompts
 
-Versioned files in `prompts/<task>/<version>.md` (`prompts/README.md`): `extract_facts/v6.md`,
-`write_journal/v4.md`, `journal_addendum/v4.md` (older versions are kept for reference). The
-current versions are in `lumitrace.prism.pipeline.prompts.PROMPT_VERSIONS`. Each file has a
-system part and a user part separated by `<!-- lumitrace-prompt: system -->` /
-`<!-- lumitrace-prompt: user -->`, with `{{name}}` placeholders (`date`, `location`, `captures`,
-`facts`, `journal`, `capture`, `author`, `family`, `glossary`). A missing value raises an error. Prompts tell
-the model to use only what the entries say and never invent.
+One file per task in `prompts/` (`prompts/README.md`, ADR 0051): `fill_day.md` and
+`update_day.md`. `day-template.md` in the same folder is pasted into the fill-day user message.
+Each instruction file has a system part and a user part separated by
+`<!-- lumitrace-prompt: system -->` / `<!-- lumitrace-prompt: user -->`, with `{{name}}`
+placeholders (`date`, `captures`, `facts`, `journal`, `capture`, `author`, `family`,
+`glossary`, `keyterms`, `template`). A missing value raises an error. Prompts tell
+the model to use only what the entries say and never invent. Edit the file in place. Git is
+the history. A new day stores the task name in `prompt_version`.
 
-The current versions (ADR 0016) also tell the model:
+The instructions (ADR 0016) also tell the model:
 
-* **Who is speaking and how everyone is related:** `author` is the `LUMITRACE_FAMILY` member
-  marked `(me)` (`(not given)` otherwise) and `family` lists every member with their relation,
-  e.g. `Sam (the author), Maya (the author's wife), Leo`. Relationship words in any language
+* **Who is speaking and how everyone is related:** `author` is the `secrets/family.md` member
+  whose relation is `me` (`(not given)` otherwise) and `family` lists every member with their
+  relation and birth date when the file has one, for example
+  `Sam (the author), Maya (the author's wife, born 1990-04-12), Leo`. Relationship words in any language
   (Dad, Amma, Nanna, ...) are resolved from the point of view of whoever says them, and the
   author's own facts go in their family block.
 * **Who did what:** every action, meal, place and feeling belongs to the person who did it;
   "we" is the author plus whoever it clearly includes; the journal never makes the author the
   subject of something someone else did.
-* **How to read the entries:** a recording with a translation is shown as
-  `English translation (machine-made from the audio):` followed by
-  `Original transcript (as spoken):`. The model reads both and follows the original when they
-  disagree (machine translations mix up who did what and mistranslate idioms; v4/v3, ADR 0018),
-  leaves a detail out only when neither makes sense, never turns a misheard phrase into a food,
-  place or name, and writes in English. Parents talking about themselves in their child's words
-  ("Dad went to bed early") mean the author.
-* **The author's own block** (`extract_facts` v4) always repeats the author's mood, meals,
-  places, activities and moments; a meal eaten without a named food is described from the
-  entry ("food from the deli") instead of borrowing another meal's food, and a meal's type may
-  come from the order of events. Feelings and worries anyone expressed are kept as moments and
-  in the journal.
-* **The Telugu day rules** (`extract_facts` v6, `write_journal` v4, `journal_addendum` v4; ADR
-  0045, mirrored by the skill `.cursor/skills/lumitrace-telugu-day-journal/`): the audio is mostly
-  Telugu, the journal is English; the original wins over the machine translation and later
-  recordings win over earlier ones; the translation's known errors are listed (wrong subject,
-  sound-alike words, similar names, a kids' show read as a friend); "<child> Nanna" is the
-  father speaking, "my Nanna" is the author's own father, a bare "Nanna" is left out when
-  unclear; deliveries are not visits, shows are not people, a guess is not a health fact; small
-  emotional moments are kept. The journal is bullets (Summary has 3 to 5, ending with
-  `**Remember:**`) and the addendum is one to three bullets. `{{glossary}}` is the owner's
-  `LUMITRACE_GLOSSARY` notes (names, relation words, known mishearings), or `(none)`.
-* **The facts can be wrong:** `write_journal` follows the entries when the extracted facts
-  disagree with them, and uses Morning/Afternoon/Evening only for events the entries place
+* **How to read the entries:** both prompts receive the code-mixed transcript, the family-file
+  glossary and the keyterms. They do not receive an English translation (ADR 0048). Parents
+  talking about themselves in their child's words ("Dad went to bed early") mean the author.
+  The model never turns a misheard phrase into a food, place or name, and writes in English.
+* **The author's own block** always repeats the author's mood, meals, places, activities and
+  moments; a meal eaten without a named food is described from the entry ("food from the deli")
+  instead of borrowing another meal's food, and a meal's type may come from the order of events.
+  Feelings and worries anyone expressed are kept as moments and in the journal.
+* **The Telugu day rules** (`fill_day.md` and `update_day.md`; ADR 0045, 0047, 0048 and 0050,
+  mirrored by the skill `.cursor/skills/lumitrace-telugu-day-journal/`): the audio is mostly
+  Telugu, the journal is English; at 4:05 a.m. every transcript is in one write, and a later
+  recording only adds what it says; "<child> Nanna" is the father speaking, "my Nanna" is the
+  author's own father, and a bare Nanna means the author when they are talking about their own
+  child (otherwise `[uncertain: who is Nanna]`); deliveries are not visits,
+  shows are not people, a guess is not a health fact; small emotional moments are kept. The
+  morning journal is bullets (Summary has 3 to 5, ending with `**Remember:**`). A later
+  recording adds one to three bullets. `{{glossary}}` is the Markdown under the front matter
+  of `secrets/family.md` (who people are, usual routines, spellings), or `(none)`.
+  `{{keyterms}}` is the speech-to-text keyterm list (family names, then
+  `LUMITRACE_STT_KEYTERMS`), or `(none)`. Those notes resolve words that were said. They are
+  not facts for today.
+* **Time of day:** the journal uses Morning/Afternoon/Evening only for events the entries place
   there.
 
 ## Activity records (`_system/activity/YYYY/MM.jsonl`)
@@ -355,26 +365,23 @@ One JSON line per processing attempt, appended to the file for the month the att
 ```json
 {"capture_id": "phone-001", "kind": "recording", "attempt": 1, "status": "done",
  "entry_date": "2026-10-10", "received_at": "...", "started_at": "...", "finished_at": "...",
- "generation": "full", "prompt_versions": {"extract_facts": "v3", "write_journal": "v2"},
- "models": {"stt": "openai/gpt-4o-transcribe", "extract_facts": "openai/gpt-4o-mini",
-            "write_journal": "openai/gpt-4o"},
+ "generation": "full",
+ "models": {"stt": "sarvam/saaras:v4", "fill_day": "gemini/gemini-3.8-flash"},
  "steps": [
    {"name": "compress_audio", "ms": 812, "ok": true,
     "detail": {"bytes_in": 5242880, "bytes_out": 1468006, "compressor": "ffmpeg"}},
-   {"name": "transcribe", "ms": 9120, "ok": true, "model": "openai/gpt-4o-transcribe",
+   {"name": "transcribe", "ms": 9120, "ok": true, "model": "sarvam/saaras:v4",
     "cost_usd": 0.036, "detail": {"audio_bytes": 5242880, "chars": 4210}},
    {"name": "write_day", "ms": 640, "ok": true, "detail": {"captures": 2}},
-   {"name": "extract_facts", "ms": 3010, "ok": true, "model": "openai/gpt-4o-mini",
-    "cost_usd": 0.0009},
-   {"name": "write_journal", "ms": 7400, "ok": true, "model": "openai/gpt-4o",
+   {"name": "fill_day", "ms": 7400, "ok": true, "model": "gemini/gemini-3.8-flash",
     "cost_usd": 0.012},
    {"name": "write_day", "ms": 590, "ok": true, "detail": {"mode": "full"}},
    {"name": "nudge", "ms": 15, "ok": true, "detail": {"accepted": true}}],
  "cost_usd": 0.0489, "errors": [], "warnings": []}
 ```
 
-* Steps: `compress_audio`, `transcribe`, `photos`, `write_day`, `extract_facts`,
-  `write_journal`, `journal_addendum`, `nudge`. When the fallback model was needed, the step's
+* Steps: `compress_audio`, `transcribe`, `photos`, `write_day`, `fill_day` or `update_day`,
+  `nudge`. When the fallback model was needed, the step's
   `detail.attempts` lists each model with `ok`, `ms` and the error.
 * `cost_usd` comes from LiteLLM (`_hidden_params.response_cost` or `completion_cost`) and is
   missing when LiteLLM does not know the price (e.g. Amazon Transcribe, local models).
@@ -400,6 +407,12 @@ One JSON line per processing attempt, appended to the file for the month the att
 
 ## Configuration
 
+Family members and the notes the prompts use to resolve names live in `secrets/family.md`
+(ADR 0047), not in environment variables. Docker reads the same file at `/secrets/family.md`.
+A missing file means no family blocks and no notes. Copy `docs/templates/family.example.md`
+and fill in real names. `born` is optional (`YYYY-MM-DD`). The Markdown under the front matter
+is background only: the prompts must not turn a usual routine into a fact for today.
+
 | Setting | Use here |
 |---|---|
 | `LUMITRACE_API_TOKEN` | bearer token; at least 16 characters (`openssl rand -hex 32`); if it is missing, `change-me` or short, every request except `/health` gets `503` |
@@ -410,10 +423,8 @@ One JSON line per processing attempt, appended to the file for the month the att
 | `LUMITRACE_PHOTO_MAX_DIMENSION`, `LUMITRACE_PHOTO_JPEG_QUALITY` | photo copies |
 | `LUMITRACE_TIMEZONE`, `LUMITRACE_DAY_ROLLOVER_HOUR` | entry dates and capture times |
 | `LUMITRACE_STT_PROVIDER`, `LUMITRACE_STT_MODEL`, `LUMITRACE_STT_LANGUAGE`, `LUMITRACE_STT_KEYTERMS`, `LUMITRACE_AWS_REGION`, `LUMITRACE_AWS_TRANSCRIBE_BUCKET` | speech to text |
-| `LUMITRACE_SARVAM_API_KEY`, `LUMITRACE_SARVAM_MODEL` (`saaras:v4`), `LUMITRACE_SARVAM_MODE` (`codemix`), `LUMITRACE_SARVAM_TRANSLATE` (`true`) | the `sarvam` speech-to-text option |
-| `LUMITRACE_LLM_EXTRACT_FACTS_MODEL`, `LUMITRACE_LLM_WRITE_JOURNAL_MODEL`, `LUMITRACE_LLM_FALLBACK_MODEL`, `LUMITRACE_LLM_TIMEOUT_SECONDS`, `LUMITRACE_LLM_MAX_RETRIES` | AI steps (`fake` = offline) |
-| `LUMITRACE_GLOSSARY` | notes for the AI prompts separated by `;` (names, relation words, known mishearings); empty = none |
-| `LUMITRACE_FAMILY` | comma-separated family members who get their own block under Family, each optionally with their relation to the owner in parentheses, the owner marked `(me)`: `Sam (me), Maya (wife), Leo (son)`; empty = no family blocks |
+| `LUMITRACE_SARVAM_API_KEY`, `LUMITRACE_SARVAM_MODEL` (`saaras:v4`), `LUMITRACE_SARVAM_MODE` (`codemix`) | the `sarvam` speech-to-text option (one transcript job) |
+| `LUMITRACE_LLM_WRITE_JOURNAL_MODEL`, `LUMITRACE_LLM_FALLBACK_MODEL`, `LUMITRACE_LLM_TIMEOUT_SECONDS`, `LUMITRACE_LLM_MAX_RETRIES` | the day-file model and its fallback (`fake` = offline) |
 | `LUMITRACE_PROMPTS_DIR` | prompt files; a relative path that does not exist falls back to the repository's `prompts/` |
 | `LUMITRACE_INDEXER_NUDGE_URL` | nudge after each capture (empty = off) |
 | `LUMITRACE_MCP_ADMIN_URL` | the Lens's private admin API for connected AI apps (Compose: `http://lens:8003`) |

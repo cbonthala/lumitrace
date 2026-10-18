@@ -95,8 +95,8 @@ File: `tests/e2e/test_full_flow.py`
 All three programs run inside the test, sharing one temporary storage folder. Speech-to-text
 is the fake one (the uploaded bytes are the "spoken" words), fact extraction is a scripted
 stand-in, the journal is written by the built-in `fake` model, and audio compression behaves as
-on a computer without audio tools (the original file is kept). Only Leo is listed as family
-(`LUMITRACE_FAMILY`). The story:
+on a computer without audio tools (the original file is kept). Only Leo is listed in the family
+file. The story:
 
 1. **Capture.** At 9:30 p.m. on Saturday, October 10, 2026, a *Log My Day* recording about a
    morning run with Maya arrives with a photo and a location (Austin). Then a quick note about
@@ -169,6 +169,7 @@ File: `tests/prism/test_flash.py`
 - Checks that signing out tells the browser to delete the session cookie. <sub>`test_logout_clears_the_cookie`</sub>
 - Checks that sign-in counts as not set up when the username is blank, the password is a placeholder or too short, or the API token is too short, and that a session cannot be valid while sign-in is off. <sub>`test_login_problem`</sub>
 - Checks that the Capture page has an "Upload audio" button for audio files, and that an uploaded voice memo (an `.mp3` here) is sent like a recording: filed under the day it was recorded and processed into that day's file. <sub>`test_uploaded_voice_memo_is_sent_like_a_recording`</sub>
+- Checks that stopping a recording opens a review with pause, play, and discard icons, crop handles, and Send, that Send in the corner of the card can send photos with no recording, and that the page script no longer sends the moment you stop. <sub>`test_recording_is_reviewed_before_it_is_sent`</sub>
 - Checks that the recent-captures list needs a login, shows the newest capture first with its status and no journal text, and respects the limit and the allowed number of days. <sub>`test_recent_captures_newest_first`</sub>
 - Checks that the weekly summary counts the days with a day file in the last seven days, the entries in them, and the streak of days in a row up to today. <sub>`test_week_summary_counts_days_captures_and_streak`</sub>
 - Checks that the streak still counts while today has no entry yet, carries across the end of a month, drops to zero after a missed day, and that an empty journal gives all zeros. <sub>`test_streak_waits_for_today_and_crosses_months`</sub>
@@ -208,7 +209,7 @@ File: `tests/prism/test_capture_api.py`
 
 File: `tests/prism/test_capture_api.py`
 
-- Checks that a typed note sent after a recording joins the same day file, entries stay in time order, and the journal and facts are rewritten using both entries. <sub>`test_note_merges_into_the_same_day`</sub>
+- Checks that a typed note sent after the journal exists joins the same day file, entries stay in time order, the first journal stays, and the note is added under Later from that note only. <sub>`test_note_merges_into_the_same_day`</sub>
 - Checks that a note can be sent as a web form with text, or as a short audio clip that is transcribed and keeps its audio file. <sub>`test_note_as_form_and_as_audio_clip`</sub>
 - Checks that a note with only a photo is accepted: the photo is saved and listed on the day, and the AI writing step is skipped because there are no words. <sub>`test_photo_only_note`</sub>
 
@@ -233,12 +234,22 @@ File: `tests/prism/test_capture_api.py`
 
 - Checks that the location shown in the journal combines the place name and coordinates neatly, works with only coordinates or only a name (tidying spaces and line breaks), and is left out when there is nothing useful to show. <sub>`test_format_location`</sub>
 
+### Journal written once after the day closes
+
+File: `tests/prism/test_journal_schedule.py`
+
+- Checks that the journal time is five minutes after the day rollover: later the same morning when it is still before that time, the next day once that time has passed. <sub>`test_next_journal_at_is_five_minutes_after_the_rollover`</sub>
+- Checks that recordings sent while the day is still open are saved without calling the AI, that a run at 3:30 a.m. still waits, and that the 4:05 a.m. run writes one journal from every recording and does not write it again. <sub>`test_open_day_keeps_every_recording_and_writes_the_journal_once`</sub>
+- Checks that a journal typed before 4:05 a.m. is replaced by the morning write from the transcripts, and that a note in My notes is kept. <sub>`test_morning_run_writes_the_journal_even_if_one_was_typed_early`</sub>
+- Checks that a morning run where every model fails leaves the transcripts and tries again later, and the second try writes the journal. <sub>`test_a_failed_morning_run_is_tried_again`</sub>
+- Checks that the morning thread stops when the Prism stops, instead of waiting until 4:05. <sub>`test_scheduler_stops_while_it_is_waiting`</sub>
+
 ### Never overwriting your edits
 
 File: `tests/prism/test_pipeline.py`
 
-- Checks that after you edit a day (your own journal words, mood and notes), a later note does not rewrite it: your text, mood and notes stay, a short AI addition is appended under "## Later", labelled with the note's time, new people are added, the AI is shown your edited journal, and fact extraction only looks at the new entry. <sub>`test_edited_day_gets_additive_update`</sub>
-- Checks that if you edit the day while the AI is still writing, the AI's version is not saved over yours; the new entry is added on top instead. <sub>`test_edit_during_generation_is_not_overwritten`</sub>
+- Checks that after the journal exists, a later note adds to the day from that note only: your journal words, mood and notes stay, a short addition is appended under "## Later", new people are added, and the model is not shown the earlier transcript. <sub>`test_edited_day_gets_additive_update`</sub>
+- Checks that if you edit the journal while that later update is running, your words stay and the new lines are added under them. <sub>`test_edit_during_generation_is_not_overwritten`</sub>
 
 ### When speech or AI services fail
 
@@ -262,7 +273,7 @@ File: `tests/prism/test_pipeline.py`
 
 File: `tests/prism/test_activity.py`
 
-- Checks that each capture adds exactly one line to the monthly activity log with its id, status, date, models, prompt versions and how long each step took (compress audio, transcribe, write the day, extract facts, write the journal, write again, nudge), and that no names, places, transcript or journal words ever appear in it. <sub>`test_one_line_per_capture_without_content`</sub>
+- Checks that each capture adds exactly one line to the monthly activity log with its id, status, date, models and how long each step took (compress audio, transcribe, write the day, fill the day, write again, nudge), and that no names, places, transcript or journal words ever appear in it. <sub>`test_one_line_per_capture_without_content`</sub>
 - Checks that the AI cost of each step is added up into a total. <sub>`test_cost_is_summed_when_known`</sub>
 - Checks that a failing step is marked as failed with a short error message, and the error is still passed on. <sub>`test_failed_step_is_recorded_and_reraised`</sub>
 - Checks that the log file is named by year and month and new records are added after the existing ones. <sub>`test_append_keeps_existing_lines`</sub>
@@ -300,10 +311,9 @@ File: `tests/prism/test_stt.py`
 - Checks, against an imitation of Amazon's services, that the AWS option uploads the audio, starts a job with the right format and language, waits for it, reads the transcript and deletes every file it created. <sub>`test_aws_transcribe_round_trip_and_cleanup`</sub>
 - Checks that a failed AWS job still cleans up its files and reports the failure, and that an audio format AWS can't read is refused up front. <sub>`test_aws_transcribe_failure_still_cleans_up`</sub>
 - Checks how the language setting is passed to AWS: a full code like "en-GB" as is, "es" as US Spanish, and an empty setting as "detect the language". <sub>`test_aws_language_options`</sub>
-- Checks, against an imitation of Sarvam's batch service, that the Sarvam option runs a transcript job and a translation job on the same upload, sends the model, mode, Telugu language code and the family names plus extra keyterms, keeps the API key away from the file-storage links, uploads `.m4a` as `audio/x-m4a` (Sarvam returns an empty transcript for a generic type), and returns both texts. <sub>`test_sarvam_transcript_and_translation`</sub>
+- Checks, against an imitation of Sarvam's batch service, that the Sarvam option runs one transcript job, sends the model, codemix mode, Telugu language code and the family names plus extra keyterms, returns no translation, keeps the API key away from the file-storage links, and uploads `.m4a` as `audio/x-m4a` (Sarvam returns an empty transcript for a generic type). <sub>`test_sarvam_transcript_only`</sub>
 - Checks that an empty Sarvam transcript is reported as a warning (so it shows in the capture status) and that `.mp3` is uploaded as `audio/mpeg`. <sub>`test_sarvam_empty_transcript_is_a_warning`</sub>
-- Checks the Sarvam options: translation can be turned off, keyterms are only sent to the v4 model, an empty language means "detect it", unsupported audio formats are refused, and a missing API key gives a clear error. <sub>`test_sarvam_options`</sub>
-- Checks that when only Sarvam's translation fails, the transcript is still returned, with a warning that says why. <sub>`test_sarvam_failed_translation_keeps_the_transcript`</sub>
+- Checks the Sarvam options: keyterms are only sent to the v4 model, an empty language means "detect it", unsupported audio formats are refused, and a missing API key gives a clear error. <sub>`test_sarvam_options`</sub>
 - Checks that a failed Sarvam transcript job raises an error with the reason, and that a refused upload reports only the HTTP status, never the secret upload link. <sub>`test_sarvam_failed_transcript_raises_without_leaking_urls`</sub>
 - Checks that the speech-to-text setting picks the right option (fake, LiteLLM or Sarvam), and that choosing AWS without a storage bucket gives a clear error. <sub>`test_get_transcriber`</sub>
 
@@ -312,14 +322,14 @@ File: `tests/prism/test_stt.py`
 File: `tests/prism/test_prompts_llm.py`
 
 - Checks that all three AI instructions (extract facts, write the journal, write an addition) exist and are filled in completely with no `{{blanks}}` left, and that entries are shown to the AI with the date, weekday, time, entry type and location. <sub>`test_every_current_prompt_exists_and_renders`</sub>
-- Checks that the owner's glossary notes reach all three AI instructions as a bullet list, and that "(none)" is sent when there are none. <sub>`test_glossary_is_sent_to_every_prompt`</sub>
-- Checks that each prompt file has the expected layout and version label and tells the AI never to invent or guess. <sub>`test_prompt_files_follow_the_layout`</sub>
+- Checks that the owner's family-file notes reach both AI instructions as written, and that "(none)" is sent when there are none. <sub>`test_glossary_is_sent_to_every_prompt`</sub>
+- Checks that each prompt file has a system part and a user part, is named for its task, tells the AI never to invent or guess, and that the day template sits in the prompts folder. <sub>`test_prompt_files_follow_the_layout`</sub>
 - Checks that a badly laid out prompt file, a missing value for a blank, or a missing prompt file give clear errors. <sub>`test_prompt_errors`</sub>
 - Checks that the prompts folder is found in the project even when the program is started from another folder. <sub>`test_relative_prompts_dir_falls_back_to_repository`</sub>
-- Checks that prompt versions are combined into one label (such as `extract_facts-v1+write_journal-v2`) for the day file. <sub>`test_combined_version`</sub>
+- Checks that the names of the prompts used on a day are joined into one label (such as `fill_day+update_day`) for the day file, and that a repeated name is kept once. <sub>`test_join_prompt_labels`</sub>
 - Checks that only the family members listed in the settings keep a family block: anyone else is dropped, names are spelled as in the settings ("leo" becomes "Leo"), they come in the settings' order, a name given twice keeps its first block, an empty list drops everyone, and every listed member the AI said nothing about gets an empty block. <sub>`test_keep_family_drops_unknown_names_and_uses_configured_spelling`</sub>
-- Checks that the fact-extraction prompt tells the AI who is speaking and how each family member is related to them ("Sam (the author), Maya (the author's wife), Leo"), and says "(not given)" when nobody is marked "(me)". <sub>`test_extract_facts_sends_the_family_list`</sub>
-- Checks that a recording with an English translation is shown to the AI as the translation first, then the original transcript as spoken. <sub>`test_captures_show_translation_and_original`</sub>
+- Checks that the fill-day prompt tells the AI who is speaking and how each family member is related to them, including a birth date ("Sam (the author), Maya (the author's wife, born 1990-04-12), Leo"), and says "(not given)" when nobody has relation "me". <sub>`test_fill_day_sends_the_family_list`</sub>
+- Checks that the fill-day and update-day prompts receive the Telugu transcript, the family names and the extra keyterms, and do not receive an English translation. <sub>`test_journal_gets_the_transcript_and_keyterms_not_a_translation`</sub>
 - Checks that the AI's structured (JSON) reply is understood even when wrapped in code fences or surrounded by chatty text, and refused when there is no data at all. <sub>`test_extract_json_tolerates_fences_and_chatter`</sub>
 - Checks that extracted facts are held to the day-file format: a reply wrapped in a "facts" object is unwrapped, an out-of-range mood score and empty values are dropped, and badly shaped replies (not an object, a meal without a type) are refused. <sub>`test_parse_facts_validates_against_dayfacts`</sub>
 - Checks that the AI client passes the timeout, retry and "reply in JSON" settings to the provider, switches to the backup model when the main one fails, records each attempt, tries a model only once when it is also the backup, and gives a clear error naming both models when all fail. <sub>`test_llm_client_passes_config_and_falls_back`</sub>
@@ -718,7 +728,7 @@ File: `tests/index/test_schema.py`
 
 ## Config and shared helpers
 
-**Covered:** settings and their defaults, `.env.example`, the fake embeddings, nudges, the Bruno
+**Covered:** settings and their defaults, `.env.example`, the family file, the fake embeddings, nudges, the Bruno
 collection, and the completeness of this catalog. **Not covered:** real embedding providers,
 running the collection in the Bruno app itself.
 
@@ -730,16 +740,27 @@ File: `tests/test_config.py`
 - Checks that `LUMITRACE_*` environment variables override the defaults and that the API token is hidden when settings are printed. <sub>`test_env_overrides`</sub>
 - Checks that an unknown timezone, a switch-over hour of 24, or an unsupported storage type are refused. <sub>`test_validation`</sub>
 - Checks that `.env.example` lists every setting, and nothing that doesn't exist. <sub>`test_env_example_documents_every_setting`</sub>
-- Checks that `LUMITRACE_FAMILY` is read as a list of names: spaces trimmed, empty entries and repeats (ignoring case) dropped, and an empty setting means no family. <sub>`test_family_members_from_a_comma_separated_list`</sub>
-- Checks that relations in `LUMITRACE_FAMILY` ("Sam (me), Maya (wife), Leo (son)") are read per name, that "(me)" or "(self)" marks the owner, that names without a relation still count, and that a broken entry is skipped. <sub>`test_family_relations_and_owner`</sub>
-- Checks that `LUMITRACE_GLOSSARY` is split on semicolons into trimmed notes, with empty entries dropped, and that an empty setting gives no notes. <sub>`test_glossary_lines_split_on_semicolons`</sub>
-- Checks that the speech-to-text keyterms are the family names followed by `LUMITRACE_STT_KEYTERMS`, trimmed and without repeats (ignoring case). <sub>`test_stt_keyterms_start_with_the_family`</sub>
+- Checks that a household passed to settings supplies the family names, relations, owner, notes and the start of the speech-to-text key terms, and that settings with no household have no family and send "(none)". <sub>`test_household_on_settings_drives_family_and_keyterms`</sub>
+- Checks that constructing settings does not read `secrets/family.md`, so a real family file cannot leak into tests. <sub>`test_settings_does_not_read_the_family_file`</sub>
+- Checks that the process-wide settings load the first family file that exists, including its notes. <sub>`test_get_settings_loads_the_first_family_file`</sub>
+
+### Family file
+
+File: `tests/test_household.py`
+
+- Checks that a family file is read as names, relations and birth dates in order, that a repeated name is dropped, that a blank name is skipped, that "me" marks the owner, and that the Markdown under the front matter is kept as notes. <sub>`test_parse_household_reads_people_birth_dates_and_notes`</sub>
+- Checks that "self" also marks the owner, that a file with no front matter is notes only, and that an empty file has no members and no notes. <sub>`test_self_marks_the_owner_and_notes_only_files_have_no_members`</sub>
+- Checks that broken YAML, a family value that is not a list, a family entry that is not a mapping, and a birth date that is not YYYY-MM-DD are refused. <sub>`test_bad_family_file_is_refused`</sub>
+- Checks that the committed example file parses as Sam, Maya and Leo, with Maya's birth date and Leon in the notes. <sub>`test_the_example_file_parses`</sub>
+- Checks that loading a path reads that file, a path that is not there is refused, a search that finds nothing is an empty household, and a broken file names itself in the error. <sub>`test_load_household_reads_a_path_and_an_empty_search`</sub>
 
 ### Embeddings and nudges
 
 File: `tests/test_shared_helpers.py`
 
 - Checks that the offline fake embeddings are repeatable, have the configured size and length 1, differ for different texts, and handle empty input. <sub>`test_fake_embeddings_are_deterministic_unit_vectors`</sub>
+- Checks that a real embedding call asks for the configured size, and that the vectors come back in input order. <sub>`test_provider_embeddings_ask_for_the_configured_size`</sub>
+- Checks that a vector of the wrong size is refused. <sub>`test_provider_embeddings_refuse_the_wrong_size`</sub>
 - Checks that fake embeddings put texts that share words closer together, so search by meaning behaves sensibly in tests. <sub>`test_fake_embeddings_rank_shared_words_closer`</sub>
 - Checks that a nudge sends the changed paths to the indexer's address. <sub>`test_nudge_posts_paths`</sub>
 - Checks that a nudge reports failure instead of crashing when the indexer is down, answers with an error, or has no address configured. <sub>`test_nudge_never_raises`</sub>
@@ -781,5 +802,5 @@ File: `tests/test_entrypoints.py`
 File: `tests/prism/test_regenerate.py`
 
 - Checks that regenerating a day you did not edit (even one written in the older day format) replaces its facts, title and journal in the current format, writes the identical snapshot, and leaves your notes, the transcripts and the audio list untouched. <sub>`test_regenerate_replaces_an_unedited_format_2_day_and_keeps_notes_and_transcripts`</sub>
-- Checks that regenerating a day you edited only adds the new facts: your changed mood and your journal words stay, and the day still counts as edited. <sub>`test_regenerate_only_adds_facts_to_a_day_the_owner_edited`</sub>
+- Checks that regenerating a day you edited does not call the model: your mood and journal words stay. <sub>`test_regenerate_leaves_a_day_the_owner_edited`</sub>
 - Checks that a dry run lists what would change without writing anything or calling the AI, that a day without any transcript text is skipped, and that a date range limits which days are processed. <sub>`test_regenerate_dry_run_range_and_days_without_text`</sub>

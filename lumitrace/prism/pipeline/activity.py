@@ -1,6 +1,6 @@
 """Activity records: one JSON line per processed capture in ``_system/activity/YYYY/MM.jsonl``.
 
-A record says which models and prompt versions were used, how long and how much each step took,
+A record says which models were used, how long and how much each step took,
 and what went wrong. It never contains journal content: no transcript, note text, journal, facts
 or file contents, and error messages go through :func:`safe_error` first.
 """
@@ -53,8 +53,8 @@ def activity_path(when: dt.datetime) -> str:
 
 class Step(BaseModel):
     name: str
-    """``transcribe``, ``compress_audio``, ``photos``, ``write_day``, ``extract_facts``,
-    ``write_journal``, ``journal_addendum``, ``nudge``."""
+    """``transcribe``, ``compress_audio``, ``photos``, ``write_day``, ``fill_day``,
+    ``update_day``, ``nudge``."""
     ms: int = 0
     ok: bool = True
     model: str | None = None
@@ -75,9 +75,11 @@ class ActivityRecord(BaseModel):
     started_at: dt.datetime = Field(default_factory=lambda: dt.datetime.now(dt.UTC))
     finished_at: dt.datetime | None = None
     generation: str | None = None
-    """``full`` (whole day regenerated), ``additive`` (edited day) or ``skipped``."""
+    """``deferred`` (saved until the day closes), ``full``, ``additive``, ``skipped`` or
+    ``failed``."""
     prompt_version: str | None = None
     prompt_versions: dict[str, str] = Field(default_factory=dict)
+    """Unused on new records. Older lines mapped a task to ``v1``, ``v2``, and so on."""
     models: dict[str, str] = Field(default_factory=dict)
     steps: list[Step] = Field(default_factory=list)
     cost_usd: float | None = None

@@ -49,19 +49,14 @@ def test_one_line_per_capture_without_content(
     assert record["status"] == "done"
     assert record["entry_date"] == "2026-10-10"
     assert record["generation"] == "full"
-    assert record["models"] == {
-        "stt": "fake",
-        "extract_facts": "test/extract",
-        "write_journal": "test/journal",
-    }
-    assert record["prompt_versions"] == {"extract_facts": "v6", "write_journal": "v4"}
+    assert record["models"] == {"stt": "fake", "fill_day": "test/journal"}
+    assert record["prompt_versions"] == {}
     names = [s["name"] for s in record["steps"]]
     assert names == [
         "compress_audio",
         "transcribe",
         "write_day",
-        "extract_facts",
-        "write_journal",
+        "fill_day",
         "write_day",
         "nudge",
     ]

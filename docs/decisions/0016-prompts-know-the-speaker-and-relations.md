@@ -1,7 +1,8 @@
 # 0016. Prompts know the speaker and family relations, and read translation and original together
 
-- Status: accepted
+- Status: accepted (the journal no longer reads a translation; ADR 0048)
 - Date: 2026-10-12
+- Family list source superseded by 0047 (`secrets/family.md`, not `LUMITRACE_FAMILY`)
 
 ## Context
 

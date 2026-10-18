@@ -10,6 +10,7 @@ import pytest
 from pydantic import SecretStr
 
 from lumitrace.config import Settings
+from lumitrace.household import Household, Person
 from lumitrace.prism.pipeline.stt import (
     AWSTranscribeTranscriber,
     FakeTranscriber,
@@ -188,15 +189,18 @@ class FakeSarvam:
 
 
 def sarvam_settings(settings: Settings, **update: Any) -> Settings:
+    household = update.pop(
+        "household",
+        Household(people=(Person("Sam", "me"), Person("Maya", "wife"))),
+    )
     values = {
         "stt_provider": "sarvam",
         "sarvam_api_key": SecretStr("sk-test"),
         "stt_language": "te",
-        "family": "Sam (me), Maya (wife)",
         "stt_keyterms": "Corner Bakery",
         **update,
     }
-    return settings.model_copy(update=values)
+    return settings.model_copy(update=values).with_household(household)
 
 
 def sarvam(settings: Settings, server: FakeSarvam) -> SarvamTranscriber:
@@ -204,20 +208,21 @@ def sarvam(settings: Settings, server: FakeSarvam) -> SarvamTranscriber:
     return SarvamTranscriber(settings, client=client, poll_seconds=0)
 
 
-def test_sarvam_transcript_and_translation(settings: Settings) -> None:
+def test_sarvam_transcript_only(settings: Settings) -> None:
     server = FakeSarvam()
     result = sarvam(sarvam_settings(settings), server).transcribe(b"audio", "audio.m4a")
     assert result.text == "mana park ki vellam"
-    assert result.translation == "We went to the park."
+    assert result.translation == ""
     assert result.model == "sarvam/saaras:v4"
     assert result.warnings == ()
-    params = [job["params"] for job in server.jobs.values()]
-    assert [p["mode"] for p in params] == ["codemix", "translate"]
-    for p in params:
-        assert p["model"] == "saaras:v4"
-        assert p["language_code"] == "te-IN"
-        assert p["keyterms"] == ["Sam", "Maya", "Corner Bakery"]
-    assert all(job["started"] for job in server.jobs.values())
+    (job,) = server.jobs.values()
+    assert job["params"] == {
+        "model": "saaras:v4",
+        "mode": "codemix",
+        "language_code": "te-IN",
+        "keyterms": ["Sam", "Maya", "Corner Bakery"],
+    }
+    assert job["started"]
     assert set(server.uploads.values()) == {b"audio"}
     assert server.api_keys == {"sk-test"}
     assert all("api-subscription-key" not in h for h in server.blob_headers)
@@ -229,9 +234,7 @@ def test_sarvam_transcript_and_translation(settings: Settings) -> None:
 
 def test_sarvam_empty_transcript_is_a_warning(settings: Settings) -> None:
     server = FakeSarvam(transcripts={"codemix": "  "})
-    result = sarvam(sarvam_settings(settings, sarvam_translate=False), server).transcribe(
-        b"audio", "audio.mp3"
-    )
+    result = sarvam(sarvam_settings(settings), server).transcribe(b"audio", "audio.mp3")
     assert result.text == ""
     assert result.warnings == ("transcript: Sarvam returned no text",)
     assert {h["content-type"] for h in server.blob_headers if "x-ms-blob-type" in h} == {
@@ -241,7 +244,7 @@ def test_sarvam_empty_transcript_is_a_warning(settings: Settings) -> None:
 
 def test_sarvam_options(settings: Settings) -> None:
     server = FakeSarvam()
-    s = sarvam_settings(settings, sarvam_translate=False, sarvam_model="saaras:v3", stt_language="")
+    s = sarvam_settings(settings, sarvam_model="saaras:v3", stt_language="")
     result = sarvam(s, server).transcribe(b"audio", "audio.wav")
     assert result.translation == ""
     (job,) = server.jobs.values()
@@ -250,15 +253,6 @@ def test_sarvam_options(settings: Settings) -> None:
         sarvam(s, server).transcribe(b"audio", "audio.caf")
     with pytest.raises(ValueError, match="SARVAM_API_KEY"):
         SarvamTranscriber(settings.model_copy(update={"stt_provider": "sarvam"}))
-
-
-def test_sarvam_failed_translation_keeps_the_transcript(settings: Settings) -> None:
-    result = sarvam(sarvam_settings(settings), FakeSarvam(fail_modes=("translate",))).transcribe(
-        b"audio", "audio.m4a"
-    )
-    assert result.text == "mana park ki vellam"
-    assert result.translation == ""
-    assert result.warnings == ("translation: RuntimeError: Sarvam job failed: audio unreadable",)
 
 
 def test_sarvam_failed_transcript_raises_without_leaking_urls(settings: Settings) -> None:

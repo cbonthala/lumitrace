@@ -35,9 +35,9 @@ You can use both; captures from either land in the same day file.
 
 | Part | What it does |
 |---|---|
-| **Log My Day** (big red button) | records audio; tap again to stop and send it to `POST /recordings` with the photos you picked, the place name and (if turned on) your location |
+| **Log My Day** (big red button) | records audio. Tap again to stop and hold the take (it is not sent yet). **Pause** and **Resume** are the two-bar and triangle buttons. **Discard** is the trash button. Then **Play**, drag the two handles to crop, and **Send** or **Discard**. Send posts that audio to `POST /recordings` with the photos you picked, the place name and (if turned on) your location. An uncropped take is the original file; a crop is trimmed on the phone before upload (ADR 0054) |
+| **Send** (bottom corner of the Log My Day card) | sends the photos on that card when there is no recording (`POST /notes`). One photo and no audio is enough. While a recording is waiting in review, this same button sends the recording |
 | **Upload audio** (chip under the record button) | pick an audio file (a Voice Memo saved to Files, an `.m4a`, `.mp3`, `.wav`, ...) and send it as Log My Day with the photos you picked and the place name, but not your current location (the memo may be from elsewhere). It is filed under the day the file was recorded or saved, unless you chose a day in **Filing under**; the app asks before sending |
-| **Quick note** | type or dictate with the keyboard's microphone, add photos, send to `POST /notes` |
 | **Filing under** | choose another day (the `date` field); leave it on today otherwise |
 | **This week** | days logged in the last 7 days, entries in them, and your streak (`GET /summary`) |
 | **Recent captures** / History | each capture's status from the last 7 days: Waiting to send, Queued, Writing journal…, In journal, or Failed (tap to retry) (`GET /captures`) |
@@ -46,7 +46,7 @@ You can use both; captures from either land in the same day file.
 | **Connected AI apps** (in Settings) | the AI apps that have connected to the Lens (Claude, ChatGPT, ...): name, the website it signs in from, Connected or Disconnected, when it signed in, when its session ends and when it was last used. **Disconnect** cuts an app off at once (its next request is refused) until it signs in again with the Lens password; **Disconnect all apps** does it for every app. Each asks for confirmation (`/lens/apps`, decision 0036) |
 
 On a phone the screen has four tabs (Capture, History, Design, Settings). Turned sideways, the
-Capture page uses two columns (record next to the note) so the record button stays on the first
+Capture page uses two columns (the record card next to this week) so the record button stays on the first
 screen. From 600 to 899 px the single column is centred at 640 px. On a laptop (900 px and
 wider) the capture cards and the history list sit side by side, and the **How it works** button
 in the header opens the Design page.
@@ -60,7 +60,8 @@ when you reopen the app, every minute, or when you tap **Send now**. A capture t
 **Limits of a web app on iPhone:**
 
 * Recording stops if the screen locks or you switch apps. The app asks iOS to keep the screen
-  on while recording; keep it in front.
+  on while recording and while paused; keep it in front. A take you have not sent yet stays
+  in the browser until you Send or Discard; leaving the page asks you to stay.
 * No Siri, Action Button, Back Tap, share sheet or automations; use the Shortcuts for those.
 * Photos are picked by hand (the browser cannot read today's photos by itself).
 * Location is latitude and longitude only, with the place name you set in Settings; there is
@@ -73,13 +74,12 @@ Sign-in details: `docs/prism.md` → Flash web app endpoints; decision: ADR 0019
 The rest of this guide is the Shortcuts. Written for iOS 18 (most steps work on iOS 17; noted
 where not). Action names are as they appear in the Shortcuts action search.
 
-You will build five Flash shortcuts and one automation:
+You will build four Flash shortcuts and one automation:
 
 | Shortcut | What it does |
 |---|---|
 | **Flash Config** | holds the API address and token, used by all the others |
 | **Log My Day** | record audio + location + today's photos → `POST /recordings` |
-| **Quick Note** | dictate a sentence (or a short clip) → `POST /notes` |
 | **Send pending** | uploads anything left in the offline inbox |
 | **Send to Lumitrace** | share sheet: send a Voice Memo or photos |
 | *Nightly reminder* | automation at about 9 p.m. that starts Log My Day |
@@ -212,29 +212,13 @@ Notes:
 * The response arrives within a few seconds; transcription and the journal take about a minute
   more. Open the day in Obsidian afterwards.
 
-## 6. Quick Note
+## 6. Quick Note (retired)
 
-New shortcut **Quick Note**:
+Do not build this shortcut. Delete **Quick Note** on the phone if it is still there. Days are
+captured by recording. A photo with no recording is sent from the web app's **Send** button,
+which still uses `POST /notes`. Old day files that already contain a Quick Note stay as they are.
 
-1. **Load config**.
-2. **Dictate Text**: Language *English* (or yours), Stop Listening *After Pause*. Rename *Note*.
-   (For a voice clip instead, use **Record Audio** with Finish Recording *After Time* 60 s, and
-   send it as an `audio` File field in step 6.)
-3. *Captured At* and *Capture ID* exactly as in Log My Day steps 3–4, but with the suffix
-   `-note`.
-4. Optional: **Get Current Location** → **Get Details of Locations** *City* → *Place*.
-5. Save to the inbox: **Text** `{"kind": "note", "capture_id": "`*Capture ID*`", "captured_at":
-   "`*Captured At*`", "place": "`*Place*`"}` → **Set Name** `meta.json` → **Save File** to
-   `Flash Inbox/`*Capture ID*`/`; then **Set Name** on *Note* to `note.txt` → **Save File** to
-   the same subpath.
-6. **Get Contents of URL**: URL *API* `/notes`; Method **POST**; header `Authorization` →
-   `Bearer ` *Token*; Request Body **JSON** with Text fields `text` → *Note*, `captured_at` →
-   *Captured At*, `capture_id` → *Capture ID*, `place` → *Place*.
-7. Same as Log My Day steps 10–12 (delete the inbox folder, show the message).
-
-Dictated notes before 4 a.m. count for the previous day, like recordings.
-
-**Filing under another day** (both shortcuts, optional): add a Text field `date` →
+**Filing under another day** (Log My Day, optional): add a Text field `date` →
 *Formatted Date* to the request body, next to `captured_at` (a **Format Date** action with custom
 format `yyyy-MM-dd`, from an **Ask for Input** of type Date). Leave it off, or empty, for today.
 
@@ -310,21 +294,17 @@ audio needs the phone unlocked, which is why this runs after confirmation instea
 
 ## 10. Ways to start a capture
 
-* **Siri:** "Hey Siri, Log My Day" / "Hey Siri, Quick Note" (Siri uses the shortcut names).
+* **Siri:** "Hey Siri, Log My Day" (Siri uses the shortcut name).
 * **Action Button** (iPhone 15 Pro and later): Settings → Action Button → swipe to
-  **Shortcut** → *Log My Day* (or *Quick Note*).
+  **Shortcut** → *Log My Day*.
 * **Control Center** (iOS 18): swipe down → **+** → Add a Control → **Shortcuts** → *Run
   Shortcut* → choose it.
 * **Lock Screen** (iOS 18): long-press the Lock Screen → Customize → Lock Screen → tap the
   flashlight or camera button → replace with a **Shortcut** control. (iOS 16–17: add a
   Shortcuts widget to the Home Screen instead.)
-* **Back Tap:** Settings → Accessibility → Touch → **Back Tap** → *Double Tap* → *Log My Day*,
-  *Triple Tap* → *Quick Note*.
-* **Apple Watch:** in each shortcut's details (ⓘ) turn on **Show on Apple Watch**. **Quick Note**
-  (Dictate Text + Get Contents of URL) works on the watch; Log My Day uses Record Audio and Find
-  Photos, which are not available on watchOS, so start it from the phone (or via Siri on the
-  phone). Unverified on every watchOS version: if Quick Note fails on the watch, remove the
-  inbox-saving steps from a watch-only copy.
+* **Back Tap:** Settings → Accessibility → Touch → **Back Tap** → *Double Tap* → *Log My Day*.
+* **Apple Watch:** Log My Day uses Record Audio and Find Photos, which are not available on
+  watchOS, so start it from the phone.
 * **Share sheet:** *Send to Lumitrace* from Voice Memos, Photos or Files (section 8).
 * **Home Screen:** long-press a shortcut in the Shortcuts app → Share → *Add to Home Screen*.
 

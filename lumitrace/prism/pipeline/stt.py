@@ -3,9 +3,8 @@
 * ``litellm``: ``litellm.transcription`` with ``LUMITRACE_STT_MODEL`` (OpenAI, Azure, Groq, ...).
 * ``aws_transcribe``: Amazon Transcribe batch job via an S3 bucket
   (``LUMITRACE_AWS_TRANSCRIBE_BUCKET``); the media and output objects are deleted afterwards.
-* ``sarvam``: Sarvam Saaras batch jobs (Indian languages mixed with English, up to 2 hours):
-  the transcript in ``LUMITRACE_SARVAM_MODE`` plus, with ``LUMITRACE_SARVAM_TRANSLATE``, an
-  English translation of the same audio.
+* ``sarvam``: one Sarvam Saaras batch job (Indian languages mixed with English, up to 2 hours):
+  the transcript in ``LUMITRACE_SARVAM_MODE``. There is no translation job.
 * ``fake``: offline; returns the uploaded bytes as text if they are UTF-8 (tests upload text as
   "audio"), otherwise a fixed placeholder.
 """
@@ -211,9 +210,8 @@ SARVAM_MAX_KEYTERM_CHARS = 64
 
 
 class SarvamTranscriber:
-    """Sarvam Saaras batch API: create a job, upload to its presigned URL, start, poll, download
-    the result JSON. The transcript job and the translation job run at the same time. A failed
-    transcript fails the capture (it is retried); a failed translation only adds a warning."""
+    """Sarvam Saaras batch API: one transcript job. Create it, upload to its presigned URL,
+    start, poll, download the result JSON. A failed transcript fails the capture (it is retried)."""
 
     def __init__(
         self,
@@ -250,26 +248,13 @@ class SarvamTranscriber:
         if ext not in SARVAM_FORMATS:
             raise ValueError(f"Sarvam cannot read .{ext} audio")
         name = f"audio.{ext}"
-        jobs = {"transcript": self._submit(self.settings.sarvam_mode, name, data)}
+        job_id = self._submit(self.settings.sarvam_mode, name, data)
+        results = self._wait({"transcript": job_id})
+        text = self._output(job_id, results["transcript"])
         warnings: list[str] = []
-        if self.settings.sarvam_translate:
-            try:
-                jobs["translation"] = self._submit("translate", name, data)
-            except Exception as exc:
-                warnings.append(f"translation: {_short(exc)}")
-        results = self._wait(jobs)
-        text = self._output(jobs["transcript"], results["transcript"])
         if not text:
             warnings.append("transcript: Sarvam returned no text")
-        translation = ""
-        if "translation" in jobs:
-            try:
-                translation = self._output(jobs["translation"], results["translation"])
-            except Exception as exc:
-                warnings.append(f"translation: {_short(exc)}")
-        return Transcript(
-            text=text, model=self.model, translation=translation, warnings=tuple(warnings)
-        )
+        return Transcript(text=text, model=self.model, warnings=tuple(warnings))
 
     # --- batch job steps ------------------------------------------------------------------
 
@@ -346,10 +331,6 @@ def _check(resp: httpx.Response, what: str) -> None:
     except (ValueError, AttributeError):
         message = ""
     raise RuntimeError(f"Sarvam {what} failed: HTTP {resp.status_code} {message}".strip())
-
-
-def _short(exc: BaseException) -> str:
-    return f"{type(exc).__name__}: {' '.join(str(exc).split())[:200]}"
 
 
 def get_transcriber(settings: Settings) -> Transcriber:

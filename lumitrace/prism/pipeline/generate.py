@@ -1,6 +1,6 @@
-"""AI steps: extract facts, write the journal, or write an addendum for an edited day.
+"""AI steps: fill a day in one call, or add a later recording to a day already written.
 
-Each step loads its versioned prompt, calls
+Each step loads its prompt, calls
 :class:`~lumitrace.prism.pipeline.llm.LLMClient` and validates the JSON reply (facts against
 :class:`lumitrace.frames.dayfile.DayFacts`).
 """
@@ -13,16 +13,19 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from lumitrace.frames.dayfile import CAPTURE_LABELS, Capture, DayFacts, FamilyMember
 from lumitrace.prism.pipeline.llm import LLMClient, LLMResult
-from lumitrace.prism.pipeline.prompts import Prompt, load_prompt
+from lumitrace.prism.pipeline.prompts import Prompt, day_template_path, load_prompt
 
 
-class JournalDraft(BaseModel):
+class DayDraft(BaseModel):
+    """One reply that fills the day: the At a glance facts and the journal page."""
+
     headline: str = ""
     journal: str
+    facts: DayFacts = Field(default_factory=DayFacts)
 
     @field_validator("headline", "journal", mode="before")
     @classmethod
@@ -37,13 +40,42 @@ class JournalDraft(BaseModel):
         return value
 
 
-class Addendum(BaseModel):
+def parse_day_draft(raw: Any, members: Sequence[str]) -> DayDraft:
+    """Validate a fill-day reply. Facts may be nested under ``facts`` or sit beside the journal."""
+    if not isinstance(raw, dict):
+        raise ValueError("day reply is not a JSON object")
+    facts_raw = raw.get("facts")
+    if not isinstance(facts_raw, dict):
+        facts_raw = {key: raw[key] for key in DayFacts.model_fields if key in raw}
+    facts = keep_family(parse_facts(facts_raw), members)
+    draft = DayDraft.model_validate(
+        {"headline": raw.get("headline"), "journal": raw.get("journal")}
+    )
+    return draft.model_copy(update={"facts": facts})
+
+
+class DayUpdate(BaseModel):
+    """What one later recording adds: new facts, and journal lines to append."""
+
     text: str = ""
+    facts: DayFacts = Field(default_factory=DayFacts)
 
     @field_validator("text", mode="before")
     @classmethod
     def _strip(cls, value: Any) -> Any:
         return value.strip() if isinstance(value, str) else ("" if value is None else value)
+
+
+def parse_day_update(raw: Any, members: Sequence[str]) -> DayUpdate:
+    """Validate an update-day reply. Empty ``text`` means no new journal lines."""
+    if not isinstance(raw, dict):
+        raise ValueError("update reply is not a JSON object")
+    facts_raw = raw.get("facts")
+    if not isinstance(facts_raw, dict):
+        facts_raw = {}
+    facts = keep_family(parse_facts(facts_raw), members)
+    update = DayUpdate.model_validate({"text": raw.get("text")})
+    return update.model_copy(update={"facts": facts})
 
 
 def parse_facts(raw: Any) -> DayFacts:
@@ -79,37 +111,20 @@ def format_capture(capture: Capture) -> str:
     head = f"### {capture.captured_at:%H:%M} · {label}"
     if capture.location:
         head += f" (location: {capture.location})"
-    text = capture.text.strip()
-    if capture.translation.strip():
-        return (
-            f"{head}\n\nEnglish translation (machine-made from the audio):\n"
-            f"{capture.translation.strip()}\n\nOriginal transcript (as spoken):\n"
-            f"{text or '(no words)'}"
-        )
-    return f"{head}\n\n{text or '(no words)'}"
+    return f"{head}\n\n{capture.text.strip() or '(no words)'}"
 
 
 def format_captures(captures: Sequence[Capture]) -> str:
-    return "\n\n".join(
-        format_capture(c) for c in captures if c.text.strip() or c.translation.strip()
-    )
-
-
-def describe_family(relations: dict[str, str], owner: str | None) -> str:
-    """``Sam (the author), Maya (the author's wife), Leo``: the ``family`` prompt value."""
-    parts = []
-    for name, relation in relations.items():
-        if name == owner:
-            parts.append(f"{name} (the author)")
-        elif relation:
-            parts.append(f"{name} (the author's {relation})")
-        else:
-            parts.append(name)
-    return ", ".join(parts)
+    return "\n\n".join(format_capture(c) for c in captures if c.text.strip())
 
 
 def _date_label(day: dt.date) -> str:
     return f"{day.isoformat()} ({day:%A})"
+
+
+def _day_template(prompts_dir: Path) -> str:
+    """The Markdown shape the fill-day prompt shows the model (``prompts/day-template.md``)."""
+    return day_template_path(prompts_dir).read_text(encoding="utf-8")
 
 
 class Generator:
@@ -122,74 +137,68 @@ class Generator:
         return load_prompt(self.prompts_dir, task)
 
     def _people(self) -> dict[str, str]:
-        """The ``author`` and ``family`` prompt values."""
-        owner = self.settings.owner_name
+        """The ``author``, ``family`` and ``glossary`` prompt values, from the family file."""
         return {
-            "author": owner or "(not given)",
-            "family": describe_family(self.settings.family_relations, owner),
-            "glossary": "\n".join(f"- {line}" for line in self.settings.glossary_lines) or "(none)",
+            "author": self.settings.owner_name or "(not given)",
+            "family": self.settings.household.describe(),
+            "glossary": self.settings.glossary_text,
         }
 
-    def extract_facts(
+    def _keyterms(self) -> str:
+        """Names, places and brands the transcript was biased toward, or ``(none)``."""
+        terms = self.settings.stt_keyterm_list
+        return ", ".join(terms) if terms else "(none)"
+
+    def fill_day(
         self, day: dt.date, captures: Sequence[Capture]
-    ) -> tuple[LLMResult[DayFacts], Prompt]:
-        prompt = self.prompt("extract_facts")
-        locations = list(dict.fromkeys(c.location for c in captures if c.location))
+    ) -> tuple[LLMResult[DayDraft], Prompt]:
+        """One call: Telugu transcript, glossary, keyterms, and the day template.
+
+        The reply is facts plus the journal page. The day file is written from that reply.
+        No English translation is included.
+        """
+        prompt = self.prompt("fill_day")
         family = self.settings.family_members
         messages = prompt.render(
             date=_date_label(day),
             **self._people(),
-            location="; ".join(locations),
-            captures=format_captures(captures),
-        )
-        result = self.llm.complete_json(
-            task="extract_facts",
-            model=self.settings.llm_extract_facts_model,
-            messages=messages,
-            parse=lambda raw: keep_family(parse_facts(raw), family),
-            fake=lambda: {},
-        )
-        return result, prompt
-
-    def write_journal(
-        self, day: dt.date, captures: Sequence[Capture], facts: DayFacts
-    ) -> tuple[LLMResult[JournalDraft], Prompt]:
-        prompt = self.prompt("write_journal")
-        messages = prompt.render(
-            date=_date_label(day),
-            **self._people(),
-            facts=json.dumps(facts.model_dump(mode="json"), ensure_ascii=False, indent=2),
+            keyterms=self._keyterms(),
+            template=_day_template(self.prompts_dir),
             captures=format_captures(captures),
         )
 
-        def fake() -> dict[str, str]:
+        def fake() -> dict[str, Any]:
             body = "\n\n".join(c.text.strip() for c in captures if c.text.strip())
-            return {"headline": "", "journal": f"## Summary\n\n{body}"}
+            return {"headline": "", "journal": f"## Summary\n\n{body}", "facts": {}}
 
         result = self.llm.complete_json(
-            task="write_journal",
+            task="fill_day",
             model=self.settings.llm_write_journal_model,
             messages=messages,
-            parse=JournalDraft.model_validate,
+            parse=lambda raw: parse_day_draft(raw, family),
             fake=fake,
         )
         return result, prompt
 
-    def write_addendum(
-        self, day: dt.date, capture: Capture, journal: str
-    ) -> tuple[LLMResult[Addendum], Prompt]:
-        prompt = self.prompt("journal_addendum")
+    def update_day(
+        self, day: dt.date, capture: Capture, journal: str, facts: DayFacts
+    ) -> tuple[LLMResult[DayUpdate], Prompt]:
+        """One later recording. The reply is added to the day; the rest of the page stays."""
+        prompt = self.prompt("update_day")
+        family = self.settings.family_members
         messages = prompt.render(
             date=_date_label(day),
             **self._people(),
+            keyterms=self._keyterms(),
             journal=journal.strip() or "(empty)",
+            facts=json.dumps(facts.model_dump(mode="json"), ensure_ascii=False, indent=2),
             capture=format_capture(capture),
         )
         result = self.llm.complete_json(
-            task="journal_addendum",
+            task="update_day",
             model=self.settings.llm_write_journal_model,
             messages=messages,
-            parse=Addendum.model_validate,
-            fake=lambda: {"text": capture.text.strip()},
+            parse=lambda raw: parse_day_update(raw, family),
+            fake=lambda: {"text": capture.text.strip(), "facts": {}},
         )
         return result, prompt

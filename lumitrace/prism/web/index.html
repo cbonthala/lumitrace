@@ -59,15 +59,46 @@
 
     <section class="card rec" id="rec-card" data-tab="capture">
       <div class="rec-live" id="rec-live" hidden>
-        <div class="day rec-state">● Recording</div>
+        <div class="day rec-state" id="rec-state">● Recording</div>
         <div class="timer" id="timer">00:00</div>
         <canvas class="wave" id="wave" width="460" height="56" aria-hidden="true"></canvas>
       </div>
+      <div class="rec-review" id="rec-review" hidden>
+        <div class="day">Review</div>
+        <div class="review-time" id="review-time">0:00 / 0:00</div>
+        <div class="crop" id="crop-box">
+          <canvas class="crop-wave" id="crop-wave" width="640" height="72" aria-hidden="true"></canvas>
+          <div class="crop-dim left" id="crop-dim-left"></div>
+          <div class="crop-dim right" id="crop-dim-right"></div>
+          <div class="crop-playhead" id="crop-playhead" hidden></div>
+          <button class="crop-handle" id="crop-start" type="button" role="slider" aria-label="Crop start" aria-valuemin="0" aria-valuenow="0"></button>
+          <button class="crop-handle" id="crop-end" type="button" role="slider" aria-label="Crop end" aria-valuemin="0" aria-valuenow="0"></button>
+        </div>
+        <p class="s" id="crop-status">Drag the handles to keep part of the recording.</p>
+        <div class="rec-review-actions">
+          <button class="btn iconbtn" id="play-btn" type="button" aria-label="Play">
+            <svg class="only-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+            <svg class="only-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>
+          </button>
+          <button class="btn iconbtn danger" id="review-discard" type="button" aria-label="Discard recording">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M8 7l1 12h6l1-12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
       <button class="recbtn" id="rec-btn" type="button" aria-label="Start recording"></button>
+      <div class="rec-controls" id="rec-controls" hidden>
+        <button class="btn iconbtn" id="pause-btn" type="button" aria-label="Pause recording">
+          <svg class="only-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>
+          <svg class="only-resume" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+        </button>
+        <button class="btn iconbtn danger" id="discard-btn" type="button" aria-label="Discard recording">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M8 7l1 12h6l1-12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
       <div class="rec-idle" id="rec-idle">
         <div class="t">Log My Day</div>
-        <div class="s">Tap to record, or upload a voice memo. Location and photos are attached
-          when you send.</div>
+        <div class="s">Tap to record. Pause, listen, and crop before you send. Or add a photo
+          and tap Send with no recording.</div>
       </div>
       <div class="s rec-hint" id="rec-hint" hidden>Keep the screen on. Recording stops if you lock the phone.</div>
       <div class="chips">
@@ -80,17 +111,11 @@
           <input type="file" id="rec-upload" accept="audio/*,.m4a,.mp3,.wav,.aac,.ogg,.webm,.flac" class="overlay-input"></label>
       </div>
       <div class="thumbs" id="rec-thumbs"></div>
-      <button class="link-btn" id="discard-btn" type="button" hidden>Discard recording</button>
-    </section>
-
-    <section class="card note" data-tab="capture">
-      <div class="sec"><h2>Quick note</h2><span class="muted">Type, or use the 🎤 on your keyboard</span></div>
-      <textarea id="note-text" placeholder="Had coffee with a friend, finally fixed the bike…" maxlength="50000"></textarea>
-      <div class="thumbs" id="note-thumbs"></div>
-      <div class="row">
-        <label class="btn">🖼 Photos<input type="file" id="note-photos" accept="image/*" multiple class="overlay-input"></label>
-        <label class="btn">📅 <span class="date-label cap">Today</span><input type="date" class="overlay-input date-input"></label>
-        <button class="btn primary" id="note-send" type="button">Send</button>
+      <div class="rec-foot" id="rec-foot">
+        <button class="btn primary" id="card-send" type="button" disabled aria-label="Send photos">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.2 11.2 20.5 3.2l-6.2 17.2-3.1-6.4-8-2.8z" fill="currentColor"/></svg>
+          <span id="card-send-label">Send</span>
+        </button>
       </div>
     </section>
 
@@ -107,7 +132,7 @@
     <section class="card list" data-tab="history">
       <div class="sec"><h2>Recent captures</h2><span class="muted">Last 7 days</span></div>
       <div id="captures"></div>
-      <p class="empty muted" id="captures-empty" hidden>Nothing yet. Record your day or send a note.</p>
+      <p class="empty muted" id="captures-empty" hidden>Nothing yet. Record your day.</p>
     </section>
 
     <section class="design" data-tab="design">
@@ -123,7 +148,7 @@
       <div class="modules">
         <article class="card mod">
           <div class="mod-head"><i class="swatch flash"></i><b>Flash</b><span>capture</span></div>
-          <p>This app and your iPhone Shortcuts. Sends your voice, notes, photos and place.
+          <p>This app and your iPhone Shortcuts. Sends your voice, photos and place.
             Offline captures wait on the device until you're back.</p>
           <p class="here">Here: the Capture tab.</p>
         </article>

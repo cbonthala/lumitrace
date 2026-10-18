@@ -50,7 +50,7 @@ flowchart LR
 
     Drive[("Google Drive<br/>day files")]
     Obsidian["Obsidian"]
-    Models["Sarvam, OpenAI"]
+    Models["Sarvam, Gemini"]
 
     Phone --> Tailscale
     AIApps --> Tailscale
@@ -58,6 +58,8 @@ flowchart LR
     Tailscale --> Lens
     Prism --> Drive
     Models <--> Prism
+    Models <--> Spectrum
+    Models <--> Lens
     Drive --> Spectrum
     Spectrum --> Lens
     Drive --> Obsidian
@@ -89,7 +91,7 @@ Lumitrace/
     inbox/<capture id>/    raw uploads waiting for the worker (deleted when done)
     captures/<id>.json     capture status, no journal content
     generated/YYYY/MM/     exact copy of each day file as the system last wrote it
-    activity/YYYY/MM.jsonl activity records: models, prompt versions, timings, cost, errors
+    activity/YYYY/MM.jsonl activity records: models, timings, cost, errors
     feedback/YYYY/MM/      one JSON file per MCP feedback call
     index-backup/          daily copy of the SQLite index
     reports/               weekly reports (later)
@@ -104,10 +106,12 @@ Lumitrace/
    4 a.m. = previous day); compress audio to `.m4a` (ffmpeg → afconvert → keep the original);
    transcribe (`LUMITRACE_STT_*`); resize photos.
 4. Read the existing day file (if any), `merge_capture` the new capture, write the day file and
-   its `_system/generated/` snapshot. The transcript is now safe.
-5. Extract facts and write the journal with LiteLLM (`LUMITRACE_LLM_*`, prompts in `prompts/`).
-   If the day is not user-edited, `apply_generation`; otherwise `merge_generation_additive`.
-   The day file is re-read before writing so an edit made meanwhile is never overwritten.
+   its `_system/generated/` snapshot. The transcript is now safe. During an open day the journal
+   waits until 4:05 a.m.
+5. One LiteLLM call (`LUMITRACE_LLM_WRITE_JOURNAL_MODEL`, prompts in `prompts/`). At 4:05, or
+   the first write of a day that has already closed, `fill_day` then
+   `apply_generation(..., force=True)`. A new recording after that write is `update_day`, then
+   `merge_generation_additive`. Owner edits made after the journal exists stay.
 6. Write the day file and its snapshot again (same text, same `generated_at`), nudge Spectrum,
    append an activity record, mark the capture `done`.
 
@@ -138,7 +142,7 @@ Lumitrace/
 
 `tests/e2e/test_full_flow.py` runs all three programs in-process on local storage with the
 offline providers: captures through the Prism, indexing by the Spectrum via a real nudge, every
-Lens tool, an owner edit producing edit signals, and an additive capture that keeps the edit. Every test, with
+Lens tool, an owner edit producing edit signals, and a later capture that keeps the edit. Every test, with
 what it checks in plain English: `docs/test-cases.md`.
 
 ## Self-improvement loop

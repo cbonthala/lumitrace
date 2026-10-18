@@ -1,49 +1,48 @@
 ---
 name: lumitrace-telugu-day-journal
-description: Fill a Lumitrace day file (docs/templates/day-template.md) from Telugu voice transcripts and their machine English translation, without inventing facts. Use when writing, checking or fixing a day's journal, food, places, health, feelings or memories from Telugu recordings.
+description: Fill a Lumitrace day file (prompts/day-template.md) from Telugu code-mixed transcripts and the family file, without inventing facts. Use when writing, checking or fixing a day's journal, food, places, health, feelings or memories from Telugu recordings.
 ---
 
 # Telugu transcript to Lumitrace day file
 
 ## Before you start
-- Read `docs/templates/day-template.md`. It is the output shape.
-- Read `glossary.local.md` in this folder. It holds the real names, relations and fixes. It is git-ignored.
-  - Missing? Copy `glossary.example.md` to `glossary.local.md` and fill it in.
-- Read the family list: `LUMITRACE_FAMILY` (`Name (me)` marks the author).
+- Read `prompts/day-template.md`. It is the output shape. The same file is pasted into the fill-day prompt.
+- Read `secrets/family.md` at the repository root. It holds the family (names, relations, birth dates) and the notes (other people, relation words, foods, places, usual routines). It is git-ignored.
+  - Missing? Copy `docs/templates/family.example.md` to `secrets/family.md` and fill it in.
+- The person with `relation: me` is the author.
 - Read every capture of the day, oldest first.
 
 ## What the input looks like
 - Audio is mostly Telugu, often mixed with English words.
-- The Prism gives two texts per recording:
-  - **Original transcript** (Telugu, as spoken).
-  - **English translation** (made by Sarvam from the audio, with no family context).
+- The Prism gives one text per recording: the code-mixed transcript (English words in English, Telugu in Telugu script). There is no English translation (ADR 0048).
+- An older day file may still have an English translation stored under the transcript. Ignore it. The Telugu transcript is the source.
+- Names, relations and spellings are in `secrets/family.md`.
 - The journal is written in **English**.
 
 ## Source rules
-- The Telugu original wins when the two texts disagree (ADR 0018).
-- Use the English translation as a hint for meaning only.
-- No translation (the job failed)? Work from the Telugu alone.
+- Read the Telugu. Verb endings show who did it.
 - Two recordings disagree? The newer one wins. Keep both in the transcript section.
-- Facts JSON from another model can be wrong. The transcript wins over it.
+- The transcript is the only source for what happened today.
+- Keep events in the order they were spoken. Reorder only when a time is stated.
+- If the speaker says నిన్న or "yesterday", those events belong to the previous date, not today.
+- Every proper noun must appear in the transcript, keyterms, or glossary. Otherwise write [uncertain: name unclear]. Never invent a name.
 
 ## Steps
-1. List the people in the day. Match every name to the family list or the glossary.
+1. List the people in the day. Match every name to `secrets/family.md`.
 2. For each sentence, find the subject.
    - Telugu verb endings show who did it.
-   - The translation often guesses wrong. Re-derive the subject from the Telugu.
 3. Tag each event: who, what, where, when, any feeling word.
-4. Check names and sound-alikes against the glossary.
+4. Check names and sound-alikes against the family file.
 5. Fill each template section from the tags.
 6. Make it quick to read: short bullets, one fact each.
 7. Run the check list.
 
 ## The main rule
 - Every line needs a phrase in the transcript behind it.
-- Not said: write `not mentioned`.
-- Said but unclear: end the line with `[uncertain: <why>]`.
+- If you cannot tell what happened, drop it. If you can tell what happened but not a detail, keep it and end with `[uncertain: why]`.
 - Never fill a gap to make a section look complete.
 
-## Known translation errors
+## Known hearing errors
 - **Wrong subject**
   - The speaker became "my father".
   - "He didn't give the kiss" was the daughter.
@@ -59,7 +58,7 @@ description: Fill a Lumitrace day file (docs/templates/day-template.md) from Tel
   - Resolve them from the speaker's point of view.
   - Telugu parents often say "<child's name> Nanna" for themselves.
   - "my Nanna" is the speaker's own father.
-  - A bare "Nanna" is unclear. Check the verb and the scene, else mark `[uncertain]`.
+  - When the author is talking about their own child, a bare Nanna (నాన్న) means the author. Otherwise end the item with [uncertain: who is Nanna].
 - **Foods**
   - Keep the Telugu word with English in brackets.
   - Do not swap one dish for a similar one (thotakura is amaranth, not spinach).
@@ -70,7 +69,7 @@ description: Fill a Lumitrace day file (docs/templates/day-template.md) from Tel
   - End with `Remember:` and the one moment worth keeping.
   - Keep small emotional moments.
 - **Food**
-  - Split by person, then Morning / Lunch / Dinner / Snacks.
+  - Split by person, then breakfast, lunch, dinner, snacks, drinks.
   - "We" means everyone present. A named person means only that person.
   - Delivery is food, not a visit.
 - **Places visited**
@@ -92,12 +91,12 @@ description: Fill a Lumitrace day file (docs/templates/day-template.md) from Tel
   - Exact quotes, firsts, sweet moments.
   - One line each, with the name.
 - **Weather**
-  - Only from a lookup by place and date.
-  - Otherwise `not looked up`.
+  - Null unless a weather lookup is passed in as input.
+  - The transcript does not set the weather.
 - **Things we did**
   - One activity per bullet, with who.
 - **Audio and transcript**
-  - Telugu untouched. English translation under it.
+  - Telugu untouched. Do not add an English translation.
 
 ## Never do
 - Invent a meal, place, symptom, feeling or reason (no "omelet", no "went to <store>", no "felt sad because of X").
@@ -119,5 +118,5 @@ description: Fill a Lumitrace day file (docs/templates/day-template.md) from Tel
 - [ ] Reads in under a minute.
 
 ## When you learn a new error
-- Add it to `glossary.local.md`.
-- If it is a pattern (not just one name), add a line under "Known translation errors" and to `docs/learnings.md`.
+- Add it to `secrets/family.md`.
+- If it is a pattern (not just one name), add a line under "Known hearing errors" and to `docs/learnings.md`.

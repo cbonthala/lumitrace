@@ -7,6 +7,9 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- **Search uses Gemini embeddings** (ADR 0053). `LUMITRACE_EMBEDDING_MODEL` is
+  `gemini/gemini-embedding-2`, same `GEMINI_API_KEY` as the day file. The call asks for 1536
+  values (the model's full vector is 3072). Restarting Spectrum rebuilds the index.
 - **Day file format 3 and index schema 3** (ADR 0045, accepted): the facts are topic first
   (Highlight with Remember, Food by person and meal, Places visited, People we met or visited,
   Health and fitness, Feelings, Memories, Weather, Things we did) with a block per family
@@ -15,9 +18,60 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
   `feelings`/`health`/`moments`, facts passages per section and person) and rebuilds old
   indexes by itself; the Lens `query_facts` takes `person` for meals. `extract_facts-v6` writes
   the new shape. `docs/templates/day-template.md` matches the real layout.
+- **Family file** (ADR 0047): who is in the family, birth dates, and the notes the prompts use
+  to resolve names live in `secrets/family.md` (Docker: `/secrets/family.md`).
+  `LUMITRACE_FAMILY` and `LUMITRACE_GLOSSARY` are removed. `get_settings()` loads the file;
+  tests pass a household in and do not read it. A missing file means no family blocks.
 
 ### Prism
 
+- **Quick Note is retired in the Flash web app.** The typed note card is gone. Record through
+  the day; the journal is written at the end of the day. A photo with no recording still sends
+  from the Log My Day card (`POST /notes`). Old Quick Notes already in day files stay readable.
+  Delete the **Quick Note** shortcut on the phone.
+- **Flash reviews a recording before sending** (ADR 0054). The red button stops and holds the
+  take. Pause and Resume stay on the same recording. Play, crop with two handles, then Send
+  or Discard. An uncropped take is uploaded as recorded. A crop is trimmed in the browser,
+  which takes about as long as the part you keep. Pause, play, and discard are icon buttons.
+  Send sits in the bottom corner of the card and also sends photos when there is no recording.
+- **Fallback is Gemini too.** `LUMITRACE_LLM_FALLBACK_MODEL` is `gemini/gemini-3.6-flash`, the same
+  `GEMINI_API_KEY` as the day-file model. It runs when `gemini-3.8-flash` fails or times out.
+- **Day-journal rules** (ADR 0052). `prompts/fill_day.md`, the day template, and the Telugu
+  journal skill now agree: a bare Nanna means the author when they are talking about their own
+  child; events stay in spoken order unless a time is stated; నిన్న / yesterday belongs to the
+  previous date; unknown names are `[uncertain: name unclear]`; weather is null unless a lookup
+  is passed in; drop what you cannot tell, and mark an unclear detail `[uncertain: why]`;
+  Thoughts is a journal heading; meal types include drinks.
+- **One prompt file per task** (ADR 0051). `prompts/fill_day.md` and `prompts/update_day.md`
+  replace the `v1` folders. `prompts/day-template.md` is the shape pasted into the fill-day
+  call. A new day stores `prompt_version: fill_day` or `update_day`. Edit the file; git is
+  the history.
+- **A later recording updates the day; unused prompts are gone** (ADR 0050). The 4:05 a.m.
+  write is `fill_day` from every transcript, and it replaces a journal typed before that run.
+  A recording that arrives after the journal exists is one `update_day` call on that recording
+  only; existing words stay. `extract_facts`, `write_journal`, and `journal_addendum` prompts
+  are removed. `LUMITRACE_LLM_EXTRACT_FACTS_MODEL` is removed. Regenerating an edited day
+  skips it.
+- **One Gemini call fills the day file** (ADR 0049). After Sarvam, `fill_day-v1` reads the
+  Telugu transcript, the family-file notes, the keyterms, and `docs/templates/day-template.md`,
+  and returns the facts and the journal together. The model is
+  `LUMITRACE_LLM_WRITE_JOURNAL_MODEL` (`gemini/gemini-3.8-flash`). An edited day still keeps
+  your words: facts from the new entry plus a short addendum. Needs `GEMINI_API_KEY`.
+- **One Sarvam job; the journal reads the Telugu** (ADR 0048). The Saaras `translate` job and
+  `LUMITRACE_SARVAM_TRANSLATE` are gone. `write_journal-v6` and `journal_addendum-v6` receive
+  the code-mixed transcript, the family-file glossary and the keyterms. They do not receive an
+  English translation or the extracted facts. Fact extraction still sees a translation already
+  stored on an older capture. Journal models stay the env settings.
+- **Family-file notes are background** (ADR 0047): `extract_facts-v7`, `write_journal-v5`,
+  `journal_addendum-v5`. The Markdown under `secrets/family.md` is sent as `{{glossary}}`.
+  The prompts may use it to resolve a word that was said, and must not turn a usual routine
+  into a fact for today. The family list in that file, including a birth date, is the
+  `{{family}}` line.
+- **The journal is written once, at 4:05 a.m.** (ADR 0046). Recordings during the day are
+  transcribed and saved only. Five minutes after the day rollover, and on startup if that run
+  was missed, Prism writes the facts and journal from every recording of the day that just
+  closed. A day you edited keeps your words. A capture for a day that has already closed is
+  written immediately.
 - **`lumitrace-prism regenerate`** redoes past days from their transcripts with the current
   prompts and format. Unedited days are replaced; edited days only gain the new facts
   (`--dry-run`, `--from`, `--to`, `--nudge`). It calls the AI models, so check with `--dry-run`.

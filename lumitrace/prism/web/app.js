@@ -17,10 +17,11 @@ const MIN_RECORDING_MS = 1000;  // a double tap must not start and stop at once
 const state = {
   date: "",              // "" = today; otherwise YYYY-MM-DD
   recPhotos: [],
-  notePhotos: [],
   recorder: null,
   starting: false,
-  recording: null,       // {stream, chunks, started, timer, raf, audioCtx, wakeLock, coords}
+  phase: "idle",         // idle | recording | paused | review
+  recording: null,       // {stream, chunks, started, elapsed, segmentStart, paused, timer, raf, audioCtx, analyser, wakeLock, coords}
+  review: null,          // held take: blob, audio element, crop start/end, decode buffer
   serverCaptures: [],
   pollTimer: null,
   sending: false,
@@ -281,6 +282,7 @@ function renderThumbs(listName, containerId, countId) {
     box.append(btn);
   }
   if (countId) $(countId).textContent = String(state[listName].length);
+  if (countId === "rec-photo-count") syncCardSend();
 }
 
 function addPhotos(input, listName, containerId, countId) {
@@ -316,6 +318,19 @@ function extensionFor(type) {
   return ".audio";
 }
 
+const CROP_EDGE = 0.15; // this close to both ends counts as the whole take
+const MIN_CROP = 0.3;
+
+function clock(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${pad(s % 60)}`;
+}
+
+function recordedMs(rec) {
+  if (rec.paused) return rec.elapsed;
+  return rec.elapsed + (Date.now() - rec.segmentStart);
+}
+
 function drawWave(analyser, canvas) {
   const ctx = canvas.getContext("2d");
   const data = new Uint8Array(analyser.frequencyBinCount);
@@ -323,6 +338,7 @@ function drawWave(analyser, canvas) {
   [["#8b7cff", 0], ["#4cc9f0", .45], ["#3ddc97", .7], ["#ffb547", 1]].forEach(([c, s]) => gradient.addColorStop(s, c));
   const bars = 46;
   const loop = () => {
+    if (!state.recording || state.phase !== "recording") return;
     analyser.getByteTimeDomainData(data);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = gradient;
@@ -339,22 +355,78 @@ function drawWave(analyser, canvas) {
   loop();
 }
 
-function setRecordingUi(on) {
-  $("rec-btn").classList.toggle("stop", on);
-  $("rec-btn").setAttribute("aria-label", on ? "Stop and send" : "Start recording");
-  $("rec-live").hidden = !on;
-  $("rec-hint").hidden = !on;
-  $("discard-btn").hidden = !on;
-  $("rec-idle").hidden = on;
+function setRecPhase(phase) {
+  state.phase = phase;
+  const live = phase === "recording" || phase === "paused";
+  const canPause = typeof state.recorder?.pause === "function";
+  $("rec-btn").hidden = phase === "review";
+  $("rec-btn").classList.toggle("stop", live);
+  $("rec-btn").setAttribute("aria-label", live ? "Stop recording" : "Start recording");
+  $("rec-live").hidden = !live;
+  $("rec-hint").hidden = !live;
+  $("rec-idle").hidden = phase !== "idle";
+  $("rec-controls").hidden = !live;
+  $("discard-btn").hidden = !live;
+  $("pause-btn").hidden = !(live && canPause);
+  $("pause-btn").classList.toggle("is-resume", phase === "paused");
+  $("pause-btn").setAttribute("aria-label", phase === "paused" ? "Resume recording" : "Pause recording");
+  $("rec-state").textContent = phase === "paused" ? "Paused" : "● Recording";
+  $("rec-state").classList.toggle("paused", phase === "paused");
+  $("rec-review").hidden = phase !== "review";
+  syncCardSend();
+}
+
+function setPlayIcon(playing) {
+  $("play-btn").classList.toggle("is-playing", !!playing);
+  $("play-btn").setAttribute("aria-label", playing ? "Pause playback" : "Play");
+}
+
+function syncCardSend() {
+  const btn = $("card-send");
+  if (!btn) return;
+  const live = state.phase === "recording" || state.phase === "paused";
+  $("rec-foot").hidden = live;
+  const busy = btn.dataset.busy === "1";
+  if (!busy) $("card-send-label").textContent = "Send";
+  if (state.phase === "review") {
+    btn.disabled = busy || !state.review?.ready;
+    btn.setAttribute("aria-label", "Send recording");
+  } else {
+    btn.disabled = busy || state.recPhotos.length === 0;
+    btn.setAttribute("aria-label", "Send photos");
+  }
 }
 
 function toggleRecording() {
-  if (state.starting) return;
+  if (state.starting || state.phase === "review") return;
   if (!state.recorder) {
     state.starting = true;
     startRecording().finally(() => { state.starting = false; });
   } else if (Date.now() - state.recording.started.getTime() >= MIN_RECORDING_MS) {
     stopRecording();
+  }
+}
+
+function togglePause() {
+  const rec = state.recording;
+  const recorder = state.recorder;
+  if (!rec || !recorder || state.phase === "review") return;
+  try {
+    if (rec.paused) {
+      recorder.resume();
+      rec.paused = false;
+      rec.segmentStart = Date.now();
+      if (rec.analyser) drawWave(rec.analyser, $("wave"));
+      setRecPhase("recording");
+    } else {
+      rec.elapsed += Date.now() - rec.segmentStart;
+      recorder.pause();
+      rec.paused = true;
+      cancelAnimationFrame(rec.raf);
+      setRecPhase("paused");
+    }
+  } catch {
+    toast("Couldn't pause. Stop, then send or discard.", true);
   }
 }
 
@@ -371,15 +443,25 @@ async function startRecording() {
     toast("Microphone access was refused. Allow it in the browser settings.", true);
     return;
   }
-  const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-  const rec = { stream, chunks: [], started: new Date(), coords: null };
+  const started = new Date();
+  let recorder;
+  try {
+    recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+  } catch {
+    stream.getTracks().forEach((t) => t.stop());
+    toast("This browser can't record audio. Use Safari on iPhone, or Chrome.", true);
+    return;
+  }
+  const rec = {
+    stream, chunks: [], started, coords: null, elapsed: 0, segmentStart: started, paused: false,
+  };
   state.recorder = recorder;
   state.recording = rec;
   recorder.ondataavailable = (e) => { if (e.data && e.data.size) rec.chunks.push(e.data); };
   recorder.start(1000);
-  setRecordingUi(true);
+  setRecPhase("recording");
   rec.timer = setInterval(() => {
-    const s = Math.floor((Date.now() - rec.started.getTime()) / 1000);
+    const s = Math.floor(recordedMs(rec) / 1000);
     $("timer").textContent = `${pad(s / 60)}:${pad(s % 60)}`;
   }, 250);
   try {
@@ -387,10 +469,11 @@ async function startRecording() {
     const analyser = rec.audioCtx.createAnalyser();
     analyser.fftSize = 1024;
     rec.audioCtx.createMediaStreamSource(stream).connect(analyser);
+    rec.analyser = analyser;
     drawWave(analyser, $("wave"));
   } catch { /* the waveform is decoration */ }
   try { rec.wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* not supported */ }
-  getCoords().then((coords) => { rec.coords = coords; });
+  getCoords().then((coords) => { if (state.recording === rec) rec.coords = coords; });
 }
 
 function stopTracks(rec) {
@@ -406,39 +489,42 @@ function finishRecording() {
   const recorder = state.recorder;
   const rec = state.recording;
   return new Promise((resolve) => {
-    recorder.onstop = () => {
+    const pack = () => {
       stopTracks(rec);
       resolve(new Blob(rec.chunks, { type: recorder.mimeType || "audio/mp4" }));
     };
+    if (recorder.state === "inactive") {
+      pack();
+      return;
+    }
+    recorder.onstop = pack;
+    try { if (recorder.state === "paused") recorder.resume(); } catch { /* stop still keeps the chunks */ }
     recorder.stop();
   });
 }
 
 async function stopRecording() {
   const rec = state.recording;
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const unlock = AudioCtx ? new AudioCtx() : null;
+  unlock?.resume?.();
   $("rec-btn").disabled = true;
+  $("pause-btn").disabled = true;
   try {
     const blob = await finishRecording();
+    const seconds = Math.round(recordedMs(rec) / 1000);
     state.recorder = null;
     state.recording = null;
-    setRecordingUi(false);
     if (!blob.size) {
+      setRecPhase("idle");
       toast("Nothing was recorded.", true);
+      unlock?.close?.().catch(() => {});
       return;
     }
-    const item = {
-      capture_id: captureId("rec", rec.started),
-      kind: "recording",
-      created: Date.now(),
-      fields: { ...baseFields(rec.started), ...(rec.coords || {}) },
-      audio: blob,
-      audioName: `audio${extensionFor(blob.type)}`,
-      photos: takePhotos("recPhotos", "rec-thumbs", "rec-photo-count"),
-      seconds: Math.round((Date.now() - rec.started.getTime()) / 1000),
-    };
-    await queueAndSend(item);
+    await openReview(blob, rec, seconds, unlock);
   } finally {
     $("rec-btn").disabled = false;
+    $("pause-btn").disabled = false;
   }
 }
 
@@ -455,12 +541,339 @@ function audioSeconds(file) {
   });
 }
 
+function cropIsWhole(review) {
+  if (!review.buffer || !review.duration) return true;
+  return review.start <= CROP_EDGE && review.duration - review.end <= CROP_EDGE;
+}
+
+function drawCropWave(buffer) {
+  const canvas = $("crop-wave");
+  const ctx = canvas.getContext("2d");
+  const data = buffer.getChannelData(0);
+  const bars = 80;
+  const step = Math.max(1, Math.floor(data.length / bars));
+  const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+  [["#8b7cff", 0], ["#4cc9f0", .45], ["#3ddc97", .7], ["#ffb547", 1]].forEach(([c, s]) => gradient.addColorStop(s, c));
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = gradient;
+  for (let i = 0; i < bars; i++) {
+    let peak = 0;
+    for (let j = 0; j < step; j += 8) peak = Math.max(peak, Math.abs(data[i * step + j] || 0));
+    const h = Math.max(3, peak * canvas.height * 0.9);
+    const x = i * (canvas.width / bars);
+    ctx.fillRect(x, (canvas.height - h) / 2, 3, h);
+  }
+}
+
+function layoutCrop() {
+  const review = state.review;
+  if (!review?.duration) return;
+  const start = (review.start / review.duration) * 100;
+  const end = (review.end / review.duration) * 100;
+  $("crop-dim-left").style.width = `${start}%`;
+  $("crop-dim-right").style.width = `${100 - end}%`;
+  $("crop-start").style.left = `${start}%`;
+  $("crop-end").style.left = `${end}%`;
+  $("crop-start").setAttribute("aria-valuemax", String(Math.round(review.duration)));
+  $("crop-end").setAttribute("aria-valuemax", String(Math.round(review.duration)));
+  $("crop-start").setAttribute("aria-valuenow", String(Math.round(review.start)));
+  $("crop-end").setAttribute("aria-valuenow", String(Math.round(review.end)));
+  const kept = Math.max(0, review.end - review.start);
+  $("crop-status").textContent = cropIsWhole(review)
+    ? "Drag the handles to keep part of the recording. The whole take will be sent."
+    : `Only ${clock(kept)} will be sent.`;
+  renderReviewTime();
+}
+
+function renderReviewTime() {
+  const review = state.review;
+  if (!review) return;
+  const kept = Math.max(0, review.end - review.start);
+  const at = review.audio.currentTime;
+  const pos = !Number.isFinite(at) || at <= review.start + 0.05
+    ? 0
+    : Math.min(kept, Math.max(0, at - review.start));
+  $("review-time").textContent = `${clock(pos)} / ${clock(kept || review.duration)}`;
+}
+
+function setCropEdge(which, seconds) {
+  const review = state.review;
+  if (!review?.duration) return;
+  const gap = Math.min(MIN_CROP, review.duration);
+  if (which === "start") review.start = Math.min(Math.max(0, seconds), review.end - gap);
+  else review.end = Math.max(Math.min(review.duration, seconds), review.start + gap);
+  if (!review.audio.paused && (review.audio.currentTime < review.start || review.audio.currentTime > review.end)) {
+    review.audio.pause();
+    setPlayIcon(false);
+    $("crop-playhead").hidden = true;
+  }
+  layoutCrop();
+}
+
+function bindCropHandle(id, which) {
+  const el = $(id);
+  const fromPointer = (ev) => {
+    const box = $("crop-box").getBoundingClientRect();
+    const frac = Math.min(1, Math.max(0, (ev.clientX - box.left) / box.width));
+    setCropEdge(which, frac * state.review.duration);
+  };
+  el.addEventListener("pointerdown", (e) => {
+    if (!state.review?.ready || !state.review.duration || $("crop-box").hidden) return;
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    const move = (ev) => fromPointer(ev);
+    const up = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+  });
+  el.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    if (!state.review?.duration) return;
+    e.preventDefault();
+    const step = (e.key === "ArrowRight" ? 0.5 : -0.5) * (e.shiftKey ? 4 : 1);
+    const current = which === "start" ? state.review.start : state.review.end;
+    setCropEdge(which, current + step);
+  });
+}
+
+function trackPlayback() {
+  const review = state.review;
+  if (!review || review.audio.paused) {
+    if (review) {
+      renderReviewTime();
+      $("crop-playhead").hidden = true;
+    }
+    return;
+  }
+  if (review.audio.currentTime >= review.end - 0.03) {
+    review.audio.pause();
+    setPlayIcon(false);
+    renderReviewTime();
+    $("crop-playhead").hidden = true;
+    return;
+  }
+  renderReviewTime();
+  if (review.duration && !$("crop-box").hidden) {
+    $("crop-playhead").hidden = false;
+    $("crop-playhead").style.left = `${(review.audio.currentTime / review.duration) * 100}%`;
+  }
+  review.raf = requestAnimationFrame(trackPlayback);
+}
+
+function togglePlayback() {
+  const review = state.review;
+  if (!review?.ready) return;
+  const audio = review.audio;
+  if (!audio.paused) {
+    audio.pause();
+    setPlayIcon(false);
+    $("crop-playhead").hidden = true;
+    renderReviewTime();
+    return;
+  }
+  try { audio.currentTime = review.start || 0; } catch { /* seek again once metadata arrives */ }
+  audio.play().then(() => {
+    setPlayIcon(true);
+    trackPlayback();
+  }).catch(() => toast("Couldn't play the recording.", true));
+}
+
+async function openReview(blob, rec, seconds, unlock) {
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  audio.preload = "auto";
+  state.review = {
+    blob, url, audio, started: rec.started, coords: rec.coords, seconds,
+    buffer: null, duration: seconds, start: 0, end: seconds, ready: false, raf: 0,
+  };
+  $("crop-box").hidden = false;
+  $("crop-box").classList.remove("busy");
+  $("play-btn").disabled = true;
+  $("card-send").dataset.busy = "";
+  setPlayIcon(false);
+  $("review-time").textContent = "Loading…";
+  $("crop-status").textContent = "Preparing the recording…";
+  setRecPhase("review");
+  let ctx = unlock;
+  try {
+    ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === "suspended") await ctx.resume();
+    const buffer = await ctx.decodeAudioData((await blob.arrayBuffer()).slice(0));
+    await ctx.close().catch(() => {});
+    ctx = null;
+    if (!Number.isFinite(buffer.duration) || buffer.duration <= 0) throw new Error("bad duration");
+    const review = state.review;
+    if (!review || review.blob !== blob) return;
+    review.buffer = buffer;
+    review.duration = buffer.duration;
+    review.start = 0;
+    review.end = buffer.duration;
+    review.ready = true;
+    drawCropWave(buffer);
+    layoutCrop();
+    $("play-btn").disabled = false;
+    syncCardSend();
+  } catch {
+    ctx?.close?.().catch(() => {});
+    const review = state.review;
+    if (!review || review.blob !== blob) return;
+    review.ready = true;
+    review.start = 0;
+    review.end = review.duration;
+    $("crop-box").hidden = true;
+    $("crop-status").textContent = "Crop isn't available for this recording. Send keeps the whole take.";
+    $("play-btn").disabled = false;
+    syncCardSend();
+    renderReviewTime();
+  }
+}
+
+function closeReview() {
+  const review = state.review;
+  if (!review) return;
+  cancelAnimationFrame(review.raf);
+  review.audio.pause();
+  review.audio.src = "";
+  URL.revokeObjectURL(review.url);
+  state.review = null;
+  setPlayIcon(false);
+  $("card-send").dataset.busy = "";
+  $("crop-box").hidden = false;
+  $("crop-box").classList.remove("busy");
+  $("crop-playhead").hidden = true;
+  setRecPhase("idle");
+}
+
+function setReviewBusy(on) {
+  $("play-btn").disabled = on;
+  $("review-discard").disabled = on;
+  $("card-send").dataset.busy = on ? "1" : "";
+  $("crop-box").classList.toggle("busy", on);
+  if (on) $("card-send-label").textContent = "Preparing…";
+  syncCardSend();
+}
+
+async function trimmedBlob(review) {
+  if (cropIsWhole(review)) return review.blob;
+  const buffer = review.buffer;
+  const rate = buffer.sampleRate;
+  const start = Math.max(0, Math.floor(review.start * rate));
+  const end = Math.min(buffer.length, Math.ceil(review.end * rate));
+  const length = Math.max(1, end - start);
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.state === "suspended") await ctx.resume();
+  const sliced = ctx.createBuffer(buffer.numberOfChannels, length, rate);
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    sliced.getChannelData(ch).set(buffer.getChannelData(ch).subarray(start, end));
+  }
+  const dest = ctx.createMediaStreamDestination();
+  const source = ctx.createBufferSource();
+  source.buffer = sliced;
+  source.connect(dest);
+  const mime = pickMime() || "";
+  let recorder;
+  try {
+    recorder = new MediaRecorder(dest.stream, mime ? { mimeType: mime } : undefined);
+  } catch (err) {
+    await ctx.close().catch(() => {});
+    throw err;
+  }
+  const chunks = [];
+  const blob = await new Promise((resolve, reject) => {
+    const limit = Math.ceil(length / rate * 1000) + 2500;
+    const timer = setTimeout(() => { try { recorder.stop(); } catch { /* already stopped */ } }, limit);
+    recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder.onerror = () => { clearTimeout(timer); reject(new Error("trim")); };
+    recorder.onstop = () => {
+      clearTimeout(timer);
+      resolve(new Blob(chunks, { type: recorder.mimeType || mime || "audio/mp4" }));
+    };
+    recorder.start();
+    source.onended = () => setTimeout(() => { try { recorder.stop(); } catch { /* already stopped */ } }, 200);
+    source.start();
+  });
+  dest.stream.getTracks().forEach((t) => t.stop());
+  await ctx.close().catch(() => {});
+  if (!blob.size) throw new Error("empty trim");
+  return blob;
+}
+
+async function sendReview() {
+  const review = state.review;
+  if (!review?.ready) return;
+  review.audio.pause();
+  setPlayIcon(false);
+  const cropped = !cropIsWhole(review);
+  setReviewBusy(true);
+  if (!cropped) $("card-send-label").textContent = "Send";
+  if (cropped) $("crop-status").textContent = "Trimming… this takes about as long as the part you kept.";
+  try {
+    const blob = await trimmedBlob(review);
+    const kept = cropped ? review.end - review.start : (review.duration || review.seconds);
+    const item = {
+      capture_id: captureId("rec", review.started),
+      kind: "recording",
+      created: Date.now(),
+      fields: { ...baseFields(review.started), ...(review.coords || {}) },
+      audio: blob,
+      audioName: `audio${extensionFor(blob.type || "")}`,
+      photos: takePhotos("recPhotos", "rec-thumbs", "rec-photo-count"),
+      seconds: Math.max(1, Math.round(kept)),
+    };
+    closeReview();
+    await queueAndSend(item);
+  } catch {
+    toast("Couldn't crop. Drag both handles to the ends, then Send.", true);
+    setReviewBusy(false);
+    layoutCrop();
+  }
+}
+
+function discardReview() {
+  if (!state.review || !confirm("Discard this recording?")) return;
+  closeReview();
+  toast("Recording discarded.");
+}
+
+async function sendPhotosOnly() {
+  if (state.phase !== "idle" || !state.recPhotos.length) return;
+  const started = new Date();
+  const btn = $("card-send");
+  btn.dataset.busy = "1";
+  syncCardSend();
+  try {
+    const coords = await getCoords();
+    const item = {
+      capture_id: captureId("note", started),
+      kind: "note",
+      created: Date.now(),
+      fields: { ...baseFields(started), ...(coords || {}) },
+      audio: null,
+      photos: takePhotos("recPhotos", "rec-thumbs", "rec-photo-count"),
+    };
+    await queueAndSend(item);
+  } finally {
+    btn.dataset.busy = "";
+    syncCardSend();
+  }
+}
+
+function onCardSend() {
+  if (state.phase === "review") sendReview();
+  else sendPhotosOnly();
+}
+
 async function uploadAudio(input) {
   const file = input.files[0];
   input.value = "";
   if (!file) return;
-  if (state.recorder) {
-    toast("Stop the recording first.", true);
+  if (state.recorder || state.review) {
+    toast("Send or discard the recording first.", true);
     return;
   }
   // The file's time is when it was recorded or saved; it picks the day unless one is chosen.
@@ -490,35 +903,8 @@ async function discardRecording() {
   await finishRecording();
   state.recorder = null;
   state.recording = null;
-  setRecordingUi(false);
+  setRecPhase("idle");
   toast("Recording discarded.");
-}
-
-// --- quick note ----------------------------------------------------------------------------
-
-async function sendNote() {
-  const text = $("note-text").value.trim();
-  if (!text && !state.notePhotos.length) {
-    toast("Write something or add a photo first.", true);
-    return;
-  }
-  const started = new Date();
-  $("note-send").disabled = true;
-  try {
-    const coords = await getCoords();
-    const item = {
-      capture_id: captureId("note", started),
-      kind: "note",
-      created: Date.now(),
-      fields: { ...baseFields(started), ...(coords || {}), text },
-      audio: null,
-      photos: takePhotos("notePhotos", "note-thumbs"),
-    };
-    $("note-text").value = "";
-    await queueAndSend(item);
-  } finally {
-    $("note-send").disabled = false;
-  }
 }
 
 // --- history, banner and summary -----------------------------------------------------------
@@ -821,11 +1207,15 @@ function wire() {
   document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => go(b.dataset.go)));
 
   $("rec-btn").addEventListener("click", toggleRecording);
+  $("pause-btn").addEventListener("click", togglePause);
   $("discard-btn").addEventListener("click", discardRecording);
+  $("play-btn").addEventListener("click", togglePlayback);
+  $("card-send").addEventListener("click", onCardSend);
+  $("review-discard").addEventListener("click", discardReview);
+  bindCropHandle("crop-start", "start");
+  bindCropHandle("crop-end", "end");
   $("rec-photos").addEventListener("change", (e) => addPhotos(e.target, "recPhotos", "rec-thumbs", "rec-photo-count"));
   $("rec-upload").addEventListener("change", (e) => uploadAudio(e.target));
-  $("note-photos").addEventListener("change", (e) => addPhotos(e.target, "notePhotos", "note-thumbs"));
-  $("note-send").addEventListener("click", sendNote);
   $("send-now").addEventListener("click", async () => { await flushOutbox(); await refreshAll(); });
 
   document.querySelectorAll(".date-input").forEach((input) => {
@@ -859,7 +1249,7 @@ function wire() {
       flushOutbox().then(refreshAll);
     }
   });
-  window.addEventListener("beforeunload", (e) => { if (state.recorder) e.preventDefault(); });
+  window.addEventListener("beforeunload", (e) => { if (state.recorder || state.review) e.preventDefault(); });
   setInterval(flushOutbox, 60000);
 
   const now = new Date();

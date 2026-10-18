@@ -46,9 +46,12 @@ component docs).
 
 1. **The Markdown day files are the source of truth.** The index is disposable and can always be
    rebuilt (except the `feedback` and `edit_signals` tables, which `reset_derived` keeps).
-2. **Never overwrite the owner's edits.** Use `lumitrace.frames.dayfile` helpers: `merge_capture`,
-   `apply_generation` (refuses on edits) and `merge_generation_additive`. Never write a day file
-   by string manipulation.
+2. **Do not overwrite the owner's edits after the day is written.** Use
+   `lumitrace.frames.dayfile` helpers: `merge_capture`, `apply_generation` and
+   `merge_generation_additive`. Never write a day file by string manipulation. The one exception
+   is the 4:05 a.m. fill, which uses `apply_generation(..., force=True)` and may replace a journal
+   typed before that run (ADR 0050). A recording that arrives after `generated_at` is set only
+   adds, through `merge_generation_additive`.
 3. **Keep the raw transcript and the audio.**
 4. **Storage, speech-to-text and AI models are swappable through config** (`lumitrace/config.py`).
    Never import a backend directly; use `get_storage(settings)` and LiteLLM model strings.
@@ -156,7 +159,8 @@ uv 0.13.0 on `/usr/local/bin` (the login shell does not load `~/.local/bin`) and
 `lens`. Logs are `/tmp/lumitrace-prism.log`, `/tmp/lumitrace-spectrum.log`, and
 `/tmp/lumitrace-lens.log`. If `.env` is missing, `start` copies `.env.example` and sets speech,
 the three LLM settings, and embeddings to `fake`, with development secrets long enough for Prism
-and Lens to accept requests. An existing `.env` is left as it is. Read `LUMITRACE_API_TOKEN` and
+and Lens to accept requests. Family and name notes are not in `.env`: if you need them, copy
+`docs/templates/family.example.md` to `secrets/family.md`. An existing `.env` is left as it is. Read `LUMITRACE_API_TOKEN` and
 `LUMITRACE_MCP_OWNER_PASSWORD` from that file. The Lens has no static token: HTTP clients sign
 in through OAuth (`LUMITRACE_MCP_PUBLIC_URL=http://localhost:8002` is allowed locally), or set
 `LUMITRACE_MCP_AUTH_MODE=none` with `LUMITRACE_MCP_HOST=127.0.0.1` for a local-only Lens. Ports: Prism `8000`, Spectrum `8001`, Lens `8002` (`/mcp`). Local day files

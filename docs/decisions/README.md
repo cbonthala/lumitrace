@@ -42,7 +42,7 @@ Template:
 | [0012](0012-activity-records-monthly-jsonl.md) | Recording API: activity records as monthly JSONL without content |
 | [0013](0013-audio-and-photo-processing.md) | Recording API: ffmpeg → afconvert → keep original; photos without EXIF |
 | [0014](0014-llm-json-validation-and-fallback.md) | Recording API: JSON validated per model, own fallback loop, `fake` model, prompt format |
-| [0015](0015-sarvam-speech-to-text-and-translation.md) | Recording API: Sarvam batch speech to text, code-mixed transcript plus an English translation |
+| [0015](0015-sarvam-speech-to-text-and-translation.md) | Recording API: Sarvam batch speech to text, code-mixed transcript plus an English translation (translate job superseded by 0048) |
 | [0016](0016-prompts-know-the-speaker-and-relations.md) | Recording API: prompts know the speaker and family relations, read translation and original together |
 | [0017](0017-date-field.md) | Recording API: optional `date` field (`YYYY-MM-DD`) chooses the day; empty = capture time's day |
 | [0018](0018-follow-the-original-over-the-translation.md) | Recording API: prompts follow the original transcript over the translation, always fill the author's block; `gpt-4.1` recommended |
@@ -61,3 +61,13 @@ Template:
 | [0042](0042-rename-to-lumitrace.md) | Rename Lumen to Lumitrace everywhere; module names unchanged |
 | [0043](0043-capture-translation-in-day-file.md) | Day file: a recording's English translation stored under its transcript |
 | [0044](0044-flash-on-the-tailnet-root-url.md) | Hosting: the Flash app on the plain tailnet address, the Lens Funnel on `:8443` |
+| [0045](0045-day-template-and-telugu-journal-skill.md) | Topic-first day template and a skill for filling it from Telugu transcripts |
+| [0046](0046-journal-once-after-rollover.md) | Write the journal once, five minutes after the day closes |
+| [0047](0047-family-file.md) | Family members and prompt notes live in `secrets/family.md`, not in environment variables |
+| [0048](0048-journal-reads-the-telugu-transcript.md) | One Sarvam transcript job; the journal reads that Telugu text plus the glossary and keyterms |
+| [0049](0049-one-call-fills-the-day-file.md) | One Gemini 3.8 Flash call fills the day file from the transcript and the day template |
+| [0050](0050-later-recording-updates-the-day.md) | A recording after the journal exists updates that day from the new transcript only |
+| [0051](0051-one-prompt-file-per-task.md) | One prompt file per task; the day template lives in `prompts/` |
+| [0052](0052-day-journal-reading-rules.md) | Fill-day prompt, day template, and skill share the reading rules |
+| [0053](0053-gemini-embeddings.md) | Search vectors come from Gemini Embedding 2, at 1536 dimensions |
+| [0054](0054-flash-reviews-before-sending.md) | Flash holds a recording for play, pause, and crop, and sends only when you tap Send |

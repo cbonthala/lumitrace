@@ -38,7 +38,8 @@ def embed_texts(
     texts: Sequence[str], settings: Settings, batch_size: int = 64
 ) -> list[list[float]]:
     """Embed ``texts`` with ``settings.embedding_model``; each vector has
-    ``settings.embedding_dimension`` floats. Raises ``ValueError`` on a dimension mismatch."""
+    ``settings.embedding_dimension`` floats. The provider is asked for that size
+    (Gemini's full vector is 3072). Raises ``ValueError`` on a dimension mismatch."""
     if not texts:
         return []
     dim = settings.embedding_dimension
@@ -53,6 +54,7 @@ def embed_texts(
         resp = litellm.embedding(
             model=settings.embedding_model,
             input=batch,
+            dimensions=dim,
             timeout=settings.llm_timeout_seconds,
         )
         data = sorted(resp.data, key=lambda d: d["index"] if isinstance(d, dict) else d.index)

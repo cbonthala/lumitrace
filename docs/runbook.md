@@ -22,10 +22,11 @@ and never paste real tokens or personal content here.
    (check the organisation's data controls); for Amazon Transcribe / Bedrock enable the AWS
    Organizations **AI services opt-out policy**; for other providers check their API data terms.
    To try everything first without any provider, use `fake` for all of them.
-   Set `LUMITRACE_FAMILY` to the family members who should get their own block under Family in each
-   day file, with each person's relation to you and yourself marked `(me)`:
-   `Sam (me), Maya (wife), Leo (son), Rose (mother)`. The AI then knows who is speaking and who
-   "Dad", "Amma" or "my wife" means. Others only appear under People.
+   Copy `docs/templates/family.example.md` to `secrets/family.md` and fill in the real family.
+   Each person in that list gets a block in every per-person section of the day file. The person
+   with `relation: me` is the one speaking. Notes under the front matter (other people, relation
+   words, foods, places, usual routines) go to the prompts so they can resolve what was said.
+   A usual routine is not written for a day unless the transcript says it that day.
 5. **Deploy:** on AWS, follow *Deploying on AWS Lightsail* below; elsewhere
    `docker compose up -d --build`. Check `curl localhost:8000/health` and
    `curl localhost:8002/health`; Spectrum has no published port (`docker compose logs
@@ -65,7 +66,7 @@ and never paste real tokens or personal content here.
     then reconnect each app (Claude: Settings → Connectors → Lumitrace → Connect; ChatGPT:
     Settings → Apps & Connectors → Lumitrace). This deletes `mcp-oauth-state.json` next to the
     index; the journal and index are untouched.
-* **Provider API keys:** update `OPENAI_API_KEY` / AWS credentials in `.env`, restart all services.
+* **Provider API keys:** update `GEMINI_API_KEY` / `LUMITRACE_SARVAM_API_KEY` in `.env`, restart all services.
 
 ## Renewing Google sign-in
 
@@ -102,10 +103,10 @@ and never paste real tokens or personal content here.
   days at once (this calls the AI models and costs money):
 
   1. `lumitrace-prism regenerate --dry-run` lists what would change.
-  2. Put real names and known mishearings in `LUMITRACE_GLOSSARY` in `.env` first.
+  2. Fill in `secrets/family.md` (copy `docs/templates/family.example.md`) before regenerating.
   3. `lumitrace-prism regenerate --from 2026-10-01 --to 2026-10-15 --nudge` redoes a range;
      omit the dates for every day. In Docker: `docker compose run --rm prism lumitrace-prism regenerate ...`.
-  Days you edited only gain the new facts; your words are never replaced.
+  Days you edited are skipped. A later recording updates that day on its own.
 
 ### Recovering from a lost or corrupt index
 
@@ -146,11 +147,11 @@ speech providers stay external (their keys only in the server's `.env`).
    `ssh -i ~/.ssh/lumitrace-lightsail ubuntu@<ip> 'sudo sh -s' < deploy/lightsail/cloud-init.sh`.
 3. **Production settings:** write a local `.env.production` (git-ignored) from `.env.example`:
    real providers, `LUMITRACE_API_TOKEN` and `LUMITRACE_MCP_OWNER_PASSWORD`,
-   `LUMITRACE_STORAGE_BACKEND=gdrive`, `LUMITRACE_FAMILY`, and `LUMITRACE_MCP_AUTH_MODE=oauth` (the public URL
+   `LUMITRACE_STORAGE_BACKEND=gdrive`, and `LUMITRACE_MCP_AUTH_MODE=oauth` (the public URL
    comes in step 5). Delete the `LUMITRACE_PROMPTS_DIR`, `LUMITRACE_LOCAL_ROOT`, `LUMITRACE_INDEX_PATH`
    and `LUMITRACE_GDRIVE_*_FILE` lines: the image sets the container paths (`/secrets/...`,
    `/data/...`) and the env file would override them with paths that do not exist there. Put
-   the Google Drive files in `secrets/` (see *First-run checklist*).
+   the Google Drive files and `secrets/family.md` in `secrets/` (see *First-run checklist*).
 4. **Deploy:** `ENV_FILE=.env.production SECRETS_DIR=secrets deploy/lightsail/deploy.sh`. It
    uploads both, copies the committed code (git `HEAD`) to `/opt/lumitrace/app`, and starts the
    services with `deploy/lightsail/compose.lightsail.yml` (ports on `127.0.0.1` only). Later
@@ -252,10 +253,9 @@ logged).
   API key at [dashboard.sarvam.ai](https://dashboard.sarvam.ai), then set
   `LUMITRACE_STT_PROVIDER=sarvam`, `LUMITRACE_SARVAM_API_KEY=<key>`, `LUMITRACE_STT_LANGUAGE=te`
   (or empty to detect), and optionally `LUMITRACE_STT_KEYTERMS` (places and brands you mention;
-  family names are added automatically). Keep `LUMITRACE_SARVAM_TRANSLATE=true` so each
-  recording also gets an English translation under its transcript. Check Sarvam's data terms
-  before sending private audio. Restart `prism`. The next recording's activity record shows
-  `"stt": "sarvam/saaras:v4"` and `translation_chars` in the `transcribe` step.
+  family names are added automatically). Sarvam runs one transcript job (ADR 0048). Check
+  Sarvam's data terms before sending private audio. Restart `prism`. The next recording's
+  activity record shows `"stt": "sarvam/saaras:v4"`.
 * **Trying it offline:** `LUMITRACE_STT_PROVIDER=fake` and all three `LUMITRACE_LLM_*_MODEL=fake`;
   then `curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json'
   -d '{"text": "Test note"}' localhost:8000/notes`.

@@ -1,6 +1,6 @@
 # 0014. JSON replies validated per model, own fallback loop, `fake` model, prompt file format
 
-- Status: accepted
+- Status: accepted; the prompt-file layout is superseded by 0051
 - Date: 2026-10-10
 
 ## Context

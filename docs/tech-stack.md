@@ -46,16 +46,15 @@ The foundation every program uses (`lumitrace/config.py`, `lumitrace/logging_set
 | httpx | 0.28 | Makes HTTP calls from Python. Example: right after writing a day file, the Prism calls Spectrum's `/nudge` so the new entry is searchable within seconds instead of at the next 5-minute check (`lumitrace/nudge.py`). Also calls Sarvam's speech-to-text API when that provider is chosen. | Yes (BSD-3-Clause) |
 | boto3 | 1.43 | The AWS library, used only if speech-to-text is switched to Amazon Transcribe (`LUMITRACE_STT_PROVIDER=aws_transcribe`). Installed but not used in production. | Yes (Apache-2.0) |
 
-AI models (production uses OpenAI; where each is called: `docs/prism.md` → *Models and
+AI models (where each is called: `docs/prism.md` → *Models and
 fallback*):
 
 | Task | Setting | Current model | What it does, with an example | Open source? |
 |---|---|---|---|---|
 | Speech to text | `LUMITRACE_STT_MODEL` | `openai/gpt-4o-transcribe` | Turns the recording into text. Example: "We took the kids to the park after lunch…" becomes the raw transcript kept in the day file. | No (OpenAI API) |
-| Speech to text and English translation (option) | `LUMITRACE_STT_PROVIDER=sarvam`, `LUMITRACE_SARVAM_MODEL` | `saaras:v4` | For Indian languages mixed with English: the transcript keeps English words in English and Telugu in Telugu script, and a second job translates the audio to English. Called over HTTP with httpx (ADR 0015). | No (Sarvam API) |
-| Extracting facts | `LUMITRACE_LLM_EXTRACT_FACTS_MODEL` | `openai/gpt-4o-mini` | Pulls structured facts out of the text for "At a glance". Example: Lunch: tacos; Places: City Park; Activities: walk, 40 min; Mood: happy. | No (OpenAI API) |
-| Writing the journal and addendums | `LUMITRACE_LLM_WRITE_JOURNAL_MODEL` | `openai/gpt-4o` | Writes the readable journal (Summary, Morning, Afternoon, Evening, ...) and the day's headline. If you edited the day, it only adds a short passage under `## Later` instead. | No (OpenAI API) |
-| Fallback | `LUMITRACE_LLM_FALLBACK_MODEL` | `openai/gpt-4o-mini` | Used when a task's model fails or returns badly formed output, so a recording is still processed. | No (OpenAI API) |
+| Speech to text (option) | `LUMITRACE_STT_PROVIDER=sarvam`, `LUMITRACE_SARVAM_MODEL` | `saaras:v4` | For Indian languages mixed with English: one job, mode `codemix`, keeps English words in English and Telugu in Telugu script. No translation job (ADR 0048). Called over HTTP with httpx. | No (Sarvam API) |
+| Filling and updating the day file | `LUMITRACE_LLM_WRITE_JOURNAL_MODEL` | `gemini/gemini-3.8-flash` | At 4:05 a.m. writes the journal and At a glance from every transcript. A recording that arrives later adds only what that recording says. | No (Google API) |
+| Fallback | `LUMITRACE_LLM_FALLBACK_MODEL` | `gemini/gemini-3.6-flash` | Used when `gemini-3.8-flash` fails or returns badly formed output, so a recording is still processed. Same `GEMINI_API_KEY`. | No (Google API) |
 
 Any LiteLLM provider works for the chat models (Anthropic, Gemini, Bedrock, Groq, Azure, local
 Ollama, ...); speech to text needs one that offers transcription (OpenAI, Groq, Azure), Amazon
@@ -90,7 +89,7 @@ The `local` storage backend (a folder on disk) is used for tests and local runs.
 | SQLite FTS5 | | Keyword search built into SQLite. Example: searching "pumpkin" finds every passage containing that word, ranked by relevance (bm25). | Yes (public domain) |
 | sqlite-vec | 0.1.9 | Meaning search inside SQLite. Example: searching "pumpkin" can also find "we carved jack-o'-lanterns", which shares no words with the query. | Yes (MIT / Apache-2.0) |
 | LiteLLM | 1.104 | Calls the embedding model for every passage when a day is indexed (`lumitrace/embeddings.py`). | Yes (MIT) |
-| Embedding model `openai/text-embedding-3-small` | 1536 dims | Turns each passage into a list of 1536 numbers that represent its meaning; similar meanings get similar numbers. Changing the model requires `lumitrace-spectrum rebuild`. | No (OpenAI API) |
+| Embedding model `gemini/gemini-embedding-2` | 1536 dims | Turns each passage into a list of 1536 numbers that represent its meaning; similar meanings get similar numbers. The model's full vector is 3072; the call asks for 1536. Changing the model rebuilds the index on the next Spectrum start. Same `GEMINI_API_KEY`. | No (Google API) |
 
 ## Lens (MCP server)
 
@@ -102,7 +101,7 @@ The `local` storage backend (a folder on disk) is used for tests and local runs.
 | Starlette, Uvicorn | 1.7, 0.54 | The web layer under the MCP SDK: serves `/mcp`, `/health` and the password page you see when connecting an AI app. | Yes (BSD-3-Clause) |
 | AnyIO | 4.15 | The async runtime the MCP SDK runs on. Example: the short pause after a wrong password on the sign-in page. | Yes (MIT) |
 | SQLite, FTS5, sqlite-vec | | Reads the index Spectrum built. Example: "how many times did I run in September?" becomes a `query_facts` call answered from the index. Read-only, so Spectrum can rebuild at any time. | Yes (public domain, MIT / Apache-2.0) |
-| LiteLLM + the same embedding model as Spectrum | | Embeds the question so `search` can find passages by meaning. It must be the same model Spectrum used, or the numbers don't compare. | Yes (MIT) / No (OpenAI API) |
+| LiteLLM + the same embedding model as Spectrum | | Embeds the question so `search` can find passages by meaning. It must be the same model Spectrum used, or the numbers don't compare. | Yes (MIT) / No (Google API) |
 | Claude, ChatGPT | | Where you ask questions. Example: "What did we do last Halloween?" Claude calls the Lens tools, then answers citing dates like 2025-10-31. | No (proprietary) |
 | Claude Desktop, Cursor | | AI apps on your computer that can run the Lens locally (stdio) or connect with the static token. | No (proprietary) |
 

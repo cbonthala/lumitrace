@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-10-17
+- `LUMITRACE_GLOSSARY` superseded by 0047 (`secrets/family.md`)
 
 ## Context
 

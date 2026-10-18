@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from lumitrace.config import Settings
+from lumitrace.config import Settings, get_settings
+from lumitrace.household import Household, Person
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -35,31 +36,47 @@ def test_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "tok-4f9a2c" not in repr(s)
 
 
-def test_family_members_from_a_comma_separated_list(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LUMITRACE_FAMILY", " Maya ,Leo,, leo , Grandma  Rose")
-    assert Settings(_env_file=None).family_members == ["Maya", "Leo", "Grandma Rose"]
-    assert Settings(_env_file=None, family="").family_members == []
-
-
-def test_family_relations_and_owner() -> None:
-    s = Settings(_env_file=None, family="Sam (me), Maya ( wife ),Leo (son), leo, Rose, Ann (")
-    assert s.family_relations == {"Sam": "me", "Maya": "wife", "Leo": "son", "Rose": ""}
-    assert s.family_members == ["Sam", "Maya", "Leo", "Rose"]
+def test_household_on_settings_drives_family_and_keyterms() -> None:
+    household = Household(
+        people=(Person("Sam", "me"), Person("Maya", "wife"), Person("Leo", "son")),
+        notes="Leon is Leo's daycare friend.",
+    )
+    s = Settings(_env_file=None, household=household, stt_keyterms=" Corner Bakery ,maya,,")
+    assert s.family_relations == {"Sam": "me", "Maya": "wife", "Leo": "son"}
+    assert s.family_members == ["Sam", "Maya", "Leo"]
     assert s.owner_name == "Sam"
-    assert Settings(_env_file=None, family="Maya (wife), Leo").owner_name is None
-    assert Settings(_env_file=None, family="Sam (Self)").owner_name == "Sam"
-
-
-def test_glossary_lines_split_on_semicolons() -> None:
-    s = Settings(_env_file=None, glossary=" Leon is Leo's  friend ;; potty not party; ")
-    assert s.glossary_lines == ["Leon is Leo's friend", "potty not party"]
-    assert Settings(_env_file=None).glossary_lines == []
-
-
-def test_stt_keyterms_start_with_the_family() -> None:
-    s = Settings(_env_file=None, family="Sam (me), Maya", stt_keyterms=" Corner Bakery ,maya,,")
-    assert s.stt_keyterm_list == ["Sam", "Maya", "Corner Bakery"]
+    assert s.glossary_text == "Leon is Leo's daycare friend."
+    assert s.stt_keyterm_list == ["Sam", "Maya", "Leo", "Corner Bakery"]
+    assert Settings(_env_file=None).family_members == []
+    assert Settings(_env_file=None).glossary_text == "(none)"
     assert Settings(_env_file=None).stt_keyterm_list == []
+    assert Settings(_env_file=None).owner_name is None
+
+
+def test_settings_does_not_read_the_family_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "family.md"
+    path.write_text("---\nfamily:\n  - name: Sam\n    relation: me\n---\n", encoding="utf-8")
+    monkeypatch.setattr("lumitrace.household.family_file_candidates", lambda: (path,))
+    assert Settings(_env_file=None).family_members == []
+
+
+def test_get_settings_loads_the_first_family_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = tmp_path / "first.md"
+    second = tmp_path / "second.md"
+    first.write_text("---\nfamily:\n  - {name: Sam, relation: me}\n---\nnotes\n", encoding="utf-8")
+    second.write_text("---\nfamily:\n  - {name: Maya, relation: wife}\n---\n", encoding="utf-8")
+    monkeypatch.setattr("lumitrace.household.family_file_candidates", lambda: (first, second))
+    get_settings.cache_clear()
+    try:
+        loaded = get_settings()
+        assert loaded.owner_name == "Sam"
+        assert loaded.glossary_text == "notes"
+    finally:
+        get_settings.cache_clear()
 
 
 def test_validation() -> None:

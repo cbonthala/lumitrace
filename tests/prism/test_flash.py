@@ -206,6 +206,23 @@ def test_login_problem(flash_settings: Settings) -> None:
     assert not session_valid(off, make_session(off)[0])
 
 
+def test_recording_is_reviewed_before_it_is_sent(client: TestClient) -> None:
+    page = client.get("/flash/").text
+    script = client.get("/flash/app.js").text
+    for element_id in (
+        "pause-btn",
+        "play-btn",
+        "card-send",
+        "review-discard",
+        "discard-btn",
+        "crop-start",
+        "crop-end",
+    ):
+        assert f'id="{element_id}"' in page
+    assert "openReview" in script and "trimmedBlob" in script and "sendPhotosOnly" in script
+    assert "Stop and send" not in script
+
+
 def test_uploaded_voice_memo_is_sent_like_a_recording(app: FastAPI, client: TestClient) -> None:
     page = client.get("/flash/").text
     assert 'id="rec-upload"' in page and 'accept="audio/*' in page

@@ -54,6 +54,15 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 ## Prism (recording API)
 
+- 2026-10-17 — Re-encoding a cropped voice note in the browser plays the slice back through
+  `MediaRecorder`, so it takes as long as the kept audio and is a second encode → send the
+  original blob when the handles are still at the ends (ADR 0054).
+- 2026-10-17 — A second facts call plus an addendum, gated on whether the owner edited, did
+  not match the day: transcripts wait until 4:05 a.m., then one fill, and a recording days
+  later should only add what it says → `fill_day` and `update_day` only (ADR 0050).
+- 2026-10-17 — Rewriting the journal on every short recording repeats the same day and spends a
+  model call each time → save transcripts as they arrive and write the journal once, five
+  minutes after the day rollover (ADR 0046).
 - 2026-10-10 — pydantic `ValidationError` and `json.JSONDecodeError` messages echo their input,
   which for AI replies is content about the owner's day → activity records keep only the error
   type and count (`safe_error`, ADR 0012).
@@ -101,6 +110,11 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 ## Models and prompts
 
+- 2026-10-17 — Two model calls (facts, then journal) let the journal copy a bad fact list. One
+  call should see the transcript and the day template and fill both (ADR 0049).
+- 2026-10-17 — Sarvam's English translation kept assigning actions to the wrong person, so the
+  journal was reading a second, worse text. Drop the translate job and give the journal the
+  code-mixed Telugu transcript plus the glossary and keyterms (ADR 0048).
 - 2026-10-12 — A real Telugu-English recording through `gpt-4o-transcribe` (language detection)
   came out as English words spelled in Telugu script with broken word boundaries and misheard
   names; `extract_facts-v2` on `gpt-4o-mini` then read a phrase meaning "in the car itself" as a
@@ -132,3 +146,7 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
   translation is a hint, the Telugu wins; relation words and names need a glossary; "unsure"
   must be written as unsure. Captured in the day template and the `lumitrace-telugu-day-journal`
   skill (ADR 0045); the prompts still need a version with the Nanna rules.
+- 2026-10-17 — Family names and the notes that fix mishearings were split across an environment
+  variable and a skill file the server cannot read. One `secrets/family.md` feeds both. Usual
+  routines in that file are easy for a model to write as if they happened today, so the prompt
+  has to say they are background only (ADR 0047).

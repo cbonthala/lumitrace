@@ -129,6 +129,44 @@ body[data-tab="settings"] .tabs [data-go="settings"] { color: var(--text); }
 .rec .s { font-size: 13px; color: var(--muted); max-width: 34ch; }
 .timer { font-variant-numeric: tabular-nums; font-size: 44px; font-weight: 300; letter-spacing: 1px; }
 .wave { width: min(100%, 460px); height: 56px; }
+.rec-state.paused { color: var(--warn); }
+.rec-review { display: grid; gap: 10px; justify-items: center; width: min(100%, 460px); }
+.review-time { font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 500; }
+.crop {
+  position: relative; width: 100%; height: 72px; touch-action: none;
+  border-radius: 12px; background: var(--panel2); border: 1px solid var(--line);
+}
+.crop.busy { pointer-events: none; opacity: .55; }
+.crop-wave { width: 100%; height: 100%; display: block; border-radius: 12px; }
+.crop-dim { position: absolute; top: 0; bottom: 0; background: #0b0d17bb; pointer-events: none; }
+.crop-dim.left { left: 0; }
+.crop-dim.right { right: 0; }
+.crop-playhead {
+  position: absolute; top: 4px; bottom: 4px; width: 2px; margin-left: -1px;
+  background: #fff; pointer-events: none;
+}
+.crop-handle {
+  position: absolute; top: 0; bottom: 0; width: 28px; margin-left: -14px; padding: 0;
+  border: 0; background: transparent; cursor: ew-resize; touch-action: none;
+}
+.crop-handle::after {
+  content: ""; position: absolute; left: 12px; top: 8px; bottom: 8px; width: 4px;
+  border-radius: 4px; background: #fff;
+}
+.rec-review-actions, .rec-controls { display: flex; gap: 12px; justify-content: center; }
+.iconbtn {
+  width: 52px; height: 52px; padding: 0; border-radius: 50%;
+  display: inline-grid; place-items: center;
+}
+.iconbtn svg { width: 22px; height: 22px; display: block; }
+.iconbtn .only-resume, .iconbtn .only-pause { display: none; }
+#pause-btn .only-pause, #play-btn .only-play { display: block; }
+#pause-btn.is-resume .only-pause, #play-btn.is-playing .only-play { display: none; }
+#pause-btn.is-resume .only-resume, #play-btn.is-playing .only-pause { display: block; }
+.iconbtn.danger { color: var(--err); }
+.rec-foot { width: 100%; display: flex; justify-content: flex-end; }
+.rec-foot .btn { margin-left: 0; }
+.rec-foot .btn svg { width: 18px; height: 18px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .chip {
   font-size: 12.5px; padding: 6px 11px; border-radius: 999px; background: var(--panel2);
@@ -152,7 +190,6 @@ textarea {
   border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px;
 }
 textarea::placeholder, input::placeholder { color: #5e648a; }
-.note .thumbs { justify-content: flex-start; margin-top: 10px; }
 .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
 .btn {
   border: 1px solid var(--line); background: var(--panel2); color: var(--text); padding: 11px 14px;
@@ -226,12 +263,11 @@ textarea::placeholder, input::placeholder { color: #5e648a; }
   main, .top { max-width: 900px; }
   body[data-tab="capture"] .main {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-areas: "title title" "banner banner" "rec note" "rec stats";
+    grid-template-areas: "title title" "banner banner" "rec stats";
   }
   body[data-tab="capture"] .main > .title { grid-area: title; }
   body[data-tab="capture"] .banner { grid-area: banner; }
   body[data-tab="capture"] .rec { grid-area: rec; align-self: start; }
-  body[data-tab="capture"] .note { grid-area: note; }
   body[data-tab="capture"] .statscard { grid-area: stats; }
   .top { padding-top: calc(8px + var(--safe-top)); padding-bottom: 6px; }
   h1 { font-size: 22px; }
@@ -250,10 +286,10 @@ textarea::placeholder, input::placeholder { color: #5e648a; }
   main { padding: 10px 40px 40px; max-width: 1240px; margin: 0 auto; gap: 20px; }
   .main {
     grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-    grid-template-areas: "title title" "banner banner" "rec list" "note list" "stats list";
+    grid-template-areas: "title title" "banner banner" "rec list" "stats list";
   }
   .main > .title { grid-area: title; } .banner { grid-area: banner; } .rec { grid-area: rec; }
-  .note { grid-area: note; } .statscard { grid-area: stats; } .list { grid-area: list; }
+  .statscard { grid-area: stats; } .list { grid-area: list; }
   .list { align-self: start; }
   body[data-tab="settings"] .main { grid-template-columns: minmax(0, 560px); grid-template-areas: none; justify-content: center; }
   body[data-tab="design"] .main { grid-template-columns: minmax(0, 960px); grid-template-areas: none; justify-content: center; }

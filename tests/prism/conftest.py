@@ -3,6 +3,7 @@ an app wired to local storage. All data is fictional."""
 
 from __future__ import annotations
 
+import datetime as dt
 import io
 import json
 import time
@@ -30,11 +31,9 @@ AUTH = {"Authorization": f"Bearer {TOKEN}"}
 
 def task_of(messages: list[dict[str, str]]) -> str:
     system = messages[0]["content"]
-    if "extract structured facts" in system:
-        return "extract_facts"
-    if "Write a short addition" in system:
-        return "journal_addendum"
-    return "write_journal"
+    if "update an existing day" in system:
+        return "update_day"
+    return "fill_day"
 
 
 class FakeLLM:
@@ -56,15 +55,20 @@ class FakeLLM:
         user = messages[1]["content"]
         if model in self.bad_json_models:
             content = "Sure! Here are the facts: mood is great"
-        elif task == "extract_facts":
-            content = json.dumps(self.facts(user))
-        elif task == "write_journal":
-            entries = user.count("· Log My Day") + user.count("· Quick Note")
+        elif task == "update_day":
             content = json.dumps(
-                {"headline": "Taco day", "journal": f"## Summary\n\nA day with {entries} entries."}
+                {"facts": self.facts(user), "text": "Later you added a quick note."}
             )
         else:
-            content = "```json\n" + json.dumps({"text": "Later you added a quick note."}) + "\n```"
+            spoken = user.split("Journal entries for this day", 1)[-1]
+            entries = spoken.count("· Log My Day") + spoken.count("· Quick Note")
+            content = json.dumps(
+                {
+                    "headline": "Taco day",
+                    "journal": f"## Summary\n\nA day with {entries} entries.",
+                    "facts": self.facts(user),
+                }
+            )
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
 
     @staticmethod
@@ -109,7 +113,6 @@ def api_settings(settings: Settings) -> Settings:
         update={
             "api_token": settings.api_token.__class__(TOKEN),
             "prompts_dir": ROOT / "prompts",
-            "llm_extract_facts_model": "test/extract",
             "llm_write_journal_model": "test/journal",
             "llm_fallback_model": "test/fallback",
         }
@@ -141,6 +144,7 @@ def processor(
         llm=LLMClient(api_settings, completion_fn=fake_llm),
         nudge=nudges,
         compress=fake_compress,
+        now=lambda: dt.datetime(2026, 10, 17, 15, tzinfo=api_settings.tz),
     )
 
 

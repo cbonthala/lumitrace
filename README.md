@@ -17,7 +17,7 @@ Drive, which you read in Obsidian and can ask questions about from an AI app lik
 | Name | What it is | Where the code lives |
 |---|---|---|
 | **Lumitrace** | the whole project: one Python package, one Docker image | `lumitrace/` |
-| **Flash** | what you capture with: the web app at `/flash/` (phone or laptop, add it to the Home Screen) and the iPhone Shortcuts (**Log My Day**, **Quick Note**, ...) | `lumitrace/prism/web/`; Shortcuts on your phone; guide `docs/flash.md` |
+| **Flash** | what you capture with: the web app at `/flash/` (phone or laptop, add it to the Home Screen) and the iPhone Shortcuts (**Log My Day**, **Send pending**, ...) | `lumitrace/prism/web/`; Shortcuts on your phone; guide `docs/flash.md` |
 | **Prism** | the recording API and processing pipeline: splits one beam of raw voice into its colors (facts, journal, mood, transcript) | `lumitrace/prism/` (pipeline in `lumitrace/prism/pipeline/`), `prompts/` |
 | **Frames** | the day files in Google Drive (one Markdown file per day, one Frame per day), their format and the storage layer | `lumitrace/frames/dayfile.py`, `lumitrace/frames/storage/` |
 | **Spectrum** | the indexer: keeps a SQLite search index of the Frames | `lumitrace/spectrum/` (schema shared in `lumitrace/index/`) |
@@ -25,8 +25,8 @@ Drive, which you read in Obsidian and can ask questions about from an AI app lik
 
 ## How it works
 
-1. **Capture (Flash):** the Flash web app or an iPhone Shortcut sends your voice note, location
-   and photos to the Prism (`POST /recordings`, or `POST /notes` for quick notes).
+1. **Capture (Flash):** the Flash web app or an iPhone Shortcut sends your voice, location
+   and photos to the Prism (`POST /recordings`). A photo with no recording uses `POST /notes`.
 2. **Split (Prism):** it transcribes the audio, extracts facts (meals, people, activities,
    mood), writes the day's Markdown file and stores a compressed copy of the audio and photos in
    `Lumitrace/YYYY/MM/YYYY-MM-DD/` in Google Drive. Anything before 4 a.m. counts as the previous
@@ -55,7 +55,7 @@ uv run pytest           # everything runs offline
 In `.env`, set `LUMITRACE_API_TOKEN` to an `openssl rand -hex 32` value and
 `LUMITRACE_MCP_OWNER_PASSWORD` to a long passphrase: with `change-me` or anything under 16
 characters the Prism refuses every request (`503`) and the Lens refuses to start. Choose the speech, AI and embedding providers and
-add their keys (`OPENAI_API_KEY`, AWS credentials, ...). To try it without any provider, set
+add their keys (`GEMINI_API_KEY`, `LUMITRACE_SARVAM_API_KEY`, ...). To try it without any provider, set
 `LUMITRACE_STT_PROVIDER=fake`, the three `LUMITRACE_LLM_*_MODEL=fake` and
 `LUMITRACE_EMBEDDING_MODEL=fake`.
 
@@ -108,8 +108,9 @@ proxy): `docs/flash.md`.
 * **Log My Day** Shortcut at night (the nightly reminder starts it), **Quick Note** during the day.
 * No signal? The Shortcut saves to a "Flash Inbox" folder in Files; "Send pending" uploads later.
   The web app keeps captures in the browser and sends them when you're back online.
-* Edit any day in Obsidian. Your edits are kept: Lumitrace never overwrites them, and it never
-  touches the **My notes** section. Later captures for an edited day are added, not rewritten.
+* Edit any day in Obsidian after the journal is written. Those edits are kept, and **My notes**
+  are never touched. A journal typed before 4:05 a.m. is replaced by the morning write. A
+  recording that arrives after the journal exists is added, not used to rewrite the day.
 * Ask your AI app about your days; answers cite the dates they come from. If an answer is wrong,
   say so and the app records feedback.
 
