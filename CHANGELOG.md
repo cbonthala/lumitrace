@@ -29,6 +29,7 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Prism
 
+- **Capture status chips match the journal.** A recording in progress says Transcribing…, and a saved capture whose journal is still waiting says Not in journal. In journal appears only after that capture's words are in the journal. The history list follows the day file, so Generate and the 4:05 a.m. run flip the chip without sending the clip again.
 - **My notes feed safe journal updates** (ADR 0058). The first journal uses every recording plus
   My notes. Later recordings or changed notes return missing bullets classified as Summary,
   Morning, Afternoon, Evening or Thoughts; code inserts them without rewriting existing words.

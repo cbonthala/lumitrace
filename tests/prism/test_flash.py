@@ -13,12 +13,21 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from lumitrace.config import Settings
-from lumitrace.frames.dayfile import Capture, day_file_path, merge_capture, parse, render
+from lumitrace.frames.dayfile import (
+    Capture,
+    DayFile,
+    FrontMatter,
+    day_file_path,
+    merge_capture,
+    parse,
+    render,
+)
 from lumitrace.frames.storage.local import LocalStorage
 from lumitrace.prism import flash
 from lumitrace.prism.app import create_app
 from lumitrace.prism.auth import SESSION_COOKIE, login_problem, make_session, session_valid
-from lumitrace.prism.flash import week_summary
+from lumitrace.prism.flash import generation_for_display, week_summary
+from lumitrace.prism.inbox import CaptureStatus
 from lumitrace.prism.pipeline.processor import CaptureProcessor
 from tests.prism.conftest import AUTH, wait_idle
 
@@ -204,6 +213,57 @@ def test_login_problem(flash_settings: Settings) -> None:
         assert login_problem(flash_settings.model_copy(update=update)) is not None, update
     off = flash_settings.model_copy(update={"flash_username": ""})
     assert not session_valid(off, make_session(off)[0])
+
+
+def test_capture_status_chip_matches_the_journal(client: TestClient) -> None:
+    script = client.get("/flash/app.js").text
+    assert "function statusChip" in script
+    assert "Transcribing…" in script and "Not in journal" in script and "In journal" in script
+    assert "Writing journal" not in script
+    assert 'IN_JOURNAL = new Set(["full", "update", "unchanged"])' in script
+
+
+def test_capture_list_follows_the_journal(flash_app: FastAPI, flash_client: TestClient) -> None:
+    headers = with_session(sign_in(flash_client))
+    sent = flash_client.post(
+        "/notes",
+        json={"text": "Tea with Maya.", "captured_at": "2026-10-17T10:00:00-05:00"},
+        headers=headers,
+    )
+    assert sent.status_code == 202, sent.text
+    capture_id = sent.json()["capture_id"]
+    wait_idle(flash_app)
+    listed = flash_client.get("/captures", headers=headers).json()
+    saved = next(row for row in listed if row["capture_id"] == capture_id)
+    assert saved["status"] == "done" and saved["generation"] == "deferred"
+
+    written = flash_client.post("/journal", json={"date": "2026-10-17"}, headers=headers)
+    assert written.status_code == 200 and written.json()["status"] == "full"
+    listed = flash_client.get("/captures", headers=headers).json()
+    included = next(row for row in listed if row["capture_id"] == capture_id)
+    assert included["generation"] == "unchanged"
+
+    written_at = dt.datetime(2026, 10, 17, 20, tzinfo=dt.UTC)
+    day = DayFile(
+        meta=FrontMatter(
+            date=dt.date(2026, 10, 17),
+            generated_at=written_at,
+            generated_source_hash="not-the-current-source",
+        )
+    )
+    base = dict(
+        capture_id="later",
+        kind="note",
+        status="done",
+        entry_date=dt.date(2026, 10, 17),
+        captured_at=written_at,
+        received_at=written_at,
+        generation="deferred",
+    )
+    before = CaptureStatus(**base, updated_at=written_at - dt.timedelta(minutes=5))
+    after = CaptureStatus(**base, updated_at=written_at + dt.timedelta(minutes=5))
+    assert generation_for_display(before, day) == "unchanged"
+    assert generation_for_display(after, day) == "deferred"
 
 
 def test_home_button_and_history_grouped_by_day(client: TestClient) -> None:

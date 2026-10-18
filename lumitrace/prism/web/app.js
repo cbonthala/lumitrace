@@ -909,12 +909,23 @@ async function discardRecording() {
 
 // --- history, banner and summary -----------------------------------------------------------
 
-const STATUS_CHIP = {
-  queued: ["queue", "Queued"],
-  processing: ["proc", "Writing journal…"],
-  done: ["done", "In journal"],
-  failed: ["failed", "Failed · retry"],
-};
+const IN_JOURNAL = new Set(["full", "update", "unchanged"]);
+
+function statusChip(capture) {
+  if (capture.status === "failed") return ["failed", "Failed · retry"];
+  if (capture.status === "queued") {
+    return capture.retry_at ? ["queue", "Retrying…"] : ["queue", "Queued"];
+  }
+  if (capture.status === "processing") {
+    return ["proc", capture.kind === "recording" ? "Transcribing…" : "Saving…"];
+  }
+  if (capture.status === "done") {
+    if (IN_JOURNAL.has(capture.generation)) return ["done", "In journal"];
+    if (capture.generation === "failed") return ["bad", "Journal failed"];
+    return ["saved", "Not in journal"];
+  }
+  return ["queue", capture.status];
+}
 
 function describe(kind, local, photos) {
   if (kind === "recording") {
@@ -1035,7 +1046,7 @@ async function renderCaptures() {
       at: c.captured_at,
       node: captureRow({
         kind: c.kind, capturedAt: c.captured_at, photos: c.photos.length || local[c.capture_id]?.photos || 0,
-        local: local[c.capture_id], chip: STATUS_CHIP[c.status] || ["queue", c.status],
+        local: local[c.capture_id], chip: statusChip(c),
         onChip: c.status === "failed" ? () => retryCapture(c.capture_id) : null,
       }),
     });

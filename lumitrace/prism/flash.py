@@ -27,6 +27,7 @@ from pydantic import BaseModel
 from lumitrace import __version__
 from lumitrace.config import Settings
 from lumitrace.frames.dayfile import (
+    DayFile,
     DayFileParseError,
     day_file_path,
     entry_date,
@@ -55,6 +56,7 @@ WEB_DIR = Path(__file__).parent / "web"
 SUMMARY_DAYS = 7
 STREAK_MAX_MONTHS = 24
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+_IN_JOURNAL = frozenset({"full", "update", "unchanged"})
 CONTENT_SECURITY_POLICY = (
     "default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; "
     "style-src 'self'; script-src 'self'; connect-src 'self'; manifest-src 'self'; "
@@ -112,6 +114,42 @@ def _days_in_month(storage: Storage, year: int, month: int) -> set[dt.date]:
         if day is not None:
             days.add(day)
     return days
+
+
+def _as_utc(moment: dt.datetime) -> dt.datetime:
+    if moment.tzinfo is None:
+        return moment.replace(tzinfo=dt.UTC)
+    return moment.astimezone(dt.UTC)
+
+
+def generation_for_display(status: CaptureStatus, day: DayFile | None) -> str | None:
+    """Whether this capture is in the journal now.
+
+    The stored ``generation`` is only what happened when the capture was processed. Generate
+    and the 4:05 a.m. run can include it later without rewriting that status file.
+    """
+    stored = status.generation
+    if status.status != "done" or stored in _IN_JOURNAL or stored == "skipped":
+        return stored
+    if day is None or day.meta.generated_at is None:
+        return stored or "deferred"
+    included = day.meta.generated_source_hash == day.compute_source_hash() or _as_utc(
+        status.updated_at
+    ) <= _as_utc(day.meta.generated_at)
+    if included:
+        return "unchanged"
+    return stored or "deferred"
+
+
+def _read_day(storage: Storage, day: dt.date) -> DayFile | None:
+    path = day_file_path(day)
+    if not storage.exists(path):
+        return None
+    try:
+        return parse(storage.read_text(path), fallback_date=day)
+    except DayFileParseError:
+        log.warning("could not read %s while listing captures", path)
+        return None
 
 
 def journal_message(day: dt.date, status: str) -> str:
@@ -263,8 +301,20 @@ def register_flash(
     def recent_captures(
         days: int = Query(default=7, ge=1, le=60), limit: int = Query(default=30, ge=1, le=200)
     ) -> list[CaptureStatus]:
+        built = services()
         since = dt.datetime.now(dt.UTC) - dt.timedelta(days=days)
-        return services().inbox.recent_statuses(since, limit)
+        found = built.inbox.recent_statuses(since, limit)
+        days_read: dict[dt.date, DayFile | None] = {}
+        shown: list[CaptureStatus] = []
+        for item in found:
+            if item.entry_date not in days_read:
+                days_read[item.entry_date] = _read_day(built.storage, item.entry_date)
+            shown.append(
+                item.model_copy(
+                    update={"generation": generation_for_display(item, days_read[item.entry_date])}
+                )
+            )
+        return shown
 
     @app.get("/summary", dependencies=auth, response_model=WeekSummary)
     def summary() -> WeekSummary:

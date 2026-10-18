@@ -228,8 +228,9 @@ textarea::placeholder, input::placeholder { color: #5e648a; }
 .st { font-size: 11.5px; font-weight: 650; padding: 4px 9px; border-radius: 999px; flex: none; border: 0; }
 .st.done { color: var(--ok); background: #3ddc9718; }
 .st.proc { color: var(--info); background: #4cc9f018; }
-.st.queue, .st.offline { color: var(--warn); background: #ffb54718; }
+.st.queue, .st.offline, .st.saved { color: var(--warn); background: #ffb54718; }
 .st.failed { color: var(--err); background: #ff6b7a18; cursor: pointer; }
+.st.bad { color: var(--err); background: #ff6b7a18; }
 .empty { margin: 6px 0 0; font-size: 13.5px; }
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .stat { background: var(--panel2); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
