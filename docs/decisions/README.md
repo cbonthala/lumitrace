@@ -71,3 +71,7 @@ Template:
 | [0052](0052-day-journal-reading-rules.md) | Fill-day prompt, day template, and skill share the reading rules |
 | [0053](0053-gemini-embeddings.md) | Search vectors come from Gemini Embedding 2, at 1536 dimensions |
 | [0054](0054-flash-reviews-before-sending.md) | Flash holds a recording for play, pause, and crop, and sends only when you tap Send |
+| [0055](0055-generate-journal-from-flash.md) | Flash Generate writes one day now (destructive rewrite superseded by 0058) |
+| [0056](0056-journal-covers-the-whole-recording.md) | The journal covers each recording to the end; Everyone meals are filled in code |
+| [0057](0057-day-file-drops-glance-and-translation.md) | Day file format 4: no At a glance section and no English translation |
+| [0058](0058-notes-and-safe-section-updates.md) | My notes feed generation; later source is inserted into existing journal sections without rewriting edits |

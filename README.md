@@ -27,8 +27,8 @@ Drive, which you read in Obsidian and can ask questions about from an AI app lik
 
 1. **Capture (Flash):** the Flash web app or an iPhone Shortcut sends your voice, location
    and photos to the Prism (`POST /recordings`). A photo with no recording uses `POST /notes`.
-2. **Split (Prism):** it transcribes the audio, extracts facts (meals, people, activities,
-   mood), writes the day's Markdown file and stores a compressed copy of the audio and photos in
+2. **Split (Prism):** it transcribes the audio, writes the day's journal from that Telugu
+   transcript, and stores a compressed copy of the audio and photos in
    `Lumitrace/YYYY/MM/YYYY-MM-DD/` in Google Drive. Anything before 4 a.m. counts as the previous
    day.
 3. **Look at the Frames:** open the Drive folder in Obsidian. Each day embeds its audio with a
@@ -108,9 +108,13 @@ proxy): `docs/flash.md`.
 * **Log My Day** Shortcut at night (the nightly reminder starts it), **Quick Note** during the day.
 * No signal? The Shortcut saves to a "Flash Inbox" folder in Files; "Send pending" uploads later.
   The web app keeps captures in the browser and sends them when you're back online.
-* Edit any day in Obsidian after the journal is written. Those edits are kept, and **My notes**
-  are never touched. A journal typed before 4:05 a.m. is replaced by the morning write. A
-  recording that arrives after the journal exists is added, not used to rewrite the day.
+* Add extra source material under **My notes**. Generate and the 4:05 a.m. run read it alongside
+  every recording but never modify it. **Generate** beside a day in Flash History writes the
+  first journal now; later clicks process only changed source.
+* Edit the title or journal in Obsidian after its first generation. Those words are kept. New
+  recordings or changed My notes add bullets directly to Morning, Afternoon, Evening, Thoughts
+  or Summary—there is no Later section and no full rewrite. A journal typed before its first
+  generation is still replaced. The file has no At a glance section or English translation.
 * Ask your AI app about your days; answers cite the dates they come from. If an answer is wrong,
   say so and the app records feedback.
 

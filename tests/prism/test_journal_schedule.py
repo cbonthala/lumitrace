@@ -55,7 +55,7 @@ def test_open_day_keeps_every_recording_and_writes_the_journal_once(
     assert fake_llm.tasks() == ["fill_day"]
     day = parse(api_storage.read_text(day_file_path(OCT10)))
     assert day.journal == "## Summary\n\nA day with 2 entries."
-    assert day.facts.people == ["Maya", "Leo"]
+    assert day.facts.people == []
     assert not day.is_user_edited()
     assert not api_storage.exists(processor._due_path(OCT10))
     filled = fake_llm.calls[0]
@@ -83,6 +83,7 @@ def test_morning_run_writes_the_journal_even_if_one_was_typed_early(
     assert "My own words about the run." not in day.journal
     assert day.notes == "Keep this note."
     assert fake_llm.tasks() == ["fill_day"]
+    assert "Keep this note." in fake_llm.calls[0][2][1]["content"]
 
 
 def test_a_failed_morning_run_is_tried_again(
@@ -101,6 +102,98 @@ def test_a_failed_morning_run_is_tried_again(
     fake_llm.fail_models.clear()
     assert processor.generate_pending() == [(OCT10, "full")]
     assert parse(api_storage.read_text(day_file_path(OCT10))).journal.startswith("## Summary")
+
+
+def test_generate_now_writes_the_open_day_from_every_recording(
+    processor: CaptureProcessor, api_settings: Settings, api_storage: LocalStorage, fake_llm
+) -> None:
+    clock = [dt.datetime(2026, 10, 10, 15, tzinfo=api_settings.tz)]
+    processor._now_fn = lambda: clock[0]
+    processor.process(make_request(api_settings, api_storage, "a", spoken="Run with Maya."))
+    processor.process(
+        make_request(api_settings, api_storage, "b", hour=22, spoken="Tacos with Leo.")
+    )
+    assert fake_llm.calls == []
+
+    assert processor.generate_day(OCT10) == "full"
+    assert fake_llm.tasks() == ["fill_day"]
+    day = parse(api_storage.read_text(day_file_path(OCT10)))
+    assert day.journal == "## Summary\n\nA day with 2 entries."
+    assert "Run with Maya." in fake_llm.calls[0][2][1]["content"]
+    assert "Tacos with Leo." in fake_llm.calls[0][2][1]["content"]
+    assert not api_storage.exists(processor._due_path(OCT10))
+
+    assert processor.generate_day(dt.date(2026, 10, 9)) == "skipped"
+    assert fake_llm.tasks() == ["fill_day"]
+
+
+def test_generate_now_preserves_edits_and_uses_changed_notes(
+    processor: CaptureProcessor, api_settings: Settings, api_storage: LocalStorage, fake_llm
+) -> None:
+    clock = [dt.datetime(2026, 10, 10, 15, tzinfo=api_settings.tz)]
+    processor._now_fn = lambda: clock[0]
+    processor.process(make_request(api_settings, api_storage, "a", spoken="Run with Maya."))
+    processor.process(
+        make_request(api_settings, api_storage, "b", hour=22, spoken="Tacos with Leo.")
+    )
+    assert processor.generate_day(OCT10) == "full"
+
+    def edit(day) -> None:
+        day.title = "My own title"
+        day.journal = (
+            "## Summary\n\nMy own words about the run.\n\n"
+            "## Evening\n\n- A line I added."
+        )
+        day.facts.mood = "proud"
+        day.facts.people = ["Nobody"]
+        day.notes = "Keep this note."
+
+    owner_edits(api_storage, edit)
+    assert parse(api_storage.read_text(day_file_path(OCT10))).is_user_edited()
+
+    assert processor.generate_day(OCT10) == "update"
+    assert fake_llm.tasks() == ["fill_day", "update_day"]
+    sent = fake_llm.calls[1][2][1]["content"]
+    assert "Run with Maya." in sent and "Tacos with Leo." in sent
+    assert "My own words" in sent and "Keep this note." in sent
+    day = parse(api_storage.read_text(day_file_path(OCT10)))
+    assert day.journal.startswith("## Summary\n\nMy own words about the run.")
+    assert "- A line I added." in day.journal
+    assert day.journal.endswith("- You added another detail to the day.")
+    assert "## Later" not in day.journal
+    assert day.title == "My own title"
+    assert day.facts.mood is None
+    assert day.facts.people == []
+    assert day.notes == "Keep this note."
+    assert [c.text for c in day.captures] == ["Run with Maya.", "Tacos with Leo."]
+    assert day.is_user_edited()
+    assert processor.generate_day(OCT10) == "unchanged"
+    assert fake_llm.tasks() == ["fill_day", "update_day"]
+
+
+def test_morning_run_merges_new_audio_after_generate_now(
+    processor: CaptureProcessor, api_settings: Settings, api_storage: LocalStorage, fake_llm
+) -> None:
+    clock = [dt.datetime(2026, 10, 10, 15, tzinfo=api_settings.tz)]
+    processor._now_fn = lambda: clock[0]
+    processor.process(make_request(api_settings, api_storage, "a", spoken="Run with Maya."))
+    assert processor.generate_day(OCT10) == "full"
+
+    processor.process(
+        make_request(api_settings, api_storage, "b", hour=22, spoken="Tacos with Leo.")
+    )
+    assert fake_llm.tasks() == ["fill_day"]
+    assert api_storage.exists(processor._due_path(OCT10))
+
+    clock[0] = dt.datetime(2026, 10, 11, 4, 6, tzinfo=api_settings.tz)
+    assert processor.generate_pending() == [(OCT10, "update")]
+    assert fake_llm.tasks() == ["fill_day", "update_day"]
+    second = fake_llm.calls[1][2][1]["content"]
+    assert "Run with Maya." in second and "Tacos with Leo." in second
+    journal = parse(api_storage.read_text(day_file_path(OCT10))).journal
+    assert journal.startswith("## Summary\n\nA day with 1 entries.")
+    assert journal.endswith("## Evening\n\n- You added another detail to the day.")
+    assert "## Later" not in journal
 
 
 def test_scheduler_stops_while_it_is_waiting(processor: CaptureProcessor) -> None:

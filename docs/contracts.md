@@ -67,10 +67,10 @@ Paths: `day_dir(d)`, `day_file_path(d)`, `audio_file_name(d, local_time)`,
 `next_photo_names(existing, count)`, `unique_file_name(name, existing)`, `system_path(*parts)`,
 `generated_snapshot_path(d)`, `parse_day_file_path(path) -> date | None`,
 `date_of_path(path) -> date | None`, `classify_path(path) -> "day"|"audio"|"photo"|"system"|"other"`.
-Constants: `SYSTEM_DIR = "_system"`, `FORMAT_VERSION = 2`, `FACTS_HEADING = "## At a glance"`,
+Constants: `SYSTEM_DIR = "_system"`, `FORMAT_VERSION = 4`, `FACTS_HEADING = "## At a glance"`,
 `FACT_SECTIONS`, `FAMILY_FIELDS`, `MEAL_TYPES` (breakfast, lunch, dinner, snacks, drinks),
-`NONE_TEXT = "none"`, `JOURNAL_SECTIONS` (Summary, Morning, Afternoon, Evening, Thoughts,
-Later), `MARKER_PREFIXES = ("lumitrace", "lumen",
+`NONE_TEXT = "none"`, `JOURNAL_SECTIONS` (Summary, Morning, Afternoon, Evening, Thoughts),
+`MARKER_PREFIXES = ("lumitrace", "lumen",
 "bookshelf", "lifelog")` (`parse` accepts all; `render` writes `lumitrace:`), `FORMAT_KEY =
 "lumitrace_format"`, `LEGACY_FORMAT_KEYS = ("lumen_format", "bookshelf_format",
 "lifelog_format")`.
@@ -85,36 +85,43 @@ Models (pydantic):
 * `FamilyMember`: `name`, `meals: list[Meal]` (breakfast, lunch, dinner, snacks), `health`,
   `feelings`, `moments` (memories); `.has_facts()`.
 * `DayFacts`: `mood`, `mood_score` (1–5), `city`, `weather`, `highlights`, `remember`,
-  `places`, `people`, `memories` (shared), `activities` (things we did), `meals` (not tied to a
-  person), `family: list[FamilyMember]`; `.is_empty()`. Format 1/2 shaped data is converted by a
+  `places`, `people`, `memories` (shared), `activities` (things we did), `meals` (the Everyone
+  block: union of family meals, each item tagged with who had it), `family: list[FamilyMember]`;
+  `.is_empty()`. Format 1/2 shaped data is converted by a
   validator (`docs/frames-format.md` → Older formats). Also the output
-  schema of fact extraction. Values are normalised (one line, no separators inside items) so
+  schema of fact extraction. Values are normalised (one line; a comma splits meal items except
+  inside parentheses) so
   render and parse agree. `FACT_FIELDS`.
 * `FrontMatter`: `date`, `audio`, `photos`, `prompt_version`, `models_used` (task → model),
-  `generated_at`, `generated_hash`, `lumitrace_format` (read from `lumen_format`,
+  `generated_at`, `generated_hash`, `generated_source_hash`, `lumitrace_format` (read from `lumen_format`,
   `bookshelf_format` or `lifelog_format` in files written under the earlier names); unknown keys preserved. Facts are
-  not in the front matter since format 2. `FORMAT_VERSION` is 3.
+  not in the front matter since format 2. `FORMAT_VERSION` is 4. `render` does not write the
+  facts section or a translation (ADR 0057). `parse` still reads both from older files.
 * `Capture`: `id`, `kind: "recording" | "note"`, `captured_at` (aware), `text`, `translation`
-  (English translation of a recording, `""` if none; written under `TRANSLATION_MARKER`),
+  (read from an older file; `render` always writes `""`),
   `audio`, `photos`, `location`; `Capture.make_id(kind, captured_at)`.
 * `DayFile`: `meta: FrontMatter`, `facts: DayFacts`, `title`, `journal`, `notes`, `captures`; `.date`,
-  `DayFile.new(d)`, `.compute_generated_hash()`, `.is_user_edited()`, `.capture_ids()`.
+  `DayFile.new(d)`, `.compute_generated_hash()`, `.compute_source_hash()`,
+  `.is_user_edited()`, `.capture_ids()`.
 
 Functions:
 
 * `parse(markdown, *, fallback_date=None) -> DayFile` (raises `DayFileParseError`)
-* `render(day) -> str` (`parse(render(d)) == d`)
+* `render(day) -> str` (format 4: no At a glance, no translation; `parse` of that text has empty facts)
 * `render_facts_section(facts, *, include_empty=True) -> str` (every line, `none` when empty;
   `include_empty=False` is the index's view without them),
   `parse_facts_section(markdown) -> (DayFacts, stray)` (the "At a glance" region; Spectrum makes
   its facts passages from the `include_empty=False` text)
 * `merge_capture(day | None, capture, day_date) -> DayFile` (idempotent by `capture.id`)
 * `apply_generation(day, *, facts, journal, title=None, prompt_version=None, models_used=None,
-  generated_at=None, force=False) -> DayFile` (raises `UserEditsDetected`)
+  generated_at=None, generated_source_hash=None, force=False) -> DayFile`
+  (raises `UserEditsDetected`)
 * `normalize_journal(markdown) -> str` (fixed `JOURNAL_SECTIONS` headings; used by
   `apply_generation`)
-* `merge_generation_additive(day, *, facts, journal_addendum=None, addendum_label=None,
-  prompt_version=None, models_used=None, generated_at=None) -> DayFile`
+* `merge_journal_sections(markdown, additions) -> str` (mechanically inserts bullets into
+  Summary, Morning, Afternoon, Evening or Thoughts without changing existing words)
+* `merge_generation_additive(day, *, facts, journal_sections=None, prompt_version=None,
+  models_used=None, generated_at=None, generated_source_hash=None) -> DayFile`
 
 ## Index: `lumitrace.index.schema`
 
@@ -168,7 +175,7 @@ Everything here lives in the owner's storage, never in the repository. `classify
 | `_system/inbox/<capture id>/` | Prism | raw uploads (`audio.<ext>`, `photo-NN.<ext>`, `manifest.json` last) waiting to be processed; deleted when the capture is `done` |
 | `_system/captures/<capture id>.json` | Prism | capture status (`queued` / `processing` / `done` / `failed`), no journal content; kept for `GET /captures/{id}` |
 | `_system/generated/YYYY/MM/YYYY-MM-DD.md` | Prism | exact day file as last written by the system (`generated_snapshot_path`); written right after every day-file write, same text and `generated_at` |
-| `_system/journal-due/YYYY-MM-DD.txt` | Prism | a day whose transcripts are saved and whose journal has not been written yet; removed when the morning run (or a late capture for a closed day) finishes (ADR 0046) |
+| `_system/journal-due/YYYY-MM-DD.txt` | Prism | a day whose transcripts are saved and whose journal has not been written yet; removed when the morning run, Generate in Flash, or a late capture for a closed day finishes (ADR 0046, 0055) |
 | `_system/activity/YYYY/MM.jsonl` | Prism | activity records, one JSON line per processing attempt: models, per-step time/cost, errors; no journal content |
 | `_system/feedback/YYYY/MM/<UTC timestamp>-<id>.json` | Lens | copy of each `feedback` call (also a row in the index) |
 | `_system/index-backup/lumitrace.sqlite` | Spectrum | daily index backup (includes `feedback` and `edit_signals`) |

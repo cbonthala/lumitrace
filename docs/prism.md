@@ -92,10 +92,11 @@ response.
 
 * `status`: `queued` → `processing` → `done`, or `failed` after the automatic retries. While an
   automatic retry is waiting, `status` is `queued` and `retry_at` is set.
-* `generation`: `deferred` (transcript saved; the journal waits until 4:05 a.m.),
-  `full` (facts, title and journal written from every transcript), `update` (a recording that
-  arrived after that write; only that recording is added), `skipped` (no words), or `failed`
-  (the transcript is saved but the model failed).
+* `generation`: `deferred` (transcript saved; the journal waits until 4:05 a.m. or Generate),
+  `full` (first title and journal written from every transcript and My notes), `update`
+  (changed source inserted into the existing journal sections), `unchanged` (all source was
+  already processed), `skipped` (no source text), or `failed` (the transcript is saved but the
+  model failed).
 * `404` for an unknown id.
 
 ### `POST /captures/{capture_id}/retry`
@@ -120,6 +121,7 @@ app itself in `lumitrace/prism/web/` (ADR 0019; user guide: `docs/flash.md` → 
 | `GET /session` | none | `{"signed_in", "username", "sign_in_available", "version"}` for the cookie sent (never an error) |
 | `GET /captures?days=7&limit=30` | token or cookie | the capture statuses (same shape as `GET /captures/{id}`) changed in the last `days` (1–60), newest capture first, at most `limit` (1–200). No journal content |
 | `GET /summary` | token or cookie | `{"today", "days": 7, "days_logged", "logged_dates", "captures", "streak"}` |
+| `POST /journal` | token or cookie | JSON `{"date": "YYYY-MM-DD"}` or `{}` (the open day). Rewrites that day's title and journal from every transcript, even if those were edited (ADR 0055). The file has no At a glance section (ADR 0057). `200` with `{"entry_date", "status", "message"}`: `status` is `full`, `skipped` (no words) or `failed`. The message has no journal text. A date after today is `422`. If a recording is still being saved after two minutes, `409` |
 | `GET /lens/apps` | token or cookie | the AI apps connected to the Lens, passed through from its admin API (`docs/lens.md` → Connected apps) |
 | `POST /lens/apps/{id}/sign-out` | token or cookie | disconnect one app now (it needs the Lens password again) |
 | `POST /lens/apps/sign-out-all` | token or cookie | disconnect every app; `{"signed_out": n}` |
@@ -236,7 +238,7 @@ activity record.
    * `fake`: offline; uploaded bytes that are UTF-8 text become the transcript.
    If transcription fails nothing has been written yet, so the capture is simply retried. New
    recordings have no English translation. A translation already stored on an older capture
-   (`Capture.translation`, `docs/frames-format.md`) is left in the file.
+   is dropped the next time the day file is written (ADR 0057).
 4. **Photos** (`pipeline/photos.py`): Pillow + pillow-heif (HEIC); rotated upright from EXIF,
    fitted within `LUMITRACE_PHOTO_MAX_DIMENSION`, saved as JPEG at `LUMITRACE_PHOTO_JPEG_QUALITY`
    without EXIF (no GPS or device data in the copy). Named with `next_photo_names()` after the
@@ -247,8 +249,9 @@ activity record.
    is re-read and `merge_capture` adds the transcript block; the day file and its
    `_system/generated/` snapshot are written. From here on the capture is safe even if the AI
    steps fail (ADR 0011).
-6. **Journal timing** (`pipeline/processor.py`, `journal_schedule.py`, ADR 0046). The facts and
-   journal are written **once per day**, not on every recording.
+6. **Journal timing** (`pipeline/processor.py`, `journal_schedule.py`, ADR 0046). The journal is
+   written **once per day**, not on every recording. The day file has no At a glance section
+   (ADR 0057).
    * While the day is still open (before `LUMITRACE_DAY_ROLLOVER_HOUR`, 4 a.m. in the owner's
      timezone) the capture is saved and `generation` is `deferred`. A marker is left at
      `_system/journal-due/YYYY-MM-DD.txt`.
@@ -256,25 +259,34 @@ activity record.
      closed day that still has a marker is written. The run waits until the capture worker is
      idle, so a recording from just before 4 a.m. is included. One write sees every recording;
      a later recording still overrides an earlier one.
+   * **Generate** in Flash (ADR 0055) runs that write for one day now: `POST /journal`.
+     It waits until the worker is idle. The first call uses `fill_day` with every transcript and
+     My notes. Once the journal exists, only changed source is processed and missing bullets are
+     inserted into normal sections without replacing existing words. Recordings that arrive
+     afterward while the day is still open stay deferred; 4:05 safely merges them. If no source
+     changed, Generate returns `unchanged` without a model call.
    * A capture for a day that has **already** closed (uploaded after 4 a.m., or sent with an
      earlier `date`) is written immediately, because the morning run has passed.
    * If that run fails, the marker stays and the next start tries again.
 7. **AI steps** (`pipeline/generate.py`, `pipeline/llm.py`), when the journal is written and the
    day has any words:
-   * The day's journal does not exist yet → **full**: one `fill_day` call (ADR 0049, 0050).
-     The model sees every Telugu transcript, the family-file glossary, the keyterms, and
-     `prompts/day-template.md`. It returns JSON `{headline, journal, facts}`. Facts are
+   * The day's journal does not exist yet → **full**: one `fill_day` call (ADR 0049, 0058).
+     The model sees every Telugu transcript, My notes, the family-file glossary, the keyterms,
+     and `prompts/day-template.md`. It returns JSON `{headline, journal, facts}`. Facts are
      validated against `DayFacts` (`keep_family` gives every member in `secrets/family.md` a
-     block). `apply_generation` writes the day file, title
+     block). Day-level meals are then filled in code as the union of every member's meals,
+     each item tagged with who had it (`oatmeal (Maya, Leo)`). The model is not asked for
+     that list. The call logs the character length of `{{captures}}` and the model's maximum
+     output tokens, and the whole transcript is sent. `apply_generation` writes the day file, title
      `"<Weekday, Month D, YYYY> · <headline>"`, and the fixed journal headings
      (`normalize_journal`, `docs/frames-format.md` → The journal). This is the 4:05 a.m. write.
      It replaces a journal typed earlier that same night. Notes and transcripts stay.
-   * The journal was already written, and a **new** recording arrives → **update**: one
-     `update_day` call. The model sees that recording only, plus the journal and facts already
-     on the page. It returns new facts and a few lines. `merge_generation_additive` adds the
-     facts and appends the lines under `## Later` with the label `**HH:MM · Quick Note**`.
-     Words already on the page, including your edits, stay. This happens whether or not you
-     edited the file.
+   * The journal exists and its source changed → **update**: one `update_day` call. The model sees
+     the authoritative current journal, every recording and My notes, then returns only missing
+     bullets classified as Summary, Morning, Afternoon, Evening or Thoughts.
+     `merge_generation_additive` inserts those bullets mechanically. It never creates a Later
+     section or changes words already on the page, including edits made while the model runs.
+     `generated_source_hash` prevents repeats and makes an unchanged Generate a no-op.
    * If the call fails on every model, the day keeps the transcript and `generation` is `failed`.
    * Front matter: `prompt_version` (`fill_day` or `update_day`) and `models_used`
      (`stt`, `fill_day` or `update_day`: the model that answered), merged with what was there.
@@ -290,9 +302,12 @@ activity record.
 
 Each AI call goes to `LUMITRACE_LLM_WRITE_JOURNAL_MODEL` with
 `response_format={"type": "json_object"}`, `timeout=LUMITRACE_LLM_TIMEOUT_SECONDS`,
-`num_retries=LUMITRACE_LLM_MAX_RETRIES` and `drop_params=True` (LiteLLM drops parameters a provider
-does not support). A provider error, a reply that is not JSON (code fences and chatter around the
-object are tolerated) or a reply that fails validation counts as a failure of that model, and the
+`num_retries=LUMITRACE_LLM_MAX_RETRIES`, `drop_params=True` (LiteLLM drops parameters a provider
+does not support) and `max_tokens` set to that model's maximum output (65536 for
+`gemini-3.8-flash` and `gemini-3.6-flash`). A reply that stops because it hit a lower ceiling
+is retried once at that maximum. A provider error, a reply that is not JSON (code fences and
+chatter around the object are tolerated) or a reply that fails validation counts as a failure of
+that model, and the
 same request goes to `LUMITRACE_LLM_FALLBACK_MODEL` (ADR 0014). An out-of-range `mood_score` is set
 to null instead of rejecting the whole reply.
 
@@ -305,7 +320,7 @@ models set to `fake`, the whole API runs offline.
 `lumitrace-prism regenerate [--from D] [--to D] [--dry-run] [--nudge]` (code:
 `lumitrace/prism/regenerate.py`) redoes past days from their stored transcripts with the current
 prompts and the current day format. A day you did not edit (its hash matches, or the file equals
-its `_system/generated` snapshot) gets new facts, title and journal. A day you edited is left
+its `_system/generated` snapshot) gets a new title and journal. A day you edited is left
 alone. Notes, transcripts, audio and photos are never touched. It writes the day file
 and the identical snapshot, like the Prism does. It calls the AI models for every day (cost),
 so start with `--dry-run` and a short date range. Days without transcript text, and days you
@@ -331,8 +346,10 @@ The instructions (ADR 0016) also tell the model:
   (Dad, Amma, Nanna, ...) are resolved from the point of view of whoever says them, and the
   author's own facts go in their family block.
 * **Who did what:** every action, meal, place and feeling belongs to the person who did it;
-  "we" is the author plus whoever it clearly includes; the journal never makes the author the
-  subject of something someone else did.
+  "we" is the author plus whoever it clearly includes; an item is given to a person only when
+  the transcript names them or uses "we" ("I drank coffee" is the author only). The journal
+  covers each recording through its last sentence, including the final third. The journal never
+  makes the author the subject of something someone else did.
 * **How to read the entries:** both prompts receive the code-mixed transcript, the family-file
   glossary and the keyterms. They do not receive an English translation (ADR 0048). Parents
   talking about themselves in their child's words ("Dad went to bed early") mean the author.

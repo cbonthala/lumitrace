@@ -7,6 +7,10 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- **Day file format 4** (ADR 0057). A new write has the title, the journal, My notes and the
+  Telugu transcript. It does not include At a glance or an English translation. Older files
+  still parse. The next system write drops both. Fact search stays filled only for days that
+  still have the old section.
 - **Search uses Gemini embeddings** (ADR 0053). `LUMITRACE_EMBEDDING_MODEL` is
   `gemini/gemini-embedding-2`, same `GEMINI_API_KEY` as the day file. The call asks for 1536
   values (the model's full vector is 3072). Restarting Spectrum rebuilds the index.
@@ -25,6 +29,26 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Prism
 
+- **My notes feed safe journal updates** (ADR 0058). The first journal uses every recording plus
+  My notes. Later recordings or changed notes return missing bullets classified as Summary,
+  Morning, Afternoon, Evening or Thoughts; code inserts them without rewriting existing words.
+  `generated_source_hash` prevents repeat Generate clicks and capture replays from duplicating
+  content. There is no Later section. Format-4 regeneration trusts the generated hash so a
+  refreshed snapshot cannot hide manual corrections.
+- **The journal prompt no longer asks for At a glance or a translation** (ADR 0057). `fill_day`
+  and `update_day` return a headline and a journal. The Telugu transcript is the source.
+- **Journal calls keep the end of a long recording** (ADR 0056). The fill-day prompt must cover
+  each transcript through its last sentence, including the final third, and a word cap no longer
+  cuts a long day short. An item is shared only when the transcript names that person or says
+  "we". The call logs the `{{captures}}` length and the model's maximum output tokens (65536
+  for Gemini 3.8 Flash) and sends that ceiling; a reply cut off by a lower ceiling is retried
+  once. The whole transcript is sent. Day-level meals are filled in code from each person's
+  meals, tagged with who had them (`oatmeal (Maya, Leo)`). The model is not asked for that list.
+- **Generate writes today's journal from Flash** (ADR 0055, safe-update behavior superseded by
+  ADR 0058). History groups captures by the day they are filed under. **Generate** beside that
+  day writes the first journal now; later clicks safely process changed recordings or My notes.
+  **Home**, next to Connected, returns to Capture. The record card no longer stretches to the
+  height of the history list.
 - **Quick Note is retired in the Flash web app.** The typed note card is gone. Record through
   the day; the journal is written at the end of the day. A photo with no recording still sends
   from the Log My Day card (`POST /notes`). Old Quick Notes already in day files stay readable.

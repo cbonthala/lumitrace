@@ -1,8 +1,8 @@
 <!--
-  LUMITRACE DAY TEMPLATE (day file format 3, ADR 0045). The real file wraps these sections in the
-  "## At a glance" facts region; see docs/frames-format.md and tests/fixtures/sample-day.md.
-  Topic sections are "###", per-person blocks "####". "Audio and transcript" is the Transcript
-  region of the real file (the code-mixed transcript per recording).
+  LUMITRACE DAY TEMPLATE (ADR 0057). A checklist for the journal. The day file does not contain
+  an "At a glance" section or a translation of the transcript. The journal uses Summary,
+  Morning, Afternoon, Evening and Thoughts. "Audio and transcript" is the Transcript region
+  (Telugu, as spoken).
 
   HOW TO READ THIS FILE
   - Everything in <!-- comments --> is an instruction for whoever fills the file. Delete none of it.
@@ -10,9 +10,12 @@
   - One subsection per family member in every section that has people, in the file's order.
     A new family member in `secrets/family.md` gets a subsection in every such section.
   - Audio is mostly Telugu. The journal below is written in ENGLISH.
-    Source: the Telugu code-mixed transcript (ADR 0048). Keep Telugu words that have no clean
-    English, e.g. "thotakura (amaranth leaves)".
-  - THE RULE: every line needs a phrase in the transcript behind it.
+    Sources: the Telugu code-mixed recordings and the day's My notes (ADR 0058). My notes are
+    direct owner input and win when they correct a recording. Keep Telugu words that have no
+    clean English, e.g. "thotakura (amaranth leaves)".
+  - Cover the transcript to its last sentence. Before returning, check the final third of each
+    recording is reflected in the journal or facts.
+  - THE RULE: every line needs a phrase in a recording or My notes behind it.
       * If you cannot tell what happened, drop it.
       * If you can tell what happened but not a detail, keep it and end with [uncertain: why].
       * Never guess, never fill a gap to make a section look complete.
@@ -47,6 +50,8 @@ lumitrace_format: 3
 <!-- Per person, per meal. NEVER put one person's food under another.
      - "We had X"           -> everyone who was there
      - "Leo had X"          -> only Leo
+     - Give an item to a person only if the transcript names them or uses 'we' for it.
+       'I drank coffee' is the author only.
      - Delivery / takeout   -> food only, NOT a place visited
      - Name the dish as said; keep Telugu food words with English in brackets
      - Meal type is breakfast, lunch, dinner, snacks, or drinks

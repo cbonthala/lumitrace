@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from lumitrace.config import Settings
-from lumitrace.frames.dayfile import Capture, day_file_path, merge_capture, render
+from lumitrace.frames.dayfile import Capture, day_file_path, merge_capture, parse, render
 from lumitrace.frames.storage.local import LocalStorage
 from lumitrace.prism import flash
 from lumitrace.prism.app import create_app
@@ -204,6 +204,55 @@ def test_login_problem(flash_settings: Settings) -> None:
         assert login_problem(flash_settings.model_copy(update=update)) is not None, update
     off = flash_settings.model_copy(update={"flash_username": ""})
     assert not session_valid(off, make_session(off)[0])
+
+
+def test_home_button_and_history_grouped_by_day(client: TestClient) -> None:
+    page = client.get("/flash/").text
+    script = client.get("/flash/app.js").text
+    assert 'id="home"' in page and 'aria-label="Home"' in page and 'data-go="capture"' in page
+    assert "day-group" in script and "generateJournal" in script
+    assert "Generate journal for" in script
+
+
+def test_generate_journal_writes_the_day_from_saved_recordings(
+    flash_app: FastAPI, flash_client: TestClient, api_storage: LocalStorage, fake_llm
+) -> None:
+    assert flash_client.post("/journal", json={}).status_code == 401
+    headers = with_session(sign_in(flash_client))
+    for text, at in (("Run with Maya.", "10:00"), ("Tacos with Leo.", "12:15")):
+        resp = flash_client.post(
+            "/notes",
+            json={"text": text, "captured_at": f"2026-10-17T{at}:00-05:00"},
+            headers=headers,
+        )
+        assert resp.status_code == 202, resp.text
+    wait_idle(flash_app)
+    saved = parse(api_storage.read_text(day_file_path(dt.date(2026, 10, 17))))
+    assert saved.journal == ""
+    assert fake_llm.calls == []
+
+    written = flash_client.post("/journal", json={"date": "2026-10-17"}, headers=headers)
+    assert written.status_code == 200, written.text
+    body = written.json()
+    assert body["entry_date"] == "2026-10-17" and body["status"] == "full"
+    assert body["message"].startswith("Journal written for")
+    assert "Maya" not in body["message"] and "Tacos" not in body["message"]
+    day = parse(api_storage.read_text(day_file_path(dt.date(2026, 10, 17))))
+    assert day.journal.startswith("## Summary")
+    assert day.facts.people == []
+    assert "## At a glance" not in api_storage.read_text(day_file_path(dt.date(2026, 10, 17)))
+    assert fake_llm.tasks() == ["fill_day"]
+
+    again = flash_client.post("/journal", json={"date": "2026-10-17"}, headers=headers)
+    assert again.status_code == 200 and again.json()["status"] == "unchanged"
+    assert "already up to date" in again.json()["message"]
+    assert fake_llm.tasks() == ["fill_day"]
+
+    future = flash_client.post("/journal", json={"date": "2026-10-18"}, headers=headers)
+    assert future.status_code == 422
+    empty = flash_client.post("/journal", json={"date": "2026-10-01"}, headers=headers)
+    assert empty.status_code == 200 and empty.json()["status"] == "skipped"
+    assert "Nothing to write" in empty.json()["message"]
 
 
 def test_recording_is_reviewed_before_it_is_sent(client: TestClient) -> None:

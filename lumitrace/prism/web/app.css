@@ -40,8 +40,9 @@ button, input, textarea { font: inherit; color: inherit; }
 .conn.bad .dot { background: var(--err); }
 .icon-btn {
   width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--line); background: none;
-  color: var(--muted); display: grid; place-items: center; cursor: pointer;
+  color: var(--muted); display: grid; place-items: center; cursor: pointer; flex: none;
 }
+.icon-btn svg { width: 18px; height: 18px; display: block; }
 
 /* layout */
 main { flex: 1; padding: 6px var(--gutter-right) calc(96px + var(--safe-bottom)) var(--gutter-left); display: grid;
@@ -53,6 +54,7 @@ body:not([data-auth="out"]) .login { display: none; }
 .day { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.2px; }
 h1 { margin: 2px 0 0; font-size: 26px; font-weight: 700; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 18px; }
+.capture-col { display: grid; gap: 16px; align-content: start; }
 .sec { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 10px; }
 .sec h2 { font-size: 15px; margin: 0; font-weight: 650; white-space: nowrap; }
 .sec span { font-size: 12.5px; text-align: right; }
@@ -110,7 +112,7 @@ body[data-tab="settings"] .tabs [data-go="settings"] { color: var(--text); }
 .swatch.lens { background: none; border: 2px solid #e8eaf6; }
 
 /* recorder */
-.rec { display: grid; place-items: center; gap: 14px; padding: 26px 18px 22px; text-align: center; }
+.rec { display: grid; justify-items: center; align-content: start; gap: 12px; padding: 16px 16px 14px; text-align: center; }
 .rec-live, .rec-idle { display: grid; gap: 8px; justify-items: center; }
 .rec-state { color: var(--err); }
 .recbtn {
@@ -209,9 +211,17 @@ textarea::placeholder, input::placeholder { color: #5e648a; }
   background: #ffb54712; border: 1px solid #ffb54740; color: #ffd28a;
 }
 .banner .btn { margin-left: auto; flex: none; }
-.item { display: flex; gap: 12px; align-items: center; padding: 11px 0; border-top: 1px solid var(--line); }
-.item:first-child { border-top: 0; }
-.ico { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--panel2); font-size: 16px; flex: none; }
+.day-group + .day-group { margin-top: 12px; }
+.day-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 0 0 4px;
+}
+.day-head b { font-size: 13px; font-weight: 650; }
+.day-head .btn { flex: none; }
+.item { display: flex; gap: 8px; align-items: center; padding: 5px 0; border-top: 1px solid var(--line); }
+.day-group .item:first-of-type { border-top: 0; }
+.ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--panel2); font-size: 14px; flex: none; }
+.item .a .when { color: var(--muted); font-weight: 550; font-variant-numeric: tabular-nums; margin-right: 6px; }
 .meta { flex: 1; min-width: 0; }
 .meta .a { font-weight: 600; font-size: 14px; }
 .meta .b { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -261,18 +271,13 @@ textarea::placeholder, input::placeholder { color: #5e648a; }
 /* phone on its side: little height, so shrink the chrome and the record button */
 @media (orientation: landscape) and (max-height: 520px) and (max-width: 899px) {
   main, .top { max-width: 900px; }
-  body[data-tab="capture"] .main {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-areas: "title title" "banner banner" "rec stats";
+  body[data-tab="capture"] .capture-col {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start;
   }
-  body[data-tab="capture"] .main > .title { grid-area: title; }
-  body[data-tab="capture"] .banner { grid-area: banner; }
-  body[data-tab="capture"] .rec { grid-area: rec; align-self: start; }
-  body[data-tab="capture"] .statscard { grid-area: stats; }
   .top { padding-top: calc(8px + var(--safe-top)); padding-bottom: 6px; }
   h1 { font-size: 22px; }
   main { gap: 12px; padding-bottom: calc(64px + var(--safe-bottom)); }
-  .rec { padding: 16px; gap: 10px; }
+  .rec { padding: 12px; gap: 8px; }
   .recbtn { width: 96px; height: 96px; }
   .tabs { padding-top: 4px; padding-bottom: calc(6px + var(--safe-bottom)); }
   .tabs button { grid-auto-flow: column; align-items: center; gap: 6px; font-size: 12px; }
@@ -282,15 +287,19 @@ textarea::placeholder, input::placeholder { color: #5e648a; }
 
 /* laptop */
 @media (min-width: 900px) {
-  .top { max-width: 1240px; margin: 0 auto; padding: 22px 40px 12px; }
-  main { padding: 10px 40px 40px; max-width: 1240px; margin: 0 auto; gap: 20px; }
+  .top { max-width: 1100px; margin: 0 auto; padding: 16px 32px 8px; }
+  main { padding: 8px 32px 32px; max-width: 1100px; margin: 0 auto; gap: 14px; }
   .main {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-    grid-template-areas: "title title" "banner banner" "rec list" "stats list";
+    grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
+    grid-template-areas: "title title" "banner banner" "col list";
+    align-items: start;
   }
-  .main > .title { grid-area: title; } .banner { grid-area: banner; } .rec { grid-area: rec; }
-  .statscard { grid-area: stats; } .list { grid-area: list; }
-  .list { align-self: start; }
+  .main > .title { grid-area: title; } .banner { grid-area: banner; }
+  .capture-col { grid-area: col; display: grid; gap: 14px; align-content: start; }
+  .list {
+    grid-area: list; align-self: start; max-height: calc(100dvh - 132px); overflow: auto;
+  }
+  .day-head { position: sticky; top: 0; background: var(--panel); z-index: 1; padding-top: 2px; }
   body[data-tab="settings"] .main { grid-template-columns: minmax(0, 560px); grid-template-areas: none; justify-content: center; }
   body[data-tab="design"] .main { grid-template-columns: minmax(0, 960px); grid-template-areas: none; justify-content: center; }
   body[data-tab="settings"] .main > [data-tab]:not([data-tab="settings"]),
@@ -298,6 +307,6 @@ textarea::placeholder, input::placeholder { color: #5e648a; }
   body:not([data-tab="settings"]) .settings, body:not([data-tab="design"]) .design { display: none; }
   .flow-big { max-width: 760px; margin: 0 auto; }
   .tabs { display: none; }
-  .recbtn { width: 150px; height: 150px; }
+  .recbtn { width: 112px; height: 112px; }
   .toast { bottom: 28px; }
 }

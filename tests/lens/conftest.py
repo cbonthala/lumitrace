@@ -187,10 +187,18 @@ def days(sample_day_markdown: str) -> list[DayFile]:
 
 
 @pytest.fixture
-def populated(settings: Settings, storage: LocalStorage, days: list[DayFile]) -> Path:
-    """Day files in storage (plus the sample day's audio and first photo) and a built index."""
+def populated(
+    settings: Settings, storage: LocalStorage, days: list[DayFile], sample_day_markdown: str
+) -> Path:
+    """Day files in storage (plus the sample day's audio and first photo) and a built index.
+
+    The sample day is the older file, which still has At a glance. The other days are written
+    the way Prism writes them now, without that section.
+    """
+    sample_date = dt.date(2026, 10, 10)
     for day in days:
-        storage.write_text(day_file_path(day.date), render(day))
+        text = sample_day_markdown if day.date == sample_date else render(day)
+        storage.write_text(day_file_path(day.date), text)
     sample = days[-1]
     storage.write_bytes(f"{day_dir(sample.date)}/{sample.meta.audio[0]}", b"fake audio")
     storage.write_bytes(f"{day_dir(sample.date)}/{sample.meta.photos[0]}", b"fake jpeg")

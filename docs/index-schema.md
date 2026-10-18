@@ -46,7 +46,7 @@ are not downloaded.
 
 | Table | Columns (plus `id`, `date`, `position`) |
 |---|---|
-| `meals` | `person` (`''` when the meal is not tied to one; the `Everyone` block), `meal_type` (`breakfast`, `lunch`, `dinner` or `snacks`), `item` (one row per item) |
+| `meals` | `person` (`''` for the `Everyone` block: each item names who had it, e.g. `oatmeal (Maya, Leo)`), `meal_type` (`breakfast`, `lunch`, `dinner` or `snacks`), `item` (one row per item) |
 | `activities` | `kind`, `minutes` |
 | `people` | `name` (index with `COLLATE NOCASE`) |
 | `places` | `name` (index with `COLLATE NOCASE`) |

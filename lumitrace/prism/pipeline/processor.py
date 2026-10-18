@@ -4,7 +4,8 @@ record activity, nudge the indexer.
 The journal is not written on every capture. While the day is still open (before the rollover
 hour, 4 a.m. by default) the transcript is saved and a due marker is left under
 ``_system/journal-due/``. :meth:`CaptureProcessor.generate_pending` writes the facts and journal
-once, for days that have closed. A day that has already closed (a late upload, or a restart
+once, for days that have closed. :meth:`CaptureProcessor.generate_day` does that same write
+early, for one day, when Flash asks. A day that has already closed (a late upload, or a restart
 after 4 a.m.) is written immediately.
 
 Order matters for safety:
@@ -28,7 +29,6 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field
 
 from lumitrace.frames.dayfile import (
-    CAPTURE_LABELS,
     Capture,
     CaptureKind,
     DayFacts,
@@ -103,7 +103,8 @@ class ProcessResult(BaseModel):
     photos: list[str] = Field(default_factory=list)
     generation: str
     """``deferred`` (saved; journal waits until the day closes), ``full`` (the 4:05 write),
-    ``update`` (a later recording added to a day already written), ``skipped`` or ``failed``."""
+    ``update`` (changed source merged into a written journal), ``unchanged``, ``skipped`` or
+    ``failed``."""
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
@@ -115,7 +116,7 @@ class _Generated(BaseModel):
     facts: DayFacts
     journal: str | None = None
     headline: str = ""
-    addendum: str | None = None
+    journal_sections: dict[str, list[str]] = Field(default_factory=dict)
     models: dict[str, str] = Field(default_factory=dict)
     prompt_labels: list[str] = Field(default_factory=list)
 
@@ -159,12 +160,24 @@ class CaptureProcessor:
     def generate_pending(self) -> list[tuple[dt.date, str]]:
         """Write the journal for every closed day that still has a due marker.
 
-        Returns ``(date, status)`` with status ``full``, ``additive``, ``skipped`` or ``failed``.
+        Returns ``(date, status)`` with status ``full``, ``update``, ``unchanged``, ``skipped``
+        or ``failed``.
         A failed day keeps its marker so the next run tries again. An open day is left for the
-        run after it closes.
+        run after it closes, unless :meth:`generate_day` is asked to write it now.
         """
         with self._day_lock:
             return self._generate_pending_locked()
+
+    def generate_day(self, day_date: dt.date) -> str:
+        """Generate or safely update one day from its transcripts and My notes.
+
+        The first call fills the title and journal. Later calls process changed source material
+        and insert new bullets into their natural sections without rewriting existing words.
+        ``skipped`` means there is no source material; ``unchanged`` means it was already used.
+        ``failed`` keeps the due marker so a later run tries again.
+        """
+        with self._day_lock:
+            return self._generate_closed(day_date)
 
     def _process_locked(self, req: CaptureRequest, attempt: int) -> ProcessResult:
         local = req.captured_at.astimezone(self.settings.tz)
@@ -199,7 +212,6 @@ class CaptureProcessor:
         day_path = day_file_path(day_date)
         existing = self._read_day(day_date)
         capture = next((c for c in existing.captures if c.id == req.id), None) if existing else None
-        replay = capture is not None
         if capture is None:
             capture = self._build_capture(req, local, day_date, record)
             with record.step("write_day") as step:
@@ -208,11 +220,11 @@ class CaptureProcessor:
                 self._write_day(day)
                 step.detail = {"captures": len(day.captures)}
         else:
-            record.warnings.append("capture already in the day file; regenerating only")
+            record.warnings.append("capture already in the day file; checking journal only")
 
         day = self._read_day(day_date)
-        has_words = day is not None and any(
-            c.text.strip() or c.translation.strip() for c in day.captures
+        has_words = day is not None and (
+            bool(day.notes.strip()) or any(c.text.strip() for c in day.captures)
         )
         if not has_words:
             generation = "skipped"
@@ -221,7 +233,7 @@ class CaptureProcessor:
             generation = "deferred"
         else:
             self._mark_due(day_date)
-            generation = self._generate(day_date, capture, local, record, replay=replay)
+            generation = self._generate(day_date, record)
             if generation != "failed":
                 self._clear_due(day_date)
         record.generation = generation
@@ -247,7 +259,7 @@ class CaptureProcessor:
         self, req: CaptureRequest, local: dt.datetime, day_date: dt.date, record: ActivityRecord
     ) -> Capture:
         text = req.text.strip()
-        translation = ""
+        translation = ""  # not stored; the journal reads the Telugu transcript (ADR 0057)
         audio: AudioResult | None = None
         if req.audio is not None:
             raw = self.storage.read_bytes(req.audio.path)
@@ -272,7 +284,7 @@ class CaptureProcessor:
             record.warnings.extend(f"transcribe: {w}" for w in transcript.warnings)
             record.models["stt"] = transcript.model
             text = "\n\n".join(t for t in (text, transcript.text) if t)
-            translation = transcript.translation
+            translation = ""
 
         listing = [f.path.rsplit("/", 1)[-1] for f in self.storage.list(day_dir(day_date))]
         audio_name: str | None = None
@@ -376,10 +388,9 @@ class CaptureProcessor:
 
     def _generate_closed(self, day_date: dt.date) -> str:
         day = self._read_day(day_date)
-        if day is None or not any(c.text.strip() or c.translation.strip() for c in day.captures):
+        if day is None or not (day.notes.strip() or any(c.text.strip() for c in day.captures)):
             self._clear_due(day_date)
             return "skipped"
-        latest = max(day.captures, key=lambda c: (c.captured_at, c.id))
         record = ActivityRecord(
             capture_id=f"journal-{day_date.isoformat()}",
             kind="journal",
@@ -387,9 +398,7 @@ class CaptureProcessor:
             received_at=self._now(),
         )
         try:
-            generation = self._generate(
-                day_date, latest, latest.captured_at.astimezone(self.settings.tz), record
-            )
+            generation = self._generate(day_date, record)
         except Exception as exc:
             record.errors.append(f"fatal: {safe_error(exc)}")
             record.finish("failed")
@@ -433,40 +442,43 @@ class CaptureProcessor:
     def _generate(
         self,
         day_date: dt.date,
-        capture: Capture,
-        local: dt.datetime,
         record: ActivityRecord,
-        *,
-        replay: bool = False,
     ) -> str:
-        day = merge_capture(self._read_day(day_date), capture, day_date)
-        if not any(c.text.strip() for c in day.captures):
+        day = self._read_day(day_date)
+        if day is None or not (day.notes.strip() or any(c.text.strip() for c in day.captures)):
             return "skipped"
-        # A capture we have already saved is a retry: write the day from every transcript.
-        # A new capture after the journal exists only adds what that capture says.
-        if day.meta.generated_at is not None and not replay:
-            if not capture.text.strip():
-                return "skipped"
-            mode = "update"
-        else:
-            mode = "full"
-        generated = self._run_ai(mode, day, capture, record)
+        source_hash = day.compute_source_hash()
+        if (
+            day.meta.generated_at is not None
+            and day.meta.generated_source_hash == source_hash
+        ):
+            return "unchanged"
+        mode = "update" if day.meta.generated_at is not None else "full"
+        generated = self._run_ai(mode, day, record)
         if generated is None:
             return "failed"
         with record.step("write_day") as step:
-            fresh = merge_capture(self._read_day(day_date), capture, day_date)
-            updated = self._apply(fresh, generated, capture, local, record.models.get("stt"))
+            fresh = self._read_day(day_date)
+            assert fresh is not None
+            updated = self._apply(
+                fresh,
+                generated,
+                record.models.get("stt"),
+                generated_source_hash=source_hash,
+            )
             self._write_day(updated)
             step.detail = {"mode": mode}
         return mode
 
     def _run_ai(
-        self, mode: str, day: DayFile, capture: Capture, record: ActivityRecord
+        self, mode: str, day: DayFile, record: ActivityRecord
     ) -> _Generated | None:
         gen = self.generator
         if mode == "full":
             filled = self._llm_step(
-                record, "fill_day", lambda: gen.fill_day(day.date, day.captures)
+                record,
+                "fill_day",
+                lambda: gen.fill_day(day.date, day.captures, day.notes),
             )
             if filled is None:
                 return None
@@ -483,15 +495,18 @@ class CaptureProcessor:
         updated = self._llm_step(
             record,
             "update_day",
-            lambda: gen.update_day(day.date, capture, day.journal, day.facts),
+            lambda: gen.update_day(day.date, day.captures, day.notes, day.journal),
         )
         if updated is None:
             return None
         addition = updated[0].value
+        sections: dict[str, list[str]] = {}
+        for item in addition.additions:
+            sections.setdefault(item.section, []).append(item.text)
         return _Generated(
             mode=mode,
-            facts=addition.facts,
-            addendum=addition.text or None,
+            facts=DayFacts(),
+            journal_sections=sections,
             models={"update_day": updated[0].model},
             prompt_labels=[updated[1].label],
         )
@@ -524,9 +539,9 @@ class CaptureProcessor:
     def _apply(
         day: DayFile,
         generated: _Generated,
-        capture: Capture,
-        local: dt.datetime,
         stt_model: str | None,
+        *,
+        generated_source_hash: str,
     ) -> DayFile:
         models_used = {**day.meta.models_used, **generated.models}
         if stt_model:
@@ -543,16 +558,16 @@ class CaptureProcessor:
                 title=title,
                 prompt_version=prompt_version,
                 models_used=models_used,
+                generated_source_hash=generated_source_hash,
                 force=True,
             )
-        label = CAPTURE_LABELS.get(capture.kind, capture.kind)
         return merge_generation_additive(
             day,
             facts=generated.facts,
-            journal_addendum=generated.addendum,
-            addendum_label=f"{local:%H:%M} · {label}",
+            journal_sections=generated.journal_sections,
             prompt_version=prompt_version,
             models_used=models_used,
+            generated_source_hash=generated_source_hash,
         )
 
     # --- storage helpers ----------------------------------------------------------------

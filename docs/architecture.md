@@ -84,7 +84,7 @@ Precise signatures: `docs/contracts.md`.
 ```
 Lumitrace/
   2026/10/2026-10-10/
-    2026-10-10.md          front matter, "At a glance" facts, journal, notes, transcript
+    2026-10-10.md          front matter, journal, notes, Telugu transcript
     2026-10-10-2130.m4a    compressed voice note
     photo-01.jpg           resized copy without EXIF (originals stay in Google Photos)
   _system/
@@ -110,8 +110,10 @@ Lumitrace/
    waits until 4:05 a.m.
 5. One LiteLLM call (`LUMITRACE_LLM_WRITE_JOURNAL_MODEL`, prompts in `prompts/`). At 4:05, or
    the first write of a day that has already closed, `fill_day` then
-   `apply_generation(..., force=True)`. A new recording after that write is `update_day`, then
-   `merge_generation_additive`. Owner edits made after the journal exists stay.
+   `apply_generation(..., force=True)` uses every recording plus My notes. Once a journal exists,
+   changed source uses `update_day`; it returns missing bullets classified into the normal
+   journal sections, and `merge_generation_additive` inserts them without rewriting existing
+   words. `generated_source_hash` makes unchanged Generate calls and capture replays no-ops.
 6. Write the day file and its snapshot again (same text, same `generated_at`), nudge Spectrum,
    append an activity record, mark the capture `done`.
 

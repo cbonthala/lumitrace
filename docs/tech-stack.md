@@ -53,7 +53,7 @@ fallback*):
 |---|---|---|---|---|
 | Speech to text | `LUMITRACE_STT_MODEL` | `openai/gpt-4o-transcribe` | Turns the recording into text. Example: "We took the kids to the park after lunch…" becomes the raw transcript kept in the day file. | No (OpenAI API) |
 | Speech to text (option) | `LUMITRACE_STT_PROVIDER=sarvam`, `LUMITRACE_SARVAM_MODEL` | `saaras:v4` | For Indian languages mixed with English: one job, mode `codemix`, keeps English words in English and Telugu in Telugu script. No translation job (ADR 0048). Called over HTTP with httpx. | No (Sarvam API) |
-| Filling and updating the day file | `LUMITRACE_LLM_WRITE_JOURNAL_MODEL` | `gemini/gemini-3.8-flash` | At 4:05 a.m. writes the journal and At a glance from every transcript. A recording that arrives later adds only what that recording says. | No (Google API) |
+| Filling and updating the day file | `LUMITRACE_LLM_WRITE_JOURNAL_MODEL` | `gemini/gemini-3.8-flash` | At 4:05 a.m. writes the journal from every Telugu transcript. A recording that arrives later adds only what that recording says. | No (Google API) |
 | Fallback | `LUMITRACE_LLM_FALLBACK_MODEL` | `gemini/gemini-3.6-flash` | Used when `gemini-3.8-flash` fails or returns badly formed output, so a recording is still processed. Same `GEMINI_API_KEY`. | No (Google API) |
 
 Any LiteLLM provider works for the chat models (Anthropic, Gemini, Bedrock, Groq, Azure, local
@@ -66,7 +66,7 @@ Transcribe or Sarvam. Tests use `fake` providers.
 
 | What | Version | Used for | Open source? |
 |---|---|---|---|
-| Markdown day files | | The source of truth: one plain-text file per day, readable without Lumitrace. Example: `2026/10/2026-10-10/2026-10-10.md` holds the title, "At a glance", the journal, your notes and the transcript (`docs/frames-format.md`). | Open format |
+| Markdown day files | | The source of truth: one plain-text file per day, readable without Lumitrace. Example: `2026/10/2026-10-10/2026-10-10.md` holds the title, the journal, your notes and the Telugu transcript (`docs/frames-format.md`). | Open format |
 | PyYAML | 6.0 | Reads and writes the small header at the top of each day file. Example: `date`, `models_used` (which AI models wrote it) and `generated_hash`, which lets the Prism tell whether you edited the file. | Yes (MIT) |
 | Google Drive | | Where everything is stored: day files, the audio and photos next to them, and records under `Lumitrace/_system/` (activity, reports, feedback, index backups). Lumitrace can only see files it created (`drive.file` scope). | No (Google service) |
 | google-api-python-client | 2.201 | Talks to the Drive API. Example: upload a day file, list files changed since the last check, download a photo. | Yes (Apache-2.0) |

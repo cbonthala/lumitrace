@@ -4,6 +4,7 @@
   signed session cookie (:mod:`lumitrace.prism.auth`).
 * ``GET /captures``: recent capture statuses (no journal content).
 * ``GET /summary``: days logged, captures and streak, read from the day files.
+* ``POST /journal``: write one day's journal now from the transcripts saved so far.
 * ``/lens/apps``: the AI apps connected to the Lens (:mod:`lumitrace.prism.lens_apps`).
 * ``/flash/``: the static app in ``lumitrace/prism/web/``.
 """
@@ -82,6 +83,18 @@ class WeekSummary(BaseModel):
     streak: int
 
 
+class JournalRequest(BaseModel):
+    date: dt.date | None = None
+    """The day to write. Empty means the open day (today, using the rollover hour)."""
+
+
+class JournalResult(BaseModel):
+    entry_date: dt.date
+    status: str
+    """``full`` (journal written), ``skipped`` (no words yet) or ``failed``."""
+    message: str
+
+
 # --- summary --------------------------------------------------------------------------------
 
 
@@ -99,6 +112,20 @@ def _days_in_month(storage: Storage, year: int, month: int) -> set[dt.date]:
         if day is not None:
             days.add(day)
     return days
+
+
+def journal_message(day: dt.date, status: str) -> str:
+    """A short line for the Flash button. No transcript or journal text."""
+    label = f"{day:%A, %B} {day.day}"
+    if status == "full":
+        return f"Journal written for {label}."
+    if status == "update":
+        return f"Journal safely updated for {label}."
+    if status == "unchanged":
+        return f"The journal for {label} is already up to date."
+    if status == "skipped":
+        return f"Nothing to write for {label} yet. Add a recording or My notes first."
+    return f"The journal for {label} could not be written. Your recordings are saved."
 
 
 def week_summary(storage: Storage, today: dt.date) -> WeekSummary:
@@ -243,6 +270,23 @@ def register_flash(
     def summary() -> WeekSummary:
         today = entry_date(dt.datetime.now(settings.tz), settings.tz, settings.day_rollover_hour)
         return week_summary(services().storage, today)
+
+    @app.post("/journal", dependencies=auth, response_model=JournalResult)
+    async def post_journal(body: JournalRequest | None = None) -> JournalResult:
+        """Generate or safely update one day from its recordings and My notes."""
+        built = services()
+        today = entry_date(built.processor._now(), settings.tz, settings.day_rollover_hour)
+        day = body.date if body and body.date is not None else today
+        if day > today:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "date is after today")
+        idle = await anyio.to_thread.run_sync(lambda: built.worker.wait_idle(120))
+        if not idle:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "a recording is still being saved; try again in a minute",
+            )
+        outcome = await anyio.to_thread.run_sync(lambda: built.processor.generate_day(day))
+        return JournalResult(entry_date=day, status=outcome, message=journal_message(day, outcome))
 
     register_lens_apps(app, settings, auth)
 

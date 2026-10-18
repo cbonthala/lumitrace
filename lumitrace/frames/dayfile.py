@@ -8,14 +8,6 @@ Full specification with an example: ``docs/frames-format.md``. Summary of the la
 
     # <title>
 
-    ## At a glance
-
-    <!-- lumitrace:facts:start ... -->           the day's facts (DayFile.facts): mood, city,
-    - **Mood:** happy (4/5)                   weather, then ### Food, Places, People,
-    ### Food                                  Activities, Family, Highlights
-    - **Breakfast:** oatmeal, blueberries
-    <!-- lumitrace:facts:end -->
-
     <!-- lumitrace:journal:start ... -->         generated journal (DayFile.journal)
     <!-- lumitrace:journal:end -->
 
@@ -32,20 +24,17 @@ Full specification with an example: ``docs/frames-format.md``. Summary of the la
     ![[2026-10-10-2130.m4a]]
 
     transcript text
-    <!-- lumitrace:translation ... -->           optional English translation (Capture.translation)
-    #### English translation
-
-    translated text
     <!-- lumitrace:transcript:end -->
 
-The facts live only in the "At a glance" region, never in the front matter. Format 1 files kept
-them in the front matter; :func:`parse` reads those and :func:`render` writes format 2.
+Format 4 does not write ``## At a glance`` or an English translation (ADR 0057). :func:`parse`
+still reads both from older files. The next :func:`render` drops them. Format 1 kept facts in
+the front matter; :func:`parse` still reads those too.
 
 Edit protection: ``FrontMatter.generated_hash`` is a hash of the facts, title and journal as the
-system last wrote them. If the current content no longer matches, the owner edited it
-(:meth:`DayFile.is_user_edited`) and :func:`apply_generation` refuses to replace it; use
-:func:`merge_generation_additive` instead. Text found outside the known regions is moved into
-the notes region on the next render, so it is never lost.
+system last wrote them. A format 4 write hashes empty facts. If the current content no longer
+matches, the owner edited it (:meth:`DayFile.is_user_edited`) and :func:`apply_generation`
+refuses to replace it; use :func:`merge_generation_additive` instead. Text found outside the
+known regions is moved into the notes region on the next render, so it is never lost.
 
 Files written under the project's earlier names use ``lifelog:`` (LifeLog, 0.1.0),
 ``bookshelf:`` (Bookshelf) or ``lumen:`` (Lumen) markers and a ``lifelog_format``,
@@ -77,7 +66,7 @@ from pydantic import (
     model_validator,
 )
 
-FORMAT_VERSION = 3
+FORMAT_VERSION = 4
 SYSTEM_DIR = "_system"
 AUDIO_EXT = ".m4a"
 PHOTO_EXT = ".jpg"
@@ -330,8 +319,43 @@ _COMMA_RE = re.compile(r"\s*,\s*")
 _SEMICOLON_RE = re.compile(r"\s*;\s*")
 
 
+def _split_outside_parens(value: str, sep: str = ",") -> list[str]:
+    """Split on ``sep`` only outside parentheses, so ``oatmeal (Maya, Leo)`` stays one item."""
+    parts: list[str] = []
+    buf: list[str] = []
+    depth = 0
+    for char in value:
+        if char == "(":
+            depth += 1
+        elif char == ")" and depth:
+            depth -= 1
+        if char == sep and depth == 0:
+            parts.append("".join(buf))
+            buf = []
+        else:
+            buf.append(char)
+    parts.append("".join(buf))
+    return parts
+
+
 def _comma_items(value: Any) -> Any:
-    return _clean_list(value, _COMMA_RE)
+    """Like :func:`_clean_list` with a comma split, but commas inside parentheses stay."""
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        return value
+    out: list[Any] = []
+    for item in value:
+        item = _one_line(item)
+        if isinstance(item, str):
+            out.extend(
+                part.strip()
+                for part in _split_outside_parens(item)
+                if part.strip() and not _is_none_text(part.strip())
+            )
+        else:
+            out.append(item)
+    return out
 
 
 def _semicolon_items(value: Any) -> Any:
@@ -609,6 +633,8 @@ class FrontMatter(BaseModel):
     """Task -> LiteLLM model string, e.g. ``{"stt": ..., "extract_facts": ...}``."""
     generated_at: dt.datetime | None = None
     generated_hash: str | None = None
+    generated_source_hash: str | None = None
+    """Hash of the transcripts and My notes already incorporated into the journal."""
     lumitrace_format: int = FORMAT_VERSION
 
     @field_validator("audio", "photos", mode="before")
@@ -630,6 +656,7 @@ FRONT_MATTER_ORDER: tuple[str, ...] = (
     "models_used",
     "generated_at",
     "generated_hash",
+    "generated_source_hash",
     "lumitrace_format",
 )
 
@@ -717,6 +744,24 @@ class DayFile(BaseModel):
     def compute_generated_hash(self) -> str:
         return _hash_generated(self.facts.model_dump(mode="json"), self.title, self.journal)
 
+    def compute_source_hash(self) -> str:
+        """Hash the owner-provided material that can feed journal generation."""
+        payload = {
+            "notes": self.notes,
+            "captures": [
+                {
+                    "id": capture.id,
+                    "kind": capture.kind,
+                    "captured_at": capture.captured_at.isoformat(),
+                    "text": capture.text,
+                    "location": capture.location,
+                }
+                for capture in self.captures
+            ],
+        }
+        raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
     def is_user_edited(self) -> bool:
         """True if facts, title or journal differ from what the system last generated."""
         stored = self.meta.generated_hash
@@ -734,6 +779,8 @@ def _front_matter_dict(meta: FrontMatter) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for key in FRONT_MATTER_ORDER:
         value = data[key]
+        if key == "generated_source_hash" and value is None:
+            continue
         if key == "generated_at" and value is not None:
             value = value.isoformat()
         out[key] = value
@@ -764,8 +811,6 @@ def _render_capture(capture: Capture) -> str:
     lines.extend(f"![[{p}]]" for p in capture.photos)
     if capture.text:
         lines.extend(["", capture.text])
-    if capture.translation:
-        lines.extend(["", TRANSLATION_MARKER, TRANSLATION_HEADING, "", capture.translation])
     return "\n".join(lines) + "\n"
 
 
@@ -902,10 +947,8 @@ JOURNAL_SECTIONS: tuple[str, ...] = (
     "Afternoon",
     "Evening",
     "Thoughts",
-    "Later",
 )
-"""The only ``##`` headings of a system-written journal, in order. ``Later`` holds additions
-made after the owner edited the day."""
+"""The only ``##`` headings of a system-written journal, in order."""
 
 _JOURNAL_ALIASES: dict[str, str] = {
     **{name.casefold(): name for name in JOURNAL_SECTIONS},
@@ -916,6 +959,7 @@ _JOURNAL_ALIASES: dict[str, str] = {
     "reflections": "Thoughts",
     "plans": "Thoughts",
     "thoughts and plans": "Thoughts",
+    "later": "Evening",
 }
 
 
@@ -953,29 +997,103 @@ def normalize_journal(markdown: str) -> str:
     return "\n\n".join(blocks)
 
 
+def merge_journal_sections(markdown: str, additions: dict[str, list[str]]) -> str:
+    """Insert new bullets into their journal sections without changing existing words.
+
+    Sections already on the page keep their exact heading and content. A missing section is
+    inserted in :data:`JOURNAL_SECTIONS` order. A legacy ``Later`` heading becomes ``Evening``;
+    its content is preserved and ``Later`` is deliberately not a target.
+    """
+    result = _JOURNAL_HEADING_RE.sub(
+        lambda match: (
+            "## Evening"
+            if match.group(1).strip().casefold() == "later"
+            else match.group(0)
+        ),
+        markdown.strip(),
+    )
+    by_section: dict[str, list[str]] = {name: [] for name in JOURNAL_SECTIONS}
+    for raw_name, items in additions.items():
+        name = _JOURNAL_ALIASES.get(raw_name.strip().casefold())
+        if name not in JOURNAL_SECTIONS:
+            raise ValueError(f"unknown journal section: {raw_name!r}")
+        for item in items:
+            text = " ".join(str(item).split()).strip()
+            if not text:
+                continue
+            by_section[name].append(text if text.startswith("- ") else f"- {text}")
+
+    for name in JOURNAL_SECTIONS:
+        if not by_section[name]:
+            continue
+        block = "\n".join(by_section[name])
+        matches = list(_JOURNAL_HEADING_RE.finditer(result))
+        target_index = next(
+            (
+                index
+                for index, match in enumerate(matches)
+                if _JOURNAL_ALIASES.get(match.group(1).strip().casefold()) == name
+            ),
+            None,
+        )
+        if target_index is not None:
+            end = (
+                matches[target_index + 1].start()
+                if target_index + 1 < len(matches)
+                else len(result)
+            )
+            before = result[:end].rstrip()
+            after = result[end:].lstrip()
+            result = f"{before}\n\n{block}" + (f"\n\n{after}" if after else "")
+            continue
+
+        order = JOURNAL_SECTIONS.index(name)
+        insert_at = len(result)
+        for match in matches:
+            existing = _JOURNAL_ALIASES.get(match.group(1).strip().casefold())
+            if existing in JOURNAL_SECTIONS and JOURNAL_SECTIONS.index(existing) > order:
+                insert_at = match.start()
+                break
+        new_section = f"## {name}\n\n{block}"
+        before = result[:insert_at].rstrip()
+        after = result[insert_at:].lstrip()
+        result = (f"{before}\n\n" if before else "") + new_section
+        if after:
+            result += f"\n\n{after}"
+    return result
+
+
 def render(day: DayFile) -> str:
-    """Render a :class:`DayFile` to Markdown. ``parse(render(d)) == d`` always holds."""
+    """Render a day file: title, journal, notes and transcripts.
+
+    Format 4 does not write ``## At a glance`` or an English translation (ADR 0057).
+    ``parse`` still reads both from older files. Dropping them on an unedited day refreshes
+    ``generated_hash`` so that drop is not itself an edit.
+    """
+    written = day.model_copy(deep=True)
+    written.facts = DayFacts()
+    for capture in written.captures:
+        capture.translation = ""
+    if written.meta.generated_hash is not None and not day.is_user_edited():
+        written.meta.generated_hash = written.compute_generated_hash()
     front = yaml.safe_dump(
-        _front_matter_dict(day.meta),
+        _front_matter_dict(written.meta),
         sort_keys=False,
         allow_unicode=True,
         default_flow_style=False,
         width=4096,
     )
-    transcript = "\n".join(_render_capture(c) for c in day.captures)
+    transcript = "\n".join(_render_capture(c) for c in written.captures)
     return "".join(
         [
             "---\n",
             front,
             "---\n\n",
-            f"# {day.title}\n\n",
-            f"{FACTS_HEADING}\n\n",
-            _region(FACTS_START, render_facts_section(day.facts), FACTS_END),
-            "\n",
-            _region(JOURNAL_START, day.journal, JOURNAL_END),
+            f"# {written.title}\n\n",
+            _region(JOURNAL_START, written.journal, JOURNAL_END),
             "\n",
             f"{NOTES_HEADING}\n\n",
-            _region(NOTES_START, day.notes, NOTES_END),
+            _region(NOTES_START, written.notes, NOTES_END),
             "\n",
             f"{TRANSCRIPT_HEADING}\n\n",
             f"{TRANSCRIPT_START}\n",
@@ -1434,6 +1552,7 @@ def apply_generation(
     prompt_version: str | None = None,
     models_used: dict[str, str] | None = None,
     generated_at: dt.datetime | None = None,
+    generated_source_hash: str | None = None,
     force: bool = False,
 ) -> DayFile:
     """Replace facts, title and journal with freshly generated content.
@@ -1449,6 +1568,8 @@ def apply_generation(
     result.journal = normalize_journal(journal)
     result.title = (title or "").strip() or result.title
     _set_provenance(result, prompt_version, models_used, generated_at)
+    if generated_source_hash is not None:
+        result.meta.generated_source_hash = generated_source_hash
     result.meta.generated_hash = result.compute_generated_hash()
     return result
 
@@ -1482,19 +1603,18 @@ def merge_generation_additive(
     day: DayFile,
     *,
     facts: DayFacts,
-    journal_addendum: str | None = None,
-    addendum_label: str | None = None,
+    journal_sections: dict[str, list[str]] | None = None,
     prompt_version: str | None = None,
     models_used: dict[str, str] | None = None,
     generated_at: dt.datetime | None = None,
+    generated_source_hash: str | None = None,
 ) -> DayFile:
     """Add new information without changing anything that is already there.
 
     Safe on user-edited days: empty scalar facts are filled, list facts gain new items, meals
     with the same ``type`` gain new items, activities with a new ``kind`` are added, family
     members are matched by name (new ones are added, known ones gain new items the same way),
-    and ``journal_addendum`` is appended under ``## Later`` (opened unless the journal already
-    ends with it), starting with ``**addendum_label**`` if given. If the day was not
+    and journal bullets are inserted into the requested existing sections. If the day was not
     user-edited, ``generated_hash`` is refreshed; otherwise it is left alone so the day stays
     marked as edited.
     """
@@ -1519,16 +1639,11 @@ def merge_generation_additive(
         _add_meals(existing_member.meals, member.meals)
     _add_activities(current.activities, facts.activities)
     result.facts = DayFacts.model_validate(current.model_dump())
-    if journal_addendum and journal_addendum.strip():
-        block = journal_addendum.strip()
-        if addendum_label:
-            block = f"**{addendum_label.strip()}**\n\n{block}"
-        journal = result.journal
-        headings = _JOURNAL_HEADING_RE.findall(journal)
-        if not headings or headings[-1].casefold() != "later":
-            journal = f"{journal}\n\n## Later"
-        result.journal = f"{journal}\n\n{block}".strip()
+    if journal_sections is not None:
+        result.journal = merge_journal_sections(result.journal, journal_sections)
     _set_provenance(result, prompt_version, models_used, generated_at)
+    if generated_source_hash is not None:
+        result.meta.generated_source_hash = generated_source_hash
     if not was_edited:
         result.meta.generated_hash = result.compute_generated_hash()
     return result

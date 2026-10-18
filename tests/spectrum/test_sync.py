@@ -59,7 +59,6 @@ def test_first_sync_indexes_day_files(
         ("2026-10-10", "the river trail (Sam)"),
         ("2026-10-10", "the taco truck (Sam, Maya)"),
         ("2026-10-10", "home (Sam, Maya, Leo)"),
-        ("2026-10-11", "the park"),
     ]
     assert _fts_dates(conn, "river trail") == {"2026-10-10"}
     family = conn.execute(
@@ -72,14 +71,14 @@ def test_first_sync_indexes_day_files(
         ("Leo", "feelings", "proud"),
         ("Leo", "moments", "lost his first tooth"),
     ]
-    assert _count(conn, "SELECT count(*) FROM activities WHERE date = '2026-10-11'") == 1
-    assert _count(conn, "SELECT count(*) FROM highlights") == 5
+    assert _count(conn, "SELECT count(*) FROM activities WHERE date = '2026-10-11'") == 0
+    assert _count(conn, "SELECT count(*) FROM highlights") == 4
 
     passages = _count(conn, "SELECT count(*) FROM passages")
     assert passages > 10
     assert _count(conn, "SELECT count(*) FROM passages_vec") == passages
     assert _fts_dates(conn, "tacos") == {"2026-10-10"}
-    assert _fts_dates(conn, "heron") == {"2026-10-11"}
+    assert _fts_dates(conn, "Robin") == {"2026-10-11"}
     assert get_meta(conn, META_SYNC_TOKEN)
 
     file_row = conn.execute("SELECT * FROM files WHERE path = ?", (day_file_path(D1),)).fetchone()

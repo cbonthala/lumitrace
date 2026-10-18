@@ -36,8 +36,6 @@ def _edit(storage: LocalStorage, day_date: dt.date, change) -> DayFile:
 
 def _owner_edits(day: DayFile) -> None:
     day.journal = day.journal.replace("Soup.", "Lentil soup, very good.")
-    day.facts.mood = "tired but happy"
-    day.facts.people.append("Sam")
     day.title = "Heron day"
     day.notes = "Slept 8 hours."
     day.captures[0].text = day.captures[0].text.replace("Robin", "Robyn")
@@ -61,19 +59,13 @@ def test_owner_edits_become_signals(indexer: Indexer, storage: LocalStorage) -> 
     keys = {(r["section"], r["field"]) for r in rows}
     capture_id = parse(storage.read_text(day_file_path(D1))).captures[0].id
     assert keys == {
-        ("facts", "mood"),
-        ("facts", "people"),
         ("journal", None),
         ("notes", None),
         ("title", None),
         ("transcript", capture_id),
     }
-    assert result.edit_signals == 6
+    assert result.edit_signals == 4
     by_key = {(r["section"], r["field"]): r for r in rows}
-    people = by_key[("facts", "people")]
-    assert json.loads(people["before"]) == ["Robin"]
-    assert json.loads(people["after"]) == ["Robin", "Sam"]
-    assert people["diff"] is None
     journal = by_key[("journal", None)]
     assert "-Soup." in journal["diff"] and "+Lentil soup, very good." in journal["diff"]
     assert journal["prompt_version"] == "journal-v1"

@@ -930,18 +930,37 @@ function dayLabel(day) {
   return new Date(`${day}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
 }
 
-function captureRow({ kind, capturedAt, entryDate, photos, local, chip, onChip }) {
+function filedDay(entryDate, capturedAt) {
+  if (entryDate) return String(entryDate).slice(0, 10);
+  return localDate(new Date(capturedAt));
+}
+
+function groupLabel(day) {
+  if (day === localDate()) return "Today";
+  const yesterday = localDate(new Date(Date.now() - 86400000));
+  if (day === yesterday) return "Yesterday";
+  return dayLabel(day);
+}
+
+function clockTime(iso) {
+  return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+let generatingDay = "";
+
+function captureRow({ kind, capturedAt, photos, local, chip, onChip }) {
   const row = el("div", "item");
   const [icon, title] = describe(kind, local, photos);
   row.append(el("div", "ico", icon));
   const meta = el("div", "meta");
-  meta.append(el("div", "a", title));
-  const bits = [when(capturedAt)];
-  if (entryDate && entryDate !== localDate(new Date(capturedAt))) bits.push(`for ${dayLabel(entryDate)}`);
+  const line = el("div", "a");
+  line.append(el("span", "when", clockTime(capturedAt)), document.createTextNode(title));
+  meta.append(line);
+  const bits = [];
   if (photos) bits.push(`${photos} photo${photos === 1 ? "" : "s"}`);
   if (local?.place) bits.push(local.place);
   if (local?.preview) bits.push(`“${local.preview}”`);
-  meta.append(el("div", "b", bits.join(" · ")));
+  if (bits.length) meta.append(el("div", "b", bits.join(" · ")));
   row.append(meta);
   const status = el(onChip ? "button" : "span", `st ${chip[0]}`, chip[1]);
   if (onChip) {
@@ -950,6 +969,30 @@ function captureRow({ kind, capturedAt, entryDate, photos, local, chip, onChip }
   }
   row.append(status);
   return row;
+}
+
+async function generateJournal(day) {
+  const label = groupLabel(day);
+  const question = `Generate or update ${label} from the recordings and My notes? ` +
+    "Existing journal words, notes, and recordings stay.";
+  if (!confirm(question)) return;
+  generatingDay = day;
+  await renderCaptures();
+  try {
+    await flushOutbox();
+    const body = await api("/journal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: day }),
+    });
+    toast(body.message || "Journal written.");
+    refreshSummary();
+  } catch (err) {
+    toast(err instanceof HttpError ? err.message : "Can't reach the server.", true);
+  } finally {
+    generatingDay = "";
+    await refreshCaptures();
+  }
 }
 
 async function retryCapture(id) {
@@ -969,11 +1012,12 @@ async function renderCaptures() {
   const rows = [];
   for (const item of pending) {
     rows.push({
+      day: filedDay(item.fields.date, item.fields.captured_at),
       at: item.fields.captured_at,
       node: captureRow({
-        kind: item.kind, capturedAt: item.fields.captured_at, entryDate: item.fields.date, photos: item.photos.length,
-        local: { preview: (item.fields.text || "").slice(0, 120), seconds: item.seconds, place: item.fields.place },
-        chip: item.error ? ["failed", "Not accepted · remove"] : ["offline", "Waiting to send"],
+        kind: item.kind, capturedAt: item.fields.captured_at, photos: item.photos.length,
+        local: { preview: (item.fields.text || "").slice(0, 80), seconds: item.seconds, place: item.fields.place },
+        chip: item.error ? ["failed", "Not accepted"] : ["offline", "Waiting"],
         onChip: item.error ? async () => {
           if (confirm(`The server refused this capture: ${item.error}\n\nRemove it from this device?`)) {
             await outboxDelete(item.capture_id);
@@ -987,16 +1031,36 @@ async function renderCaptures() {
   for (const c of state.serverCaptures) {
     if (seen.has(c.capture_id)) continue;
     rows.push({
+      day: filedDay(c.entry_date, c.captured_at),
       at: c.captured_at,
       node: captureRow({
-        kind: c.kind, capturedAt: c.captured_at, entryDate: c.entry_date, photos: c.photos.length || local[c.capture_id]?.photos || 0,
+        kind: c.kind, capturedAt: c.captured_at, photos: c.photos.length || local[c.capture_id]?.photos || 0,
         local: local[c.capture_id], chip: STATUS_CHIP[c.status] || ["queue", c.status],
         onChip: c.status === "failed" ? () => retryCapture(c.capture_id) : null,
       }),
     });
   }
-  rows.sort((a, b) => new Date(b.at) - new Date(a.at));
-  box.replaceChildren(...rows.map((r) => r.node));
+  const byDay = new Map();
+  for (const row of rows) {
+    if (!byDay.has(row.day)) byDay.set(row.day, []);
+    byDay.get(row.day).push(row);
+  }
+  const days = [...byDay.keys()].sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+  const groups = days.map((day) => {
+    const group = el("div", "day-group");
+    const head = el("div", "day-head");
+    head.append(el("b", "", groupLabel(day)));
+    const button = el("button", "btn small", generatingDay === day ? "Writing…" : "Generate");
+    button.type = "button";
+    button.disabled = generatingDay === day;
+    button.setAttribute("aria-label", `Generate journal for ${groupLabel(day)}`);
+    button.addEventListener("click", () => generateJournal(day));
+    head.append(button);
+    const items = byDay.get(day).sort((a, b) => new Date(b.at) - new Date(a.at));
+    group.append(head, ...items.map((row) => row.node));
+    return group;
+  });
+  box.replaceChildren(...groups);
   $("captures-empty").hidden = rows.length > 0;
 }
 

@@ -22,6 +22,9 @@
     <div class="brand"><div class="logo" aria-hidden="true"></div>Lumitrace <span class="muted">Flash</span></div>
     <div class="top-right">
       <div class="conn" id="conn"><span class="dot"></span><span id="conn-text">Connecting…</span></div>
+      <button class="icon-btn only-signed-in" id="home" type="button" aria-label="Home" data-go="capture">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      </button>
       <button class="pill-btn wide-only only-signed-in" type="button" data-go="design">△ How it works</button>
       <button class="icon-btn only-signed-in" id="gear" type="button" aria-label="Settings">⚙︎</button>
     </div>
@@ -57,7 +60,8 @@
       <button class="btn small" id="send-now" type="button">Send now</button>
     </div>
 
-    <section class="card rec" id="rec-card" data-tab="capture">
+    <div class="capture-col" data-tab="capture">
+    <section class="card rec" id="rec-card">
       <div class="rec-live" id="rec-live" hidden>
         <div class="day rec-state" id="rec-state">● Recording</div>
         <div class="timer" id="timer">00:00</div>
@@ -119,7 +123,7 @@
       </div>
     </section>
 
-    <section class="card statscard" data-tab="capture">
+    <section class="card statscard">
       <div class="sec"><h2>This week</h2><span class="muted">from your day files</span></div>
       <div class="stats">
         <div class="stat"><div class="v" id="stat-days">–</div><div class="l">days logged</div></div>
@@ -128,9 +132,10 @@
       </div>
       <div class="week" id="week-dots" aria-hidden="true"></div>
     </section>
+    </div>
 
     <section class="card list" data-tab="history">
-      <div class="sec"><h2>Recent captures</h2><span class="muted">Last 7 days</span></div>
+      <div class="sec"><h2>Recent captures</h2><span class="muted">By day</span></div>
       <div id="captures"></div>
       <p class="empty muted" id="captures-empty" hidden>Nothing yet. Record your day.</p>
     </section>
@@ -154,9 +159,11 @@
         </article>
         <article class="card mod">
           <div class="mod-head"><i class="swatch prism"></i><b>Prism</b><span>split</span></div>
-          <p>Turns a recording into a transcript, then facts, mood and a journal entry.
-            The audio and raw transcript are always kept.</p>
-          <p class="here">Here: “Writing journal…” → “In journal” in History.</p>
+          <p>Turns recordings into transcripts, then one journal for the day.
+            Generate, beside a day in History, writes or safely updates it now from the
+            recordings and My notes. Otherwise it waits until 4:05 a.m. The audio, raw
+            transcript, and your edits are always kept.</p>
+          <p class="here">Here: Generate beside a day in History.</p>
         </article>
         <article class="card mod">
           <div class="mod-head"><i class="swatch frames"></i><b>Frames</b><span>day files</span></div>

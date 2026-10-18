@@ -1,4 +1,4 @@
-# Frames: day file format (format version 3)
+# Frames: day file format (format version 4)
 
 The Frames are the day files: one Markdown file per day, the source of truth. Code:
 `lumitrace/frames/dayfile.py` (format) and `lumitrace/frames/storage/` (where they live). Always use
@@ -30,19 +30,9 @@ All paths are relative to the `Lumitrace` root folder.
 
 # Title                      DayFile.title (default: "Saturday, October 10, 2026")
 
-## At a glance
-
-<!-- lumitrace:facts:start (...) -->      DayFile.facts: Mood and City lines, then "###"
-- **Mood:** happy (4/5)                   topic sections; Food, Health and fitness,
-### Highlight                             Feelings and Memories hold one "####" block
-### Food                                  per family member
-#### Leo
-- **Morning:** oatmeal
-<!-- lumitrace:facts:end -->
-
 <!-- lumitrace:journal:start (...) -->    DayFile.journal: generated Markdown, "##" sections
-## Summary                                Summary, Morning, Afternoon, Evening, Thoughts,
-...                                       Later (fixed names and order)
+## Summary                                Summary, Morning, Afternoon, Evening, Thoughts
+...                                       (fixed names and order)
 <!-- lumitrace:journal:end -->
 
 ## My notes
@@ -59,11 +49,7 @@ All paths are relative to the `Lumitrace` root folder.
 ![[audio.m4a]]                            embeds derived from the capture metadata
 ![[photo-01.jpg]]
 
-raw transcript or note text
-<!-- lumitrace:translation (...) -->      optional: Capture.translation
-#### English translation
-
-English translation of the recording
+raw transcript or note text               Telugu, as spoken. No translation block.
 <!-- lumitrace:transcript:end -->
 ```
 
@@ -76,7 +62,7 @@ written under the project's earlier names use `lifelog:` (LifeLog, 0.1.0), `book
 
 ### Front matter fields
 
-The front matter holds only the date, the media and provenance. The facts are in "At a glance".
+The front matter holds only the date, the media and provenance.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -86,13 +72,18 @@ The front matter holds only the date, the media and provenance. The facts are in
 | `models_used` | map task → model | e.g. `stt`, `fill_day`, `update_day` |
 | `generated_at` | ISO-8601 datetime or null | last generation |
 | `generated_hash` | string or null | edit detection, see below |
-| `lumitrace_format` | int | `3` (read from `lumen_format`, `bookshelf_format` or `lifelog_format` in files written under the earlier names) |
+| `generated_source_hash` | string or null | recordings and My notes already incorporated into the journal |
+| `lumitrace_format` | int | `4` (read from `lumen_format`, `bookshelf_format` or `lifelog_format` in files written under the earlier names) |
 | *anything else* | | preserved as is (e.g. Obsidian `tags`) |
 
-### "At a glance": the facts (`DayFacts`)
+### "At a glance": older files only (`DayFacts`)
 
-The Prism extracts these from the recordings; Spectrum indexes them exactly as they are written
-here (one row per item in the fact tables, see `docs/index-schema.md`). The layout is
+A new write does not include this section (ADR 0057). `render` drops it. `parse` still reads it
+from files that have it, and Spectrum still indexes those files. The next system write of that
+day removes the section. The journal is where food, places, people, health, feelings and
+memories go.
+
+While the section is present, the layout is
 **topic first** (decision 0045): each topic is a `###` section and, where it differs per person,
 holds one `#### name` block per family member. A family member named in `secrets/family.md` gets
 a block in every such section on every generated day, in the configured order and spelling, so a
@@ -107,7 +98,7 @@ weather lookup fills it. Search and the index never see those lines
 |---|---|---|
 | `- **Mood:**`, `- **City:**` | `mood`, `mood_score` (1-5), `city` | `happy (4/5)`, the city or `not mentioned` |
 | `### Highlight` | `highlights`, `remember` | one short bullet per highlight, then `- **Remember:** ...`, the one moment worth keeping |
-| `### Food` | `FamilyMember.meals`, `meals` | per person: `- **Morning:**`, `**Lunch:**`, `**Dinner:**`, `**Snacks / drinks / other:**` (`MEAL_TYPES` breakfast, lunch, dinner, snacks); `#### Everyone` for meals nobody is named for |
+| `### Food` | `FamilyMember.meals`, `meals` | per person: `- **Morning:**`, `**Lunch:**`, `**Dinner:**`, `**Snacks / drinks / other:**` (`MEAL_TYPES` breakfast, lunch, dinner, snacks); `#### Everyone` is the union of those meals, each item tagged with who had it (`oatmeal (Maya, Leo)`) |
 | `### Places visited` | `places` | one bullet per place; add `(Name)` when only some went |
 | `### People we met or visited` | `people` | one bullet: `Rachel, friend - at the park (Maya)` |
 | `### Health and fitness` | `FamilyMember.health` | per person, one bullet per item (exercise, symptoms, sleep) |
@@ -123,7 +114,10 @@ see and fix it.
 Values are normalised so that rendering and parsing give back the same facts: each value is one
 line (whitespace collapsed); empty and `not mentioned` items are dropped; meals of the same type
 are merged and kept in `MEAL_TYPES` order (`snack`, `drink`, `other` become snacks, `supper`
-dinner, `brunch` lunch); members without a name are dropped (members without facts are kept).
+dinner, `brunch` lunch); a comma splits meal items, except a comma inside parentheses
+(`oatmeal (Maya, Leo)` stays one item); members without a name are dropped (members without
+facts are kept). The Prism fills `#### Everyone` after the model replies (ADR 0056). The model
+is not asked for that list.
 
 Hand edits are tolerated: bullets and bold are optional, headings may use any level, and
 common alternative names (`Meals`, `Places`, `People`, `Activities`) are accepted for the
@@ -134,14 +128,13 @@ standard names and lines on the next system write.
 ### The journal
 
 A journal written by the Prism only uses these `##` headings, in this order, each only when it
-has text: `Summary`, `Morning`, `Afternoon`, `Evening`, `Thoughts`, `Later` (`JOURNAL_SECTIONS`).
+has text: `Summary`, `Morning`, `Afternoon`, `Evening`, `Thoughts` (`JOURNAL_SECTIONS`).
 `apply_generation` enforces it with `normalize_journal`: text before the first heading goes to
 Summary, repeated sections are merged, `Night`/`Tonight` count as Evening and
 `Reflections`/`Plans` as Thoughts, and any other heading becomes a bold line in the section it
-appears in. `Later` holds what is added after the owner edited the day
-(`merge_generation_additive`): each addition starts with a bold label such as
-`**22:15 · Quick Note**`, and a `## Later` heading is only opened when the journal does not
-already end with one. A journal the owner edited is never re-normalised.
+appears in. Later source is returned as section-classified bullets and
+`merge_journal_sections` inserts each one under the requested normal heading. Existing journal
+words are never re-normalised or replaced; a missing heading is inserted in the fixed order.
 
 ### Older formats
 
@@ -150,9 +143,11 @@ already end with one. A journal the owner edited is never re-normalised.
   it (`parse_facts_section(..., source_format=2)`) and converts it: a member's food becomes
   that member's meals (snacks when no meal is known), their places and activities become day
   places and things we did marked `(Name)`, school/work becomes things we did, moments become
-  memories, and the rest keep their names. The next `render` writes format 3.
+  memories, and the rest keep their names. The next `render` writes format 4 and drops the section.
+* **Format 3** is the topic-first "At a glance" layout above. `parse` still reads it. The next
+  `render` writes format 4 and drops the section.
 * **Format 1** (0.1.0) kept the facts in the front matter and had no facts region; `parse` reads
-  those keys as the facts and the next `render` writes format 3.
+  those keys as the facts and the next `render` writes format 4 without a facts section.
 
 **Edit detection across formats.** `generated_hash` covers the rendered facts, so a day written
 in format 1 or 2 cannot reproduce its old hash and looks edited after migration. To redo old
@@ -166,14 +161,12 @@ existing id is a no-op, so retries from the offline inbox are safe), `kind` (`re
 `note`), `captured_at` (ISO-8601 with offset), `audio`, `photos`, `location`. The heading and
 embed lines are regenerated from it; the text below them is the transcript and may be edited.
 
-**English translation** (`Capture.translation`, ADR 0043). Older recordings that were translated
-keep the block after the transcript: the `<!-- lumitrace:translation (...) -->` marker, a
-`#### English translation` heading and the translated text. New recordings do not get one
-(ADR 0048). The raw transcript above it is kept as spoken. On parsing,
-everything after the marker is the translation (the heading is dropped if present, so deleting
-it by hand is harmless); a block without the marker has no translation. The translation may be
-edited like the transcript. Spectrum indexes it as extra transcript passages headed
-`HH:MM · Log My Day · English`, so English searches find days spoken in another language.
+**English translation** (`Capture.translation`, ADR 0043). `render` does not write it (ADR 0057).
+New recordings never store one. `parse` still reads an older block: everything after
+`<!-- lumitrace:translation (...) -->` is the translation (the heading is dropped if present).
+The next system write drops the block. The Telugu transcript above it stays. Spectrum indexes a
+translation only while the block is still in the file, as passages headed
+`HH:MM · Log My Day · English`.
 
 ```markdown
 <!-- lumitrace:capture {"id": "...", "kind": "recording", ...} -->
@@ -191,15 +184,21 @@ We went to the park, and Leo played on the slide for a long time.
 ## Never overwrite the owner's edits
 
 * **Notes** (`My notes`) are never modified by the system.
+  They are direct generation input: the first write and later safe updates use them alongside
+  the recordings.
 * **Transcript** blocks are append-only; edits to their text are kept.
-* **Generated content** (facts in "At a glance", title, journal) carries `generated_hash`, a
-  hash of exactly what
-  the system wrote. `DayFile.is_user_edited()` compares it with the current content.
+* **Generated content** (title and journal; facts too, when an older file still has them) carries
+  `generated_hash`, a hash of exactly what the system wrote. A format 4 write hashes empty facts.
+  Dropping "At a glance" on a day that was not edited refreshes the hash, so that drop is not
+  itself an edit. `DayFile.is_user_edited()` compares the stored hash with the current content.
   * `apply_generation(...)` replaces facts/title/journal, and raises `UserEditsDetected` if the
-    owner edited them (unless `force=True`). The 4:05 a.m. fill uses `force=True` (ADR 0050).
-  * `merge_generation_additive(...)` only adds: fills empty facts, adds new list items, appends
-    journal lines under `## Later`. A recording that arrives after the journal exists uses this,
+    owner edited them (unless `force=True`). Only the first journal generation uses
+    `force=True`.
+  * `merge_generation_additive(...)` only adds: it inserts model-returned bullets into Summary,
+    Morning, Afternoon, Evening or Thoughts. A later recording or changed My notes uses this,
     whether or not the owner edited the file. On an edited day it keeps the old hash.
+* `generated_source_hash` covers capture ids, times, text and locations plus My notes. It prevents
+  repeated Generate clicks and capture replays from adding the same source twice.
 * **Stray text** typed outside the regions (or a region whose markers were deleted) is moved into
   `My notes` on the next system write, so nothing is lost.
 * Provenance fields (`prompt_version`, `models_used`, `generated_at`) and transcript text are not
@@ -211,8 +210,9 @@ it writes a day file; Spectrum diffs the live file against that snapshot to reco
 
 ## Example
 
-Fictional data (also `tests/fixtures/sample-day.md`, which is the canonical rendering; the same
-day in format 2 is `tests/fixtures/sample-day-v2.md` and in format 1 `tests/fixtures/sample-day-v1.md`):
+The fenced file below is an older format 3 day (`tests/fixtures/sample-day.md`). `parse` still
+reads it. A new `render` omits "At a glance" and any translation. Format 2 is
+`tests/fixtures/sample-day-v2.md` and format 1 is `tests/fixtures/sample-day-v1.md`.
 
 ```markdown
 ---
@@ -390,12 +390,19 @@ day_date = entry_date(captured_at, settings.tz, settings.day_rollover_hour)
 path = day_file_path(day_date)
 day = parse(storage.read_text(path), fallback_date=day_date) if storage.exists(path) else None
 day = merge_capture(day, capture, day_date)
+source_hash = day.compute_source_hash()
 if day.meta.generated_at is None:
     day = apply_generation(
-        day, facts=facts_for_whole_day, journal=journal, title=title, force=True, ...
+        day, facts=DayFacts(), journal=journal, title=title,
+        generated_source_hash=source_hash, force=True, ...
+    )
+elif day.meta.generated_source_hash != source_hash:
+    day = merge_generation_additive(
+        day, facts=DayFacts(), journal_sections={"Evening": ["new bullet"]},
+        generated_source_hash=source_hash, ...
     )
 else:
-    day = merge_generation_additive(day, facts=new_facts, journal_addendum=..., ...)
+    return "unchanged"
 text = render(day)
 storage.write_text(path, text)
 storage.write_text(generated_snapshot_path(day_date), text)

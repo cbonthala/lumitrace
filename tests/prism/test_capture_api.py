@@ -61,8 +61,9 @@ def test_recording_end_to_end(
     day = read_day(api_storage)
     assert day.title == "Saturday, October 10, 2026 · Taco day"
     assert day.journal == "## Summary\n\nA day with 1 entries."
-    assert day.facts.people == ["Maya"]
-    assert day.facts.meals[0].items == ["fish tacos"]
+    assert day.facts.people == []
+    assert day.facts.meals == []
+    assert "## At a glance" not in api_storage.read_text(day_file_path(OCT10))
     assert day.meta.audio == ["2026-10-10-2130.m4a"]
     assert day.meta.photos == ["photo-01.jpg", "photo-02.jpg"]
     assert day.meta.prompt_version == "fill_day"
@@ -190,17 +191,17 @@ def test_note_merges_into_the_same_day(
     day = read_day(api_storage)
     assert [c.kind for c in day.captures] == ["note", "recording"]  # sorted by time
     assert day.journal.startswith("## Summary\n\nA day with 1 entries.")
-    assert "## Later" in day.journal
-    assert "Later you added a quick note." in day.journal
-    assert day.facts.people == ["Priya"]
-    assert [a.kind for a in day.facts.activities] == ["run"]
+    assert day.journal.endswith("## Evening\n\n- You added another detail to the day.")
+    assert "## Later" not in day.journal
+    assert day.facts.people == []
+    assert day.facts.activities == []
     assert day.meta.models_used["stt"] == "fake"
     assert [c[0] for c in fake_llm.calls] == ["fill_day", "update_day"]
     fill, update = fake_llm.calls
     assert "Morning run" in fill[2][1]["content"]
-    new_only = update[2][1]["content"].split("Journal entries for this day", 1)[-1]
-    assert "Tacos with Priya." in new_only
-    assert "Morning run" not in new_only
+    update_input = update[2][1]["content"]
+    assert "Tacos with Priya." in update_input
+    assert "Morning run" in update_input
 
 
 def test_note_as_form_and_as_audio_clip(app: FastAPI, client: TestClient, api_storage) -> None:

@@ -49,9 +49,10 @@ component docs).
 2. **Do not overwrite the owner's edits after the day is written.** Use
    `lumitrace.frames.dayfile` helpers: `merge_capture`, `apply_generation` and
    `merge_generation_additive`. Never write a day file by string manipulation. The one exception
-   is the 4:05 a.m. fill, which uses `apply_generation(..., force=True)` and may replace a journal
-   typed before that run (ADR 0050). A recording that arrives after `generated_at` is set only
-   adds, through `merge_generation_additive`.
+ is the first journal generation (Generate or 4:05), which uses
+ `apply_generation(..., force=True)` and may replace a journal typed before that run. Once
+ `generated_at` is set, changed recordings or My notes only add section-classified bullets
+ through `merge_generation_additive` (ADR 0058).
 3. **Keep the raw transcript and the audio.**
 4. **Storage, speech-to-text and AI models are swappable through config** (`lumitrace/config.py`).
    Never import a backend directly; use `get_storage(settings)` and LiteLLM model strings.

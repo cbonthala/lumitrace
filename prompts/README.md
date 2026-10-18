@@ -8,8 +8,8 @@ folder. Edit the file. Git keeps the history. Code: `lumitrace/prism/pipeline/pr
 
 ```
 prompts/
-  fill_day.md        the 4:05 a.m. write: facts plus the journal
-  update_day.md      a recording that arrives after that write
+  fill_day.md        the first write: title and journal from recordings plus My notes
+  update_day.md      missing bullets from changed recordings or My notes
   day-template.md    the day-file shape, pasted into the fill_day user message
 ```
 
@@ -40,8 +40,8 @@ prompt and the code cannot silently drift apart. Available values:
 
 | Task | Placeholders |
 |---|---|
-| `fill_day` | `date` (`2026-10-10 (Saturday)`), `author`, `family`, `glossary`, `keyterms`, `template`, `captures` |
-| `update_day` | `date`, `author`, `family`, `glossary`, `keyterms`, `journal`, `facts` (JSON already on the page), `capture` |
+| `fill_day` | `date` (`2026-10-10 (Saturday)`), `author`, `family`, `glossary`, `keyterms`, `template`, `notes`, `captures` |
+| `update_day` | `date`, `author`, `family`, `glossary`, `keyterms`, authoritative `journal`, `notes`, all `captures` |
 
 `author` is the `secrets/family.md` member whose relation is `me`, or `(not given)`. `family`
 lists every member with their relation to the author, and a birth date when the file has one:
@@ -57,6 +57,9 @@ transcript or note text. There is no English translation. `keyterms` is the spee
 * No personal content in prompts or examples. Use fictional people and events.
 * Prompts must ask the model to use only what is in the transcript and never invent facts
   (`tests/prism/test_prompts_llm.py` checks for "never invent/guess").
+* `{{captures}}` is the full transcript of every recording. Nothing is cut before it is sent.
+  The fill-day call logs that length and the model's maximum output tokens (ADR 0056).
+* Day-level meals are not in the JSON. Code fills them from each person's meals.
 * Fact lists in both replies must validate against `lumitrace.frames.dayfile.DayFacts`.
 * Record why a prompt changed in `CHANGELOG.md` and, if it came from a learning, in
   `docs/learnings.md`.

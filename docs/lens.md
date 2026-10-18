@@ -64,9 +64,10 @@ Hybrid search over passages (title, journal, notes, transcript, facts).
 ### `get_day(date)`
 
 Reads the day file from storage (the source of truth; works even before the index exists) and
-returns `found`, `path`, `title`, `facts` (the `DayFacts` fields), `journal`, `notes`,
+returns `found`, `path`, `title`, `facts` (empty on a format 4 file; filled when an older file
+still has At a glance), `journal`, `notes`,
 `transcript` (one item per capture: `time`, `kind`, `location`, `audio`, `photos`, `text`,
-`translation`: the English translation of a recording, or `null`),
+`translation`: `null` unless an older file still has a translation block),
 `audio` and `photos` (`{name, path, link}` with `link` from `storage.get_share_link`, i.e. a
 private Google Drive link that opens only for the owner, or `file://` locally; `link` is `null`
 with an `error` if the file is missing), and `user_edited`. A missing day returns

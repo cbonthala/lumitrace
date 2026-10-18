@@ -132,7 +132,7 @@ def test_sample_fixture_roundtrips(sample_day_markdown: str) -> None:
     assert day.meta.model_extra == {}
     assert day.meta.audio == ["2026-10-10-2130.m4a"]
     assert day.meta.photos == ["photo-01.jpg", "photo-02.jpg"]
-    assert day.meta.models_used["write_journal"] == "openai/gpt-4o"
+    assert day.meta.models_used["fill_day"] == "gemini/gemini-3.8-flash"
     assert day.meta.generated_at == dt.datetime(2026, 10, 11, 0, 41, tzinfo=TZ)
     assert day.journal.startswith("## Summary")
     assert day.notes == "Remember to put the tooth under the pillow tomorrow too."
@@ -147,7 +147,16 @@ def test_sample_fixture_roundtrips(sample_day_markdown: str) -> None:
     assert rec.photos == ["photo-01.jpg", "photo-02.jpg"]
     assert rec.text.startswith("Long day.")
     assert not day.is_user_edited()
-    assert D.render(day) == sample_day_markdown
+    rendered = D.render(day)
+    assert "## At a glance" not in rendered
+    assert "English translation" not in rendered
+    rewritten = D.parse(rendered)
+    assert rewritten.facts == D.DayFacts()
+    assert rewritten.journal == day.journal
+    assert rewritten.notes == day.notes
+    assert rewritten.title == day.title
+    assert [c.text for c in rewritten.captures] == [c.text for c in day.captures]
+    assert not rewritten.is_user_edited()
 
 
 @pytest.mark.parametrize("old_name", ["lifelog", "bookshelf", "lumen"])
@@ -159,7 +168,9 @@ def test_parses_files_written_before_the_rename(sample_day_markdown: str, old_na
     day = D.parse(legacy)
     assert day == D.parse(sample_day_markdown)
     assert day.meta.model_extra == {}
-    assert D.render(day) == sample_day_markdown
+    rendered = D.render(day)
+    assert f"{old_name}:" not in rendered
+    assert "## At a glance" not in rendered
 
 
 def test_reads_format_1_files_and_writes_the_current_format(
@@ -176,8 +187,11 @@ def test_reads_format_1_files_and_writes_the_current_format(
     front = rendered.split("\n---\n", 1)[0]
     assert "mood" not in front and "meals" not in front
     assert f"lumitrace_format: {D.FORMAT_VERSION}" in front
-    assert "- **Mood:** happy (4/5)" in rendered
-    assert D.parse(rendered) == old
+    assert "## At a glance" not in rendered
+    rewritten = D.parse(rendered)
+    assert rewritten.facts == D.DayFacts()
+    assert (rewritten.title, rewritten.journal) == (old.title, old.journal)
+    assert not rewritten.is_user_edited()
 
 
 def test_reads_format_2_files_and_moves_their_facts_into_the_current_sections(
@@ -194,7 +208,12 @@ def test_reads_format_2_files_and_moves_their_facts_into_the_current_sections(
     assert leo.meals == [D.Meal(type="snacks", items=["pasta"])]
     assert day.meta.lumitrace_format == D.FORMAT_VERSION
     assert day.is_user_edited()  # the format 2 hash does not match, so it is never overwritten
-    assert D.parse(D.render(day)) == day
+    rendered = D.render(day)
+    assert "## At a glance" not in rendered
+    rewritten = D.parse(rendered)
+    assert rewritten.facts == D.DayFacts()
+    assert rewritten.journal == day.journal
+    assert rewritten.is_user_edited()
 
 
 def test_format_2_family_lines_become_places_and_things_we_did() -> None:
@@ -274,7 +293,10 @@ def test_facts_section_tolerates_hand_edits() -> None:
     ]
     for stray in ["- Sleep: 8 hours", "### Dreams", "- flying over the lake"]:
         assert stray in day.notes
-    assert D.parse(D.render(day)) == day
+    rewritten = D.parse(D.render(day))
+    assert rewritten.facts == D.DayFacts()
+    for stray in ["- Sleep: 8 hours", "### Dreams", "- flying over the lake"]:
+        assert stray in rewritten.notes
 
 
 def test_person_sections_tolerate_hand_edits() -> None:
@@ -318,7 +340,10 @@ def test_person_sections_tolerate_hand_edits() -> None:
     assert facts.weather is None
     for stray in ["- a stray line", "### Dreams", "- flying"]:
         assert stray in day.notes
-    assert D.parse(D.render(day)) == day
+    rewritten = D.parse(D.render(day))
+    assert rewritten.facts == D.DayFacts()
+    for stray in ["- a stray line", "### Dreams", "- flying"]:
+        assert stray in rewritten.notes
 
 
 def test_person_items_never_contain_their_separator() -> None:
@@ -336,6 +361,20 @@ def test_person_items_never_contain_their_separator() -> None:
         family=[member, D.FamilyMember(name="Empty"), D.FamilyMember(name="", health=["x"])]
     )
     assert [m.name for m in facts.family] == ["Leo", "Empty"]
+    assert D.parse_facts_section(D.render_facts_section(facts)) == (facts, "")
+
+
+def test_meal_items_keep_commas_inside_parentheses() -> None:
+    meal = D.Meal(type="breakfast", items=["oatmeal (Maya, Leo), coffee (Sam)"])
+    assert meal.items == ["oatmeal (Maya, Leo)", "coffee (Sam)"]
+    facts = D.DayFacts(
+        meals=[meal],
+        family=[
+            D.FamilyMember(name="Maya"),
+            D.FamilyMember(name="Leo"),
+            D.FamilyMember(name="Sam"),
+        ],
+    )
     assert D.parse_facts_section(D.render_facts_section(facts)) == (facts, "")
 
 
@@ -473,7 +512,11 @@ def test_roundtrip_model_equality_with_tricky_content() -> None:
     )
     md = D.render(day)
     parsed = D.parse(md)
-    assert parsed == day
+    assert parsed.facts == D.DayFacts()
+    assert (parsed.title, parsed.journal, parsed.notes) == (day.title, day.journal, day.notes)
+    assert [(c.id, c.text, c.audio, c.photos) for c in parsed.captures] == [
+        (c.id, c.text, c.audio, c.photos) for c in day.captures
+    ]
     assert D.render(parsed) == md
     assert parsed.meta.model_extra == {"tags": ["journal", "family"]}
 
@@ -494,18 +537,27 @@ def test_capture_translation_roundtrip_and_hand_edits() -> None:
         ],
     )
     md = D.render(day)
-    assert (
-        "![[2026-10-10-2130.m4a]]\n\nmana park ki vellam\n\n"
-        f"{D.TRANSLATION_MARKER}\n#### English translation\n\nWe went to the park.\n\nThen home.\n"
-    ) in md
+    assert "mana park ki vellam" in md
+    assert "English translation" not in md
+    assert D.TRANSLATION_MARKER not in md
     parsed = D.parse(md)
-    assert parsed == day
-    assert D.render(parsed) == md
-    edited = md.replace("#### English translation\n\nWe went", "We went").replace(
+    assert parsed.captures[0].translation == ""
+    assert parsed.captures[1].translation == ""
+    legacy = (
+        "---\ndate: 2026-10-10\n---\n\n# T\n\n## Transcript\n\n"
+        "<!-- lumitrace:transcript:start -->\n"
+        '<!-- lumitrace:capture {"id": "c1", "kind": "recording", '
+        '"captured_at": "2026-10-10T21:30:00-05:00"} -->\n'
+        "### 21:30 · Log My Day\n\nmana park ki vellam\n\n"
+        f"{D.TRANSLATION_MARKER}\n#### English translation\n\nWe went to the park.\n"
+        "<!-- lumitrace:transcript:end -->\n"
+    )
+    assert D.parse(legacy).captures[0].translation == "We went to the park."
+    edited = legacy.replace("#### English translation\n\nWe went", "We went").replace(
         D.TRANSLATION_MARKER, "<!-- lumen:translation -->"
     )
     first = D.parse(edited).captures[0]
-    assert (first.text, first.translation) == ("mana park ki vellam", day.captures[0].translation)
+    assert (first.text, first.translation) == ("mana park ki vellam", "We went to the park.")
 
 
 def test_docs_example_matches_fixture(sample_day_markdown: str) -> None:
@@ -586,7 +638,9 @@ def test_stray_text_moves_into_notes_and_is_never_lost(sample_day_markdown: str)
     ]:
         assert text in day.notes
     rendered = D.render(day)
-    assert D.parse(rendered) == day
+    rewritten = D.parse(rendered)
+    assert rewritten.notes == day.notes
+    assert rewritten.journal == day.journal
 
 
 def test_missing_markers_keep_content_as_notes(sample_day_markdown: str) -> None:
@@ -684,7 +738,11 @@ def test_merge_capture_never_touches_generated_or_notes(sample_day_markdown: str
     assert not new.is_user_edited()
     assert new.meta.audio == ["2026-10-10-2130.m4a", "2026-10-10-2300.m4a"]
     assert new.meta.photos[-1] == "photo-03.jpg"
-    assert D.parse(D.render(new)) == new
+    written = D.parse(D.render(new))
+    assert written.facts == D.DayFacts()
+    assert (written.title, written.journal, written.notes) == (new.title, new.journal, new.notes)
+    assert [c.id for c in written.captures] == [c.id for c in new.captures]
+    assert not written.is_user_edited()
 
 
 def test_merge_capture_wrong_day_raises(sample_day_markdown: str) -> None:
@@ -703,6 +761,7 @@ def _facts(**kw) -> D.DayFacts:
 
 def test_apply_generation_sets_content_and_hash() -> None:
     day = D.merge_capture(None, capture("a", at(9), text="eggs"), DAY)
+    source_hash = day.compute_source_hash()
     gen = D.apply_generation(
         day,
         facts=_facts(meals=[D.Meal(type="breakfast", items=["eggs"])]),
@@ -711,16 +770,28 @@ def test_apply_generation_sets_content_and_hash() -> None:
         prompt_version="v1",
         models_used={"extract_facts": "m"},
         generated_at=at(9, 5),
+        generated_source_hash=source_hash,
     )
     assert gen.title == "Eggs day"
     assert gen.facts.meals[0].items == ["eggs"]
     assert gen.meta.prompt_version == "v1"
     assert gen.meta.generated_hash == gen.compute_generated_hash()
+    assert gen.meta.generated_source_hash == source_hash
     assert not gen.is_user_edited()
     regen = D.apply_generation(gen, facts=_facts(mood="ok"), journal="New.")
     assert regen.title == "Eggs day"
     assert regen.facts.meals == []
     assert regen.meta.prompt_version == "v1"
+
+
+def test_source_hash_tracks_transcripts_and_notes_not_generated_words() -> None:
+    day = D.merge_capture(None, capture("a", at(9), text="eggs"), DAY)
+    original = day.compute_source_hash()
+    day.journal = "## Summary\n\nGenerated words."
+    day.title = "Generated title"
+    assert day.compute_source_hash() == original
+    day.notes = "Owner detail."
+    assert day.compute_source_hash() != original
 
 
 def test_apply_generation_refuses_user_edits(sample_day_markdown: str) -> None:
@@ -732,7 +803,7 @@ def test_apply_generation_refuses_user_edits(sample_day_markdown: str) -> None:
     assert not forced.is_user_edited()
 
 
-def test_additive_merge_on_edited_day_keeps_edits(sample_day_markdown: str) -> None:
+def test_section_merge_on_edited_day_keeps_edits(sample_day_markdown: str) -> None:
     day = D.parse(sample_day_markdown.replace("**Mood:** happy", "**Mood:** great"))
     assert day.is_user_edited()
     merged = D.merge_generation_additive(
@@ -759,8 +830,7 @@ def test_additive_merge_on_edited_day_keeps_edits(sample_day_markdown: str) -> N
             ],
             highlights=["Night walk"],
         ),
-        journal_addendum="A late walk.",
-        addendum_label="23:00 · Quick Note",
+        journal_sections={"Evening": ["A late walk."]},
         prompt_version="v2",
         generated_at=at(23),
     )
@@ -787,16 +857,19 @@ def test_additive_merge_on_edited_day_keeps_edits(sample_day_markdown: str) -> N
     assert [a.kind for a in merged.facts.activities] == ["run (Sam)", "reading (Sam)", "yoga (Sam)"]
     assert merged.facts.activities[0].minutes == 40
     assert merged.journal.startswith(day.journal)
-    assert merged.journal.endswith("## Later\n\n**23:00 · Quick Note**\n\nA late walk.")
+    assert merged.journal.endswith("Pasta at home. Leo lost his first tooth and was very proud. "
+                                   "Late at night you finished the book you had been reading."
+                                   "\n\n- A late walk.")
+    assert "## Later" not in merged.journal
     assert merged.notes == day.notes
     assert merged.meta.prompt_version == "v2"
     assert merged.meta.generated_hash == day.meta.generated_hash
     assert merged.is_user_edited()
     again = D.merge_generation_additive(
-        merged, facts=D.DayFacts(), journal_addendum="Stars.", addendum_label="23:30 · Quick Note"
+        merged, facts=D.DayFacts(), journal_sections={"Evening": ["Stars."]}
     )
-    assert again.journal.count("## Later") == 1
-    assert again.journal.endswith("A late walk.\n\n**23:30 · Quick Note**\n\nStars.")
+    assert again.journal.endswith("- A late walk.\n\n- Stars.")
+    assert "## Later" not in again.journal
 
 
 def test_additive_merge_on_clean_day_refreshes_hash(sample_day_markdown: str) -> None:
@@ -804,3 +877,28 @@ def test_additive_merge_on_clean_day_refreshes_hash(sample_day_markdown: str) ->
     merged = D.merge_generation_additive(day, facts=_facts(people=["Sam"]))
     assert merged.facts.people[-1] == "Sam"
     assert not merged.is_user_edited()
+
+
+def test_section_merge_inserts_missing_sections_in_journal_order() -> None:
+    journal = "## Summary\n\n- Started the day.\n\n## Evening\n\n- Ate dinner."
+    merged = D.merge_journal_sections(
+        journal,
+        {
+            "Afternoon": ["Visited the park."],
+            "Thoughts": ["Felt grateful."],
+        },
+    )
+    assert merged == (
+        "## Summary\n\n- Started the day.\n\n"
+        "## Afternoon\n\n- Visited the park.\n\n"
+        "## Evening\n\n- Ate dinner.\n\n"
+        "## Thoughts\n\n- Felt grateful."
+    )
+    assert "## Later" not in merged
+
+
+def test_section_merge_moves_legacy_later_content_to_evening() -> None:
+    journal = "## Summary\n\n- Started the day.\n\n## Later\n\n- Existing late detail."
+    merged = D.merge_journal_sections(journal, {"Evening": ["New late detail."]})
+    assert "## Later" not in merged
+    assert "## Evening\n\n- Existing late detail.\n\n- New late detail." in merged

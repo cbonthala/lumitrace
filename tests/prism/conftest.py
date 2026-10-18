@@ -57,7 +57,14 @@ class FakeLLM:
             content = "Sure! Here are the facts: mood is great"
         elif task == "update_day":
             content = json.dumps(
-                {"facts": self.facts(user), "text": "Later you added a quick note."}
+                {
+                    "additions": [
+                        {
+                            "section": "Evening",
+                            "text": "You added another detail to the day.",
+                        }
+                    ]
+                }
             )
         else:
             spoken = user.split("Journal entries for this day", 1)[-1]

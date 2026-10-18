@@ -54,6 +54,9 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 ## Prism (recording API)
 
+- 2026-10-18 — Asking a model to rewrite a journal cannot guarantee that manual corrections stay;
+  even a preservation prompt can paraphrase them → track processed source separately and let the
+  model classify only new bullets while code inserts them into existing sections (ADR 0058).
 - 2026-10-17 — Re-encoding a cropped voice note in the browser plays the slice back through
   `MediaRecorder`, so it takes as long as the kept audio and is a second encode → send the
   original blob when the handles are still at the ends (ADR 0054).
@@ -146,6 +149,13 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
   translation is a hint, the Telugu wins; relation words and names need a glossary; "unsure"
   must be written as unsure. Captured in the day template and the `lumitrace-telugu-day-journal`
   skill (ADR 0045); the prompts still need a version with the Nanna rules.
+- 2026-10-18 — A long day's journal stopped before the last part of the recording, and an "I"
+  drink was written as shared. The fill-day call already sent the whole transcript. The prompt
+  capped the journal around 300 words and did not require the final third, and the model's
+  output ceiling was left at the provider default. Day-level meals stayed empty because only
+  per-person meals are in the JSON → cover the transcript to its last sentence, give an item
+  to someone only when they are named or the speaker says "we", ask for the model's maximum
+  output tokens, and fill the Everyone meals in code (ADR 0056).
 - 2026-10-17 — Family names and the notes that fix mishearings were split across an environment
   variable and a skill file the server cannot read. One `secrets/family.md` feeds both. Usual
   routines in that file are easy for a model to write as if they happened today, so the prompt

@@ -1,16 +1,24 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import re
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
 from lumitrace.config import Settings
-from lumitrace.frames.dayfile import Capture, DayFacts, FamilyMember
+from lumitrace.frames.dayfile import Capture, DayFacts, FamilyMember, Meal
 from lumitrace.household import Household, Person
-from lumitrace.prism.pipeline.generate import Generator, keep_family, parse_facts
+from lumitrace.prism.pipeline.generate import (
+    Generator,
+    keep_family,
+    parse_day_draft,
+    parse_day_update,
+    parse_facts,
+)
 from lumitrace.prism.pipeline.llm import LLMClient, LLMError, extract_json
 from lumitrace.prism.pipeline.prompts import (
     PROMPT_TASKS,
@@ -34,8 +42,8 @@ def test_every_current_prompt_exists_and_renders(api_settings: Settings) -> None
         text="Tacos with Maya.",
         location="Austin",
     )
-    gen.fill_day(day, [capture])
-    gen.update_day(day, capture, "## Summary\n\nEarlier.", DayFacts())
+    gen.fill_day(day, [capture], "Owner note.")
+    gen.update_day(day, [capture], "Owner note.", "## Summary\n\nEarlier.")
     assert sorted({c[0] for c in llm.calls}) == sorted(PROMPT_TASKS)
     for _, _, messages in llm.calls:
         for message in messages:
@@ -43,6 +51,7 @@ def test_every_current_prompt_exists_and_renders(api_settings: Settings) -> None
     facts_user = llm.calls[0][2][1]["content"]
     assert "2026-10-10 (Saturday)" in facts_user
     assert "### 13:05 · Quick Note (location: Austin)\n\nTacos with Maya." in facts_user
+    assert all("Owner note." in call[2][1]["content"] for call in llm.calls)
 
 
 def test_prompt_files_follow_the_layout() -> None:
@@ -156,7 +165,9 @@ def test_glossary_is_sent_to_every_prompt(api_settings: Settings) -> None:
         llm = FakeLLM()
         gen = Generator(LLMClient(settings, completion_fn=llm), settings.prompts_dir)
         gen.fill_day(dt.date(2026, 10, 10), [capture])
-        gen.update_day(dt.date(2026, 10, 10), capture, "## Summary\n\nEarlier.", DayFacts())
+        gen.update_day(
+            dt.date(2026, 10, 10), [capture], "Owner note.", "## Summary\n\nEarlier."
+        )
         for _, _, messages in llm.calls:
             system = messages[0]["content"]
             assert (notes in system) is expected
@@ -180,8 +191,10 @@ def test_journal_gets_the_transcript_and_keyterms_not_a_translation(
         text="mana park ki vellam",
         translation="We went to the park.",
     )
-    gen.fill_day(dt.date(2026, 10, 10), [capture])
-    gen.update_day(dt.date(2026, 10, 10), capture, "## Summary\n\nEarlier.", DayFacts())
+    gen.fill_day(dt.date(2026, 10, 10), [capture], "Owner note.")
+    gen.update_day(
+        dt.date(2026, 10, 10), [capture], "Owner note.", "## Summary\n\nEarlier."
+    )
     assert [c[0] for c in llm.calls] == ["fill_day", "update_day"]
     for _, _, messages in llm.calls:
         user = messages[1]["content"]
@@ -191,6 +204,24 @@ def test_journal_gets_the_transcript_and_keyterms_not_a_translation(
         assert "English translation" not in user
         assert "Leon is a friend." in messages[0]["content"]
     assert "Facts already extracted" not in llm.calls[0][2][1]["content"]
+
+
+def test_update_reply_classifies_additions_by_journal_section() -> None:
+    update = parse_day_update(
+        {
+            "additions": [
+                {"section": "Afternoon", "text": "- Walked to the park."},
+                {"section": "Thoughts", "text": "Felt grateful."},
+            ]
+        },
+        [],
+    )
+    assert [(item.section, item.text) for item in update.additions] == [
+        ("Afternoon", "Walked to the park."),
+        ("Thoughts", "Felt grateful."),
+    ]
+    with pytest.raises(ValueError):
+        parse_day_update({"additions": [{"section": "Later", "text": "No."}]}, [])
 
 
 def test_llm_client_passes_config_and_falls_back(api_settings: Settings) -> None:
@@ -225,3 +256,154 @@ def test_llm_client_passes_config_and_falls_back(api_settings: Settings) -> None
             task="t", model="primary", messages=[], parse=lambda raw: raw, fake=dict
         )
     assert [a.model for a in info.value.attempts] == ["primary", "backup"]
+
+
+def test_fill_day_prompt_covers_the_ending_and_keeps_an_i_item_with_the_author() -> None:
+    for task in ("fill_day", "update_day"):
+        text = (ROOT / "prompts" / f"{task}.md").read_text(encoding="utf-8")
+        assert "Cover the transcript to its last sentence." in text
+        assert "check the final third of each" in text
+        assert "uses 'we' for it." in text
+        assert "'I drank coffee' is the author only." in text
+    template = (ROOT / "prompts" / "day-template.md").read_text(encoding="utf-8")
+    assert "Cover the transcript to its last sentence." in template
+    assert "'I drank coffee' is the author only." in template
+
+
+def test_day_level_meals_are_the_union_of_each_persons_meals() -> None:
+    raw = {
+        "headline": "Breakfast at home",
+        "journal": "## Summary\n\n- Home.",
+        "facts": {
+            "meals": [{"type": "breakfast", "items": ["shared coffee"]}],
+            "family": [
+                {
+                    "name": "Sam",
+                    "meals": [
+                        {"type": "breakfast", "items": ["coffee"]},
+                        {"type": "dinner", "items": ["rice"]},
+                    ],
+                },
+                {"name": "maya", "meals": [{"type": "breakfast", "items": ["Oatmeal"]}]},
+                {"name": "Leo", "meals": [{"type": "breakfast", "items": ["oatmeal"]}]},
+                {"name": "Priya", "meals": [{"type": "lunch", "items": ["soup"]}]},
+            ],
+        },
+    }
+    draft = parse_day_draft(raw, ["Sam", "Maya", "Leo"])
+    assert draft.facts.meals == [
+        Meal(type="breakfast", items=["coffee (Sam)", "Oatmeal (Maya, Leo)"]),
+        Meal(type="dinner", items=["rice (Sam)"]),
+    ]
+    assert [member.name for member in draft.facts.family] == ["Sam", "Maya", "Leo"]
+    assert draft.facts.family[1].meals == [Meal(type="breakfast", items=["Oatmeal"])]
+    kept = parse_day_draft(
+        {
+            "journal": "## Summary\n\n- Tacos.",
+            "facts": {"meals": [{"type": "lunch", "items": ["fish tacos"]}]},
+        },
+        [],
+    )
+    assert kept.facts.meals == [Meal(type="lunch", items=["fish tacos"])]
+
+
+def test_fill_day_sends_the_whole_transcript(
+    api_settings: Settings, caplog: pytest.LogCaptureFixture
+) -> None:
+    ending = "FINAL SENTENCE about bedtime."
+    text = ("nanna coffee thaganu. " * 800) + ending
+    at = dt.datetime(2026, 10, 10, 21, 30, tzinfo=api_settings.tz)
+    capture = Capture(id="long", kind="recording", captured_at=at, text=text)
+    llm = FakeLLM()
+    gen = Generator(LLMClient(api_settings, completion_fn=llm), api_settings.prompts_dir)
+    with caplog.at_level(logging.INFO, logger="lumitrace.prism.pipeline.generate"):
+        gen.fill_day(dt.date(2026, 10, 10), [capture])
+    user = llm.calls[0][2][1]["content"]
+    assert text in user
+    assert user.strip().endswith(ending)
+    match = re.search(r"captures_chars=(\d+) transcript_chars=(\d+)", caplog.text)
+    assert match is not None
+    assert int(match.group(1)) > int(match.group(2)) == len(text)
+    assert "captures=1" in caplog.text
+    assert "transcript_complete=True" in caplog.text
+    assert "max_output_tokens=" in caplog.text
+
+
+def _json_reply(content: str, finish: str, tokens: int) -> Any:
+    message = SimpleNamespace(content=content)
+    choice = SimpleNamespace(message=message, finish_reason=finish)
+    usage = SimpleNamespace(completion_tokens=tokens)
+    return SimpleNamespace(choices=[choice], usage=usage)
+
+
+def test_journal_call_asks_for_the_model_max_output_tokens(
+    api_settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("lumitrace.prism.pipeline.llm.model_max_output_tokens", lambda model: 65536)
+    seen: list[dict[str, Any]] = []
+
+    def completion(**kwargs: Any) -> Any:
+        seen.append(kwargs)
+        return _json_reply('{"ok": true}', "stop", 40)
+
+    client = LLMClient(api_settings, completion_fn=completion)
+    result = client.complete_json(
+        task="fill_day",
+        model="gemini/gemini-3.8-flash",
+        messages=[],
+        parse=lambda raw: raw,
+        fake=dict,
+    )
+    assert result.value == {"ok": True}
+    assert seen[0]["max_tokens"] == 65536
+    assert len(seen) == 1
+
+
+def test_output_token_limit_is_raised_when_the_reply_is_cut_off(
+    api_settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("lumitrace.prism.pipeline.llm.model_max_output_tokens", lambda model: 1000)
+    seen: list[int | None] = []
+
+    def completion(**kwargs: Any) -> Any:
+        limit = kwargs.get("max_tokens")
+        seen.append(limit)
+        if limit == 100:
+            return _json_reply("not json", "length", 80)
+        return _json_reply('{"ok": true}', "stop", 20)
+
+    client = LLMClient(api_settings, completion_fn=completion)
+    result = client.complete_json(
+        task="fill_day",
+        model="gemini/gemini-3.8-flash",
+        messages=[],
+        parse=lambda raw: raw,
+        fake=dict,
+        max_tokens=100,
+    )
+    assert seen == [100, 1000]
+    assert result.value == {"ok": True}
+    assert [attempt.ok for attempt in result.attempts] == [False, True]
+    assert result.attempts[0].error == "output truncated"
+
+
+def test_output_already_at_the_model_max_is_not_retried(
+    api_settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("lumitrace.prism.pipeline.llm.model_max_output_tokens", lambda model: 1000)
+    seen: list[int | None] = []
+
+    def completion(**kwargs: Any) -> Any:
+        seen.append(kwargs.get("max_tokens"))
+        return _json_reply('{"ok": true}', "length", 1000)
+
+    client = LLMClient(api_settings, completion_fn=completion)
+    result = client.complete_json(
+        task="fill_day",
+        model="gemini/gemini-3.8-flash",
+        messages=[],
+        parse=lambda raw: raw,
+        fake=dict,
+    )
+    assert seen == [1000]
+    assert result.value == {"ok": True}

@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-10-17
+- Superseded in part by: 0058 (updates now merge into normal journal sections, not `## Later`)
 
 ## Context
 

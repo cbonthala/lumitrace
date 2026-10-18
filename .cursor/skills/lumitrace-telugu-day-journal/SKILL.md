@@ -6,7 +6,8 @@ description: Fill a Lumitrace day file (prompts/day-template.md) from Telugu cod
 # Telugu transcript to Lumitrace day file
 
 ## Before you start
-- Read `prompts/day-template.md`. It is the output shape. The same file is pasted into the fill-day prompt.
+- Read `prompts/day-template.md`. It is a checklist. The same file is pasted into the fill-day prompt.
+- The day file you write has a title, the journal (Summary, Morning, Afternoon, Evening, Thoughts), My notes, and the Telugu transcript. Do not write an At a glance section. Do not write a translation.
 - Read `secrets/family.md` at the repository root. It holds the family (names, relations, birth dates) and the notes (other people, relation words, foods, places, usual routines). It is git-ignored.
   - Missing? Copy `docs/templates/family.example.md` to `secrets/family.md` and fill it in.
 - The person with `relation: me` is the author.
@@ -15,14 +16,16 @@ description: Fill a Lumitrace day file (prompts/day-template.md) from Telugu cod
 ## What the input looks like
 - Audio is mostly Telugu, often mixed with English words.
 - The Prism gives one text per recording: the code-mixed transcript (English words in English, Telugu in Telugu script). There is no English translation (ADR 0048).
-- An older day file may still have an English translation stored under the transcript. Ignore it. The Telugu transcript is the source.
+- An older day file may still show a translation or an At a glance section. Ignore both. The Telugu transcript is the source. Do not write either back.
 - Names, relations and spellings are in `secrets/family.md`.
 - The journal is written in **English**.
 
 ## Source rules
 - Read the Telugu. Verb endings show who did it.
 - Two recordings disagree? The newer one wins. Keep both in the transcript section.
-- The transcript is the only source for what happened today.
+- The recordings and the day's My notes are the only sources for what happened today. My notes
+  are direct owner input and win when they correct a recording.
+- Cover the transcript to its last sentence. Before returning, check the final third of each recording is reflected in the journal or facts.
 - Keep events in the order they were spoken. Reorder only when a time is stated.
 - If the speaker says నిన్న or "yesterday", those events belong to the previous date, not today.
 - Every proper noun must appear in the transcript, keyterms, or glossary. Otherwise write [uncertain: name unclear]. Never invent a name.
@@ -33,7 +36,7 @@ description: Fill a Lumitrace day file (prompts/day-template.md) from Telugu cod
    - Telugu verb endings show who did it.
 3. Tag each event: who, what, where, when, any feeling word.
 4. Check names and sound-alikes against the family file.
-5. Fill each template section from the tags.
+5. Cover each checklist topic inside the journal. Do not add an At a glance section.
 6. Make it quick to read: short bullets, one fact each.
 7. Run the check list.
 
@@ -71,6 +74,7 @@ description: Fill a Lumitrace day file (prompts/day-template.md) from Telugu cod
 - **Food**
   - Split by person, then breakfast, lunch, dinner, snacks, drinks.
   - "We" means everyone present. A named person means only that person.
+  - Give an item to a person only if the transcript names them or uses 'we' for it. 'I drank coffee' is the author only.
   - Delivery is food, not a visit.
 - **Places visited**
   - Only places someone physically went.
@@ -108,6 +112,8 @@ description: Fill a Lumitrace day file (prompts/day-template.md) from Telugu cod
 
 ## Check list
 - [ ] Every bullet has a phrase behind it.
+- [ ] The final third of each recording shows up in the journal or facts.
+- [ ] An "I" item is the author's only. A shared item names the person or says "we".
 - [ ] Each action's subject re-checked against the Telugu.
 - [ ] Nobody's food, places or health sits under someone else.
 - [ ] No delivery under Places. No show under People.

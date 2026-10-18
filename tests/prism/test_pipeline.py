@@ -45,7 +45,7 @@ def owner_edits(storage: LocalStorage, change) -> None:
     storage.write_text(path, render(day))
 
 
-def test_edited_day_gets_additive_update(
+def test_edited_day_gets_section_update(
     processor: CaptureProcessor, api_settings: Settings, api_storage: LocalStorage, fake_llm
 ) -> None:
     first = processor.process(make_request(api_settings, api_storage, "a", spoken="Run with Maya."))
@@ -63,11 +63,10 @@ def test_edited_day_gets_additive_update(
     assert second.generation == "update"
     day = parse(api_storage.read_text(day_file_path(OCT10)))
     assert day.journal.startswith("## Summary\n\nMy own words about the run.")
-    assert day.journal.endswith(
-        "## Later\n\n**22:30 · Quick Note**\n\nLater you added a quick note."
-    )
-    assert day.facts.mood == "proud"
-    assert day.facts.people == ["Maya", "Leo"]
+    assert day.journal.endswith("## Evening\n\n- You added another detail to the day.")
+    assert "## Later" not in day.journal
+    assert day.facts.mood is None
+    assert day.facts.people == []
     assert day.notes == "Private thought."
     assert day.is_user_edited()
     assert day.meta.prompt_version == "update_day"
@@ -76,7 +75,8 @@ def test_edited_day_gets_additive_update(
     update_call = next(c for c in fake_llm.calls if c[0] == "update_day")
     assert "My own words about the run." in update_call[2][1]["content"]
     assert "Tacos with Leo." in update_call[2][1]["content"]
-    assert "Run with Maya." not in update_call[2][1]["content"]
+    assert "Run with Maya." in update_call[2][1]["content"]
+    assert "Private thought." in update_call[2][1]["content"]
 
 
 def test_edit_during_generation_is_not_overwritten(
@@ -100,7 +100,8 @@ def test_edit_during_generation_is_not_overwritten(
     assert result.generation == "update"
     day = parse(api_storage.read_text(day_file_path(OCT10)))
     assert day.journal.startswith("Typed while the AI was busy.")
-    assert "## Later" in day.journal
+    assert day.journal.endswith("## Evening\n\n- You added another detail to the day.")
+    assert "## Later" not in day.journal
     assert len(day.captures) == 2
 
 
@@ -112,7 +113,7 @@ def test_fallback_model_is_used_and_recorded(
     assert result.generation == "full"
     day = parse(api_storage.read_text(day_file_path(OCT10)))
     assert day.meta.models_used["fill_day"] == "test/fallback"
-    assert day.facts.people == ["Maya"]
+    assert day.journal.startswith("## Summary")
     record = json.loads(api_storage.read_text("_system/activity/2026/10.jsonl").splitlines()[-1])
     steps = {s["name"]: s for s in record["steps"]}
     attempts = steps["fill_day"]["detail"]["attempts"]
@@ -169,7 +170,8 @@ def test_translation_is_saved_with_the_transcript(
     processor.transcriber = Translating()
     processor.process(make_request(api_settings, api_storage, "a", spoken="ignored"))
     (saved,) = parse(api_storage.read_text(day_file_path(OCT10))).captures
-    assert (saved.text, saved.translation) == ("mana park ki vellam", "We went to the park.")
+    assert (saved.text, saved.translation) == ("mana park ki vellam", "")
+    assert "English translation" not in api_storage.read_text(day_file_path(OCT10))
     record = json.loads(api_storage.read_text("_system/activity/2026/10.jsonl"))
     assert record["warnings"] == ["transcribe: keyterms ignored"]
     step = next(s for s in record["steps"] if s["name"] == "transcribe")
@@ -193,11 +195,18 @@ def test_reprocessing_a_saved_capture_does_not_duplicate_it(
 ) -> None:
     req = make_request(api_settings, api_storage, "a", spoken="Run.")
     processor.process(req)
+
+    def edit(day) -> None:
+        day.journal = "## Summary\n\nMy corrected words."
+
+    owner_edits(api_storage, edit)
     again = processor.process(req)
     assert again.audio == "2026-10-10-2130.m4a"
-    assert "capture already in the day file; regenerating only" in again.warnings
+    assert again.generation == "unchanged"
+    assert "capture already in the day file; checking journal only" in again.warnings
     day = parse(api_storage.read_text(day_file_path(OCT10)))
     assert len(day.captures) == 1
+    assert day.journal == "## Summary\n\nMy corrected words."
     assert [f.path for f in api_storage.list("2026") if f.path.endswith(".m4a")] == [
         "2026/10/2026-10-10/2026-10-10-2130.m4a"
     ]

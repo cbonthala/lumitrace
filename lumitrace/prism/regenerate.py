@@ -7,9 +7,9 @@
 * a day the owner edited is left as it is (a later recording updates that day on its own);
 * a day without any transcript text is skipped.
 
-A day counts as unedited when its generated hash matches, or when the file is identical to the
-snapshot the Prism wrote (``_system/generated/``). The second rule covers days written in the
-older day format 2, whose hash no longer matches after the format changed.
+A day counts as unedited when its generated hash matches. An older-format day whose parsed hash
+cannot match may also use an identical generated snapshot; current format 4 always trusts the
+hash so a refreshed snapshot cannot hide an owner edit.
 
 Every day is written like the Prism writes it: the day file, then the identical snapshot.
 Spectrum picks the changes up on its next sync; ``nudge`` asks it to do so right away.
@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -66,10 +67,22 @@ def _day_files(
     return sorted(found.items())
 
 
+_LEGACY_FORMAT_RE = re.compile(
+    r"(?m)^(?:lumitrace|lumen|bookshelf|lifelog)_format:\s*[123]\s*$"
+)
+
+
 def _is_edited(day: DayFile, live: str, snapshot: str | None) -> bool:
-    if snapshot is not None and snapshot == live:
+    if not day.is_user_edited():
         return False
-    return day.is_user_edited()
+    # Old layouts cannot reproduce their original hash after parsing. Their exact snapshot is
+    # the only safe proof that the owner did not edit them. Format 4 trusts the hash so a system
+    # write cannot hide a manual correction merely because it refreshed the snapshot.
+    return not (
+        snapshot is not None
+        and snapshot == live
+        and _LEGACY_FORMAT_RE.search(live) is not None
+    )
 
 
 def regenerate_days(
@@ -112,7 +125,7 @@ def regenerate_days(
             done(DayOutcome(date, "would regenerate"))
             continue
         try:
-            filled, prompt = generator.fill_day(date, day.captures)
+            filled, prompt = generator.fill_day(date, day.captures, day.notes)
             headline = filled.value.headline
             title = default_title(date) + (f" · {headline}" if headline else "")
             updated = apply_generation(
@@ -122,6 +135,7 @@ def regenerate_days(
                 title=title,
                 prompt_version=prompt.label,
                 models_used={**day.meta.models_used, "fill_day": filled.model},
+                generated_source_hash=day.compute_source_hash(),
                 force=True,  # only reached for a day that is unedited
             )
             status = "regenerated"

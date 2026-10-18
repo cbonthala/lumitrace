@@ -40,7 +40,7 @@ You can use both; captures from either land in the same day file.
 | **Upload audio** (chip under the record button) | pick an audio file (a Voice Memo saved to Files, an `.m4a`, `.mp3`, `.wav`, ...) and send it as Log My Day with the photos you picked and the place name, but not your current location (the memo may be from elsewhere). It is filed under the day the file was recorded or saved, unless you chose a day in **Filing under**; the app asks before sending |
 | **Filing under** | choose another day (the `date` field); leave it on today otherwise |
 | **This week** | days logged in the last 7 days, entries in them, and your streak (`GET /summary`) |
-| **Recent captures** / History | each capture's status from the last 7 days: Waiting to send, Queued, Writing journal…, In journal, or Failed (tap to retry) (`GET /captures`) |
+| **Recent captures** / History | captures from the last 7 days, grouped by the day they are filed under. Each row is the time, what it was, and a status: Waiting, Queued, Writing journal…, In journal, or Failed (tap to retry). **Generate** beside the day writes its first journal now from every recording and My notes (`POST /journal`, ADR 0058). Later clicks process changed source and insert missing bullets into the normal sections without changing existing words. The file has no At a glance or Later section. Notes and recordings stay. Anything still waiting on the phone is sent first |
 | **Design** (tab on a phone, **How it works** button on a laptop) | an animated diagram of the Flash → Prism → Frames → Spectrum → Lens flow and one short card per module: what it does and where you see it in the app |
 | **Settings** | place name and location switch (saved on the device only), sign out, and **Connected AI apps** |
 | **Connected AI apps** (in Settings) | the AI apps that have connected to the Lens (Claude, ChatGPT, ...): name, the website it signs in from, Connected or Disconnected, when it signed in, when its session ends and when it was last used. **Disconnect** cuts an app off at once (its next request is refused) until it signs in again with the Lens password; **Disconnect all apps** does it for every app. Each asks for confirmation (`/lens/apps`, decision 0036) |
@@ -48,8 +48,8 @@ You can use both; captures from either land in the same day file.
 On a phone the screen has four tabs (Capture, History, Design, Settings). Turned sideways, the
 Capture page uses two columns (the record card next to this week) so the record button stays on the first
 screen. From 600 to 899 px the single column is centred at 640 px. On a laptop (900 px and
-wider) the capture cards and the history list sit side by side, and the **How it works** button
-in the header opens the Design page.
+wider) the capture cards and the history list sit side by side. **Home** (the house, next to
+Connected) returns to Capture. **How it works** opens the Design page.
 
 **Offline:** every capture is saved in the browser (IndexedDB) before it is uploaded and removed
 only after the Prism confirms it. Without a connection the app still opens (a service worker

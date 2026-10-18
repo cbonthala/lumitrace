@@ -85,6 +85,70 @@ def _message_content(resp: Any) -> str:
     return str(content)
 
 
+_TRUNCATED_REASONS = frozenset({"length", "max_tokens"})
+
+
+def model_max_output_tokens(model: str) -> int | None:
+    """The model's output-token ceiling from LiteLLM's price table, or None if unknown.
+
+    A missing model returns None without a lookup error. ``fake`` and test model names are
+    unknown, so offline calls leave the provider default in place.
+    """
+    try:
+        import litellm
+    except Exception:
+        return None
+    info = litellm.model_cost.get(model)
+    if not isinstance(info, dict):
+        return None
+    raw = info.get("max_output_tokens") or info.get("max_tokens")
+    if isinstance(raw, bool) or not isinstance(raw, int | float):
+        return None
+    value = int(raw)
+    return value if value > 0 else None
+
+
+def _finish_reason(resp: Any) -> str:
+    try:
+        choice = resp["choices"][0] if isinstance(resp, dict) else resp.choices[0]
+    except (AttributeError, IndexError, KeyError, TypeError):
+        return ""
+    if isinstance(choice, dict):
+        reason = choice.get("finish_reason")
+    else:
+        reason = getattr(choice, "finish_reason", None)
+    return str(reason or "").casefold()
+
+
+def _completion_tokens(resp: Any) -> int | None:
+    usage = resp.get("usage") if isinstance(resp, dict) else getattr(resp, "usage", None)
+    if usage is None:
+        return None
+    raw = (
+        usage.get("completion_tokens")
+        if isinstance(usage, dict)
+        else getattr(usage, "completion_tokens", None)
+    )
+    if isinstance(raw, bool) or not isinstance(raw, int | float):
+        return None
+    return int(raw)
+
+
+def _should_raise_output_limit(
+    reason: str,
+    tokens: int | None,
+    limit: int | None,
+    ceiling: int | None,
+    raised: bool,
+) -> bool:
+    """True when the reply stopped for length and the model allows a higher ceiling."""
+    if raised or reason not in _TRUNCATED_REASONS or ceiling is None:
+        return False
+    if limit is not None and limit >= ceiling:
+        return False
+    return tokens is None or tokens < int(ceiling * 0.9)
+
+
 def response_cost(resp: Any, call_type: str = "completion") -> float | None:
     """Cost in USD reported by LiteLLM, or None when it does not know the price."""
     hidden = getattr(resp, "_hidden_params", None)
@@ -122,37 +186,96 @@ class LLMClient:
         messages: list[dict[str, str]],
         parse: Callable[[Any], T],
         fake: Callable[[], Any],
+        max_tokens: int | None = None,
     ) -> LLMResult[T]:
         """Ask ``model`` (then the fallback) for JSON and validate it with ``parse``.
 
         A reply that is not valid JSON or fails ``parse`` counts as a failure of that model.
         Raises :class:`LLMError` if every model fails.
+
+        ``max_tokens`` is the output ceiling for the first try. When it is omitted, the call
+        uses the model's own maximum (Gemini 3.8 Flash is 65536). A reply that stops because
+        it hit a lower ceiling is retried once at that maximum.
         """
         attempts: list[Attempt] = []
         for candidate in self.models_for(model):
-            started = time.monotonic()
-            cost: float | None = None
-            try:
-                if candidate == FAKE_MODEL:
-                    raw = fake()
-                else:
-                    resp = self._complete(
-                        model=candidate,
-                        messages=messages,
-                        response_format={"type": "json_object"},
-                        timeout=self.settings.llm_timeout_seconds,
-                        num_retries=self.settings.llm_max_retries,
-                        drop_params=True,
-                    )
-                    cost = response_cost(resp)
-                    raw = extract_json(_message_content(resp))
-                value = parse(raw)
-            except Exception as exc:
+            if candidate == FAKE_MODEL:
+                started = time.monotonic()
+                try:
+                    value = parse(fake())
+                except Exception as exc:
+                    ms = int((time.monotonic() - started) * 1000)
+                    attempts.append(Attempt(candidate, False, ms, safe_error(exc)))
+                    log.warning("%s failed on %s: %s", task, candidate, safe_error(exc))
+                    continue
                 ms = int((time.monotonic() - started) * 1000)
-                attempts.append(Attempt(candidate, False, ms, safe_error(exc), cost))
-                log.warning("%s failed on %s: %s", task, candidate, safe_error(exc))
-                continue
-            ms = int((time.monotonic() - started) * 1000)
-            attempts.append(Attempt(candidate, True, ms, None, cost))
-            return LLMResult(value=value, model=candidate, attempts=attempts)
+                attempts.append(Attempt(candidate, True, ms))
+                return LLMResult(value=value, model=candidate, attempts=attempts)
+
+            ceiling = model_max_output_tokens(candidate)
+            limit = max_tokens if max_tokens is not None else ceiling
+            raised = False
+            while True:
+                started = time.monotonic()
+                cost: float | None = None
+                try:
+                    kwargs: dict[str, Any] = {
+                        "model": candidate,
+                        "messages": messages,
+                        "response_format": {"type": "json_object"},
+                        "timeout": self.settings.llm_timeout_seconds,
+                        "num_retries": self.settings.llm_max_retries,
+                        "drop_params": True,
+                    }
+                    if limit is not None:
+                        kwargs["max_tokens"] = limit
+                    resp = self._complete(**kwargs)
+                    cost = response_cost(resp)
+                    reason = _finish_reason(resp)
+                    tokens = _completion_tokens(resp)
+                    log.info(
+                        "%s: model=%s max_output_tokens=%s model_max_output_tokens=%s "
+                        "finish=%s completion_tokens=%s",
+                        task,
+                        candidate,
+                        limit if limit is not None else "default",
+                        ceiling if ceiling is not None else "unknown",
+                        reason or "unknown",
+                        tokens if tokens is not None else "unknown",
+                    )
+                    if _should_raise_output_limit(reason, tokens, limit, ceiling, raised):
+                        ms = int((time.monotonic() - started) * 1000)
+                        attempts.append(Attempt(candidate, False, ms, "output truncated", cost))
+                        log.warning(
+                            "%s hit the output token limit on %s "
+                            "(completion_tokens=%s, max_output_tokens=%s); "
+                            "retrying with max_output_tokens=%s",
+                            task,
+                            candidate,
+                            tokens if tokens is not None else "unknown",
+                            limit if limit is not None else "default",
+                            ceiling,
+                        )
+                        limit = ceiling
+                        raised = True
+                        continue
+                    if reason in _TRUNCATED_REASONS:
+                        log.warning(
+                            "%s output hit the model max on %s "
+                            "(completion_tokens=%s, max_output_tokens=%s)",
+                            task,
+                            candidate,
+                            tokens if tokens is not None else "unknown",
+                            limit if limit is not None else "default",
+                        )
+                    raw = extract_json(_message_content(resp))
+                    value = parse(raw)
+                except Exception as exc:
+                    ms = int((time.monotonic() - started) * 1000)
+                    attempts.append(Attempt(candidate, False, ms, safe_error(exc), cost))
+                    log.warning("%s failed on %s: %s", task, candidate, safe_error(exc))
+                    break
+                ms = int((time.monotonic() - started) * 1000)
+                attempts.append(Attempt(candidate, True, ms, None, cost))
+                return LLMResult(value=value, model=candidate, attempts=attempts)
         raise LLMError(task, attempts)
