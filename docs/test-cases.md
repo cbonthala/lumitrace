@@ -106,7 +106,8 @@ file. The story:
    "audio kept uncompressed" warning, the photo is saved as `photo-01.jpg`, and every nudge to
    the indexer is accepted.
 2. **The day file.** The snapshot is identical to the day file. The entries are in time order,
-   format 4 has no At a glance or English-translation block, the journal mentions the tacos,
+   format 5 has structured At a glance facts and no English-translation block, the journal
+   mentions the tacos,
    the audio is stored in the day's folder, and the upload inbox is empty again. The activity
    record names the capture but contains none of the journal's words.
 3. **Index.** Without any polling, the nudges alone bring both days into the index, and the day
@@ -116,7 +117,7 @@ file. The story:
      patch" finds October 10, 2025;
    * `get_day` returns the people, both transcripts in time order, the location as
      "Austin (30.26720, -97.74310)", and links to the audio and the photo;
-   * the format-4 `query_facts` calls return no derived fact rows;
+   * `query_facts` returns the tacos, run and lake from the structured facts;
    * `on_this_day` finds last year's pumpkin-patch day, "1 year ago", with its highlight;
    * `feedback` is saved in the index and in storage, with the date picked out of the answer.
 5. **You edit the day in Obsidian.** A sentence ("Best tacos in town, honestly.") is added to
@@ -124,8 +125,8 @@ file. The story:
 6. **A late capture.** A note at 10:15 p.m. about a walk with Leo is added *on top of* the
    edited day: your sentence is still there, the new bullet appears under Evening, no Later
    section is created, the day has three entries, and the snapshot is updated.
-7. **Ask again.** Searching "stars" finds the new transcript, the format-4 fact queries stay
-   empty, and the earlier journal edit signal is still there.
+7. **Ask again.** Searching "stars" finds the new transcript; fact queries return Leo, his
+   moment and the activities; and the earlier journal edit signal is still there.
 
 - Checks that the story above works from start to finish across all three programs. <sub>`test_full_flow`</sub>
 
@@ -168,7 +169,7 @@ File: `tests/prism/test_flash.py`
 - Checks that the header has a Home button that opens Capture, and that History groups captures by day with a Generate button on each day. <sub>`test_home_button_and_history_grouped_by_day`</sub>
 - Checks that a capture's status chip follows the journal: a recording in progress says Transcribing…, a saved capture whose journal is still waiting says Not in journal, and In journal is used only once the words are in the journal. <sub>`test_capture_status_chip_matches_the_journal`</sub>
 - Checks that the history list says a saved capture is not in the journal yet, says it is once Generate has written the day, and says a later capture is still waiting. <sub>`test_capture_list_follows_the_journal`</sub>
-- Checks that Generate needs a login, writes one journal from every saved recording, returns unchanged without another model call when clicked again, refuses a future date, skips a day with no source, and never returns journal text. <sub>`test_generate_journal_writes_the_day_from_saved_recordings`</sub>
+- Checks that Generate needs a login, writes one journal and structured facts from every saved recording, returns unchanged without another model call when clicked again, refuses a future date, skips a day with no source, and never returns journal text. <sub>`test_generate_journal_writes_the_day_from_saved_recordings`</sub>
 - Checks that stopping a recording opens a review with pause, play, and discard icons, crop handles, and Send, that Send in the corner of the card can send photos with no recording, and that the page script no longer sends the moment you stop. <sub>`test_recording_is_reviewed_before_it_is_sent`</sub>
 - Checks that the recent-captures list needs a login, shows the newest capture first with its status and no journal text, and respects the limit and the allowed number of days. <sub>`test_recent_captures_newest_first`</sub>
 - Checks that the weekly summary counts the days with a day file in the last seven days, the entries in them, and the streak of days in a row up to today. <sub>`test_week_summary_counts_days_captures_and_streak`</sub>
@@ -209,7 +210,7 @@ File: `tests/prism/test_capture_api.py`
 
 File: `tests/prism/test_capture_api.py`
 
-- Checks that a typed note sent after the journal exists joins the same day file, entries stay in time order, the first journal stays, and a missing bullet is inserted under Evening with no Later section. <sub>`test_note_merges_into_the_same_day`</sub>
+- Checks that a typed note sent after the journal exists joins the same day file, entries stay in time order, the first journal stays, complete facts are refreshed, and a missing bullet is inserted under Evening with no Later section. <sub>`test_note_merges_into_the_same_day`</sub>
 - Checks that a note can be sent as a web form with text, or as a short audio clip that is transcribed and keeps its audio file. <sub>`test_note_as_form_and_as_audio_clip`</sub>
 - Checks that a note with only a photo is accepted: the photo is saved and listed on the day, and the AI writing step is skipped because there are no words. <sub>`test_photo_only_note`</sub>
 
@@ -239,11 +240,13 @@ File: `tests/prism/test_capture_api.py`
 File: `tests/prism/test_journal_schedule.py`
 
 - Checks that the journal time is five minutes after the day rollover: later the same morning when it is still before that time, the next day once that time has passed. <sub>`test_next_journal_at_is_five_minutes_after_the_rollover`</sub>
-- Checks that recordings sent while the day is still open are saved without calling the AI, that a run at 3:30 a.m. still waits, and that the 4:05 a.m. run writes one journal from every recording and does not write it again. <sub>`test_open_day_keeps_every_recording_and_writes_the_journal_once`</sub>
+- Checks that recordings sent while the day is still open are saved without calling the AI, that a run at 3:30 a.m. still waits, and that the 4:05 a.m. run writes one journal, structured facts and generated-facts base from every recording and does not write it again. <sub>`test_open_day_keeps_every_recording_and_writes_the_journal_once`</sub>
 - Checks that a journal typed before its first generation is replaced by the morning write, while My notes are both preserved and sent to the fill-day model. <sub>`test_morning_run_writes_the_journal_even_if_one_was_typed_early`</sub>
 - Checks that a morning run where every model fails leaves the transcripts and tries again later, and the second try writes the journal. <sub>`test_a_failed_morning_run_is_tried_again`</sub>
 - Checks that Generate writes the open day's journal now from every recording, clears the waiting marker, and does nothing for a day with no words. <sub>`test_generate_now_writes_the_open_day_from_every_recording`</sub>
-- Checks that Generate again after the owner edits the title and journal and changes My notes sends all source plus the authoritative journal to update-day, preserves every edit, inserts the returned bullet into Evening without a Later section, and then returns unchanged without another model call. <sub>`test_generate_now_preserves_edits_and_uses_changed_notes`</sub>
+- Checks that Generate again after the owner edits the title, journal and facts and changes My notes sends all source plus the authoritative journal to update-day, preserves every edit through the facts merge, inserts the returned bullet into Evening without a Later section, and then returns unchanged without another model call. <sub>`test_generate_now_preserves_edits_and_uses_changed_notes`</sub>
+- Checks that deleting the generated-facts base (as on a format-4 day) makes Generate run one safe update to restore facts and the base, after which another click returns unchanged. <sub>`test_generate_repairs_facts_when_the_generated_facts_base_is_missing`</sub>
+- Checks that repairing an edited format-4-style day restores empty facts while preserving the owner's title and journal corrections and leaving the day marked edited. <sub>`test_format_4_facts_repair_keeps_owner_title_and_journal_edits`</sub>
 - Checks that a recording saved after Generate stays waiting, and that the 4:05 run safely inserts its update into Evening instead of rewriting the first journal. <sub>`test_morning_run_merges_new_audio_after_generate_now`</sub>
 - Checks that the morning thread stops when the Prism stops, instead of waiting until 4:05. <sub>`test_scheduler_stops_while_it_is_waiting`</sub>
 
@@ -251,7 +254,7 @@ File: `tests/prism/test_journal_schedule.py`
 
 File: `tests/prism/test_pipeline.py`
 
-- Checks that after the journal exists, a later note sends every recording, My notes and the authoritative current journal to update-day; the returned bullet goes under Evening while the owner's wording and notes stay and no Later section appears. <sub>`test_edited_day_gets_section_update`</sub>
+- Checks that after the journal exists, a later note sends every recording, My notes and the authoritative current journal to update-day; the returned facts merge while the owner's mood stays, and the bullet goes under Evening while the owner's wording and notes stay and no Later section appears. <sub>`test_edited_day_gets_section_update`</sub>
 - Checks that if you edit the journal while an update is running, the fresh words stay and the returned bullet is inserted under Evening without a Later section. <sub>`test_edit_during_generation_is_not_overwritten`</sub>
 
 ### When speech or AI services fail
@@ -333,7 +336,7 @@ File: `tests/prism/test_prompts_llm.py`
 - Checks that only the family members listed in the settings keep a family block: anyone else is dropped, names are spelled as in the settings ("leo" becomes "Leo"), they come in the settings' order, a name given twice keeps its first block, an empty list drops everyone, and every listed member the AI said nothing about gets an empty block. <sub>`test_keep_family_drops_unknown_names_and_uses_configured_spelling`</sub>
 - Checks that the fill-day prompt tells the AI who is speaking and how each family member is related to them, including a birth date ("Sam (the author), Maya (the author's wife, born 1990-04-12), Leo"), and says "(not given)" when nobody has relation "me". <sub>`test_fill_day_sends_the_family_list`</sub>
 - Checks that fill-day and update-day receive the Telugu transcript, My notes, family names and keyterms, and do not receive an English translation. <sub>`test_journal_gets_the_transcript_and_keyterms_not_a_translation`</sub>
-- Checks that an update reply accepts additions classified into Afternoon or Thoughts, strips a leading bullet marker, and refuses the removed Later section. <sub>`test_update_reply_classifies_additions_by_journal_section`</sub>
+- Checks that an update reply accepts additions classified into Afternoon or Thoughts, strips a leading bullet marker, validates its complete facts, and refuses both the removed Later section and a missing facts object. <sub>`test_update_reply_classifies_additions_by_journal_section`</sub>
 - Checks that the AI's structured (JSON) reply is understood even when wrapped in code fences or surrounded by chatty text, and refused when there is no data at all. <sub>`test_extract_json_tolerates_fences_and_chatter`</sub>
 - Checks that extracted facts are held to the day-file format: a reply wrapped in a "facts" object is unwrapped, an out-of-range mood score and empty values are dropped, and badly shaped replies (not an object, a meal without a type) are refused. <sub>`test_parse_facts_validates_against_dayfacts`</sub>
 - Checks that the AI client passes the timeout, retry and "reply in JSON" settings to the provider, switches to the backup model when the main one fails, records each attempt, tries a model only once when it is also the backup, and gives a clear error naming both models when all fail. <sub>`test_llm_client_passes_config_and_falls_back`</sub>
@@ -386,7 +389,8 @@ File: `tests/spectrum/test_passages.py`
 File: `tests/spectrum/test_edit_signals.py`
 
 - Checks that nothing is recorded when the day file matches what Lumitrace last wrote. <sub>`test_no_signals_when_file_matches_snapshot`</sub>
-- Checks that your changes to the mood, people, journal, notes, title and a transcript are each recorded separately with the before and after values (plus a line-by-line comparison for longer text) and the prompt and model versions that wrote the original, and that the day is marked as edited. <sub>`test_owner_edits_become_signals`</sub>
+- Checks that your changes to the journal, notes, title and a transcript are each recorded separately with the before and after values (plus a line-by-line comparison for longer text) and the prompt and model versions that wrote the original, and that the day is marked as edited. <sub>`test_owner_edits_become_signals`</sub>
+- Checks that changing only structured facts records one field-level signal per changed fact (mood and places here), with JSON before and after values and no text diff. <sub>`test_owner_fact_edits_become_field_signals`</sub>
 - Checks that saving the same edit again doesn't record it twice, a further edit to the same part replaces the earlier record, and undoing the edit removes it. <sub>`test_signals_are_deduplicated_and_superseded`</sub>
 - Checks that a new entry added by Lumitrace (before its snapshot is updated) is not mistaken for your edit. <sub>`test_new_capture_is_not_an_edit`</sub>
 - Checks that edits are not worked out against an out-of-date snapshot from an earlier generation. <sub>`test_stale_snapshot_is_not_compared`</sub>
@@ -594,7 +598,7 @@ Obsidian displays the files.
 
 File: `tests/frames/test_dayfile.py`
 
-- Checks the folder and file names: `2026/10/2026-10-10/2026-10-10.md`, audio named by date and time (a 1:30 a.m. recording goes in the previous day's folder), photos `photo-01.jpg` (with three digits when needed, starting at 1), and the snapshot and system paths. <sub>`test_path_conventions`</sub>
+- Checks the folder and file names: `2026/10/2026-10-10/2026-10-10.md`, audio named by date and time (a 1:30 a.m. recording goes in the previous day's folder), photos `photo-01.jpg` (with three digits when needed, starting at 1), and the exact snapshot, generated-facts base and system paths. <sub>`test_path_conventions`</sub>
 - Checks that new photos continue after the highest existing number, and that a file name already taken gets `-2`, `-3` and so on. <sub>`test_next_photo_names_and_unique_names`</sub>
 - Checks that only correctly placed day files count as day files (the month folder, day folder and file name must agree, the date must exist, and the path must start at the Lumitrace folder), and that files are sorted into day files, audio, photos, system files and others. <sub>`test_parse_day_file_path_and_classify`</sub>
 
@@ -616,14 +620,14 @@ File: `tests/frames/test_dayfile.py`
 
 File: `tests/frames/test_dayfile.py`
 
-- Checks that an older sample day file is read correctly (facts per person and per topic, title, journal, notes, three entries with audio and photos), and that writing it again drops At a glance and keeps the journal, notes and transcripts. <sub>`test_sample_fixture_roundtrips`</sub>
+- Checks that an older sample day file is read correctly (facts per person and per topic, title, journal, notes, three entries with audio and photos), and that writing it as format 5 preserves At a glance, the journal, notes and transcripts while dropping the translation. <sub>`test_sample_fixture_roundtrips`</sub>
 - Checks that a day file written under an earlier project name (LifeLog's `lifelog:` markers and `lifelog_format` key, Bookshelf's `bookshelf:` markers and `bookshelf_format` key, or Lumen's `lumen:` markers and `lumen_format` key; run once for each) is read exactly like a new one, and is written back with the new Lumitrace names. <sub>`test_parses_files_written_before_the_rename`</sub>
 - Checks that tricky content survives reading and writing unchanged: apostrophes and accents, values that look special ("null", "a: b"), comment arrows (`-->`), headings in notes, picture embeds, empty entries, and extra fields of your own such as tags. <sub>`test_roundtrip_model_equality_with_tricky_content`</sub>
 - Checks that a new write leaves out the English translation, and that an older file's translation block is still read, including when the heading is deleted or an older marker name is used. <sub>`test_capture_translation_roundtrip_and_hand_edits`</sub>
 - Checks that the example in `docs/frames-format.md` is identical to the sample file the tests use. <sub>`test_docs_example_matches_fixture`</sub>
 - Checks that a day file's parts are written in the documented order: front matter, title, "At a glance" facts (Highlight, Food, Places visited, People we met or visited, Health and fitness, Feelings, Memories, Weather, Things we did), journal, My notes, Transcript. <sub>`test_render_layout_markers_in_order`</sub>
-- Checks that a day file in the first layout (facts in the front matter) is read with its facts, still counts as unedited, and is written back as format 4 without At a glance. <sub>`test_reads_format_1_files_and_writes_the_current_format`</sub>
-- Checks that a format 2 day file (one Family block per person) is read, counts as edited, and is written back as format 4 without At a glance while staying marked edited. <sub>`test_reads_format_2_files_and_moves_their_facts_into_the_current_sections`</sub>
+- Checks that a day file in the first layout (facts in the front matter) is read with its facts, still counts as unedited, and is written back as format 5 with At a glance. <sub>`test_reads_format_1_files_and_writes_the_current_format`</sub>
+- Checks that a format 2 day file (one Family block per person) is read, counts as edited, and is written back as format 5 with converted At a glance facts while staying marked edited. <sub>`test_reads_format_2_files_and_moves_their_facts_into_the_current_sections`</sub>
 - Checks that the lines of an old Family block are converted: "Went to" becomes a place, "Did" and "School/work" become things we did, each with the person's name in brackets, and "Ate" becomes snacks. <sub>`test_format_2_family_lines_become_places_and_things_we_did`</sub>
 - Checks that an old day's meals go to the person whose food holds them all, the rest of that person's food goes under snacks, and meals nobody could be given stay as the day's "Everyone" meals. <sub>`test_format_2_day_meals_go_to_the_person_who_ate_them`</sub>
 - Checks that an old-layout file you had edited still counts as edited after the upgrade. <sub>`test_edited_format_1_file_stays_edited`</sub>
@@ -667,6 +671,7 @@ File: `tests/frames/test_dayfile.py`
 - Checks that a full rewrite is refused once you have edited the day, unless explicitly forced (which still keeps your notes). <sub>`test_apply_generation_refuses_user_edits`</sub>
 - Checks that adding AI output to an edited day keeps the existing facts and notes, merges new fact values without duplicates, inserts repeated journal additions into Evening without creating Later, and leaves the day marked as edited. <sub>`test_section_merge_on_edited_day_keeps_edits`</sub>
 - Checks that adding AI output to an unedited day keeps it counted as unedited. <sub>`test_additive_merge_on_clean_day_refreshes_hash`</sub>
+- Checks that a complete incoming facts reply follows model changes for untouched values while preserving owner scalar changes, list additions and removals, meal edits, activity minutes and per-person food and feelings. <sub>`test_three_way_facts_merge_keeps_owner_additions_changes_and_removals`</sub>
 - Checks that journal additions create missing sections in Summary/Morning/Afternoon/Evening/Thoughts order, preserve existing section text and never create Later. <sub>`test_section_merge_inserts_missing_sections_in_journal_order`</sub>
 - Checks that updating a legacy journal renames its Later heading to Evening, preserves the old content and appends the new bullet there. <sub>`test_section_merge_moves_legacy_later_content_to_evening`</sub>
 
@@ -815,6 +820,6 @@ File: `tests/test_entrypoints.py`
 
 File: `tests/prism/test_regenerate.py`
 
-- Checks that regenerating a day you did not edit (even one written in the older day format) replaces its facts, title and journal in the current format, writes the identical snapshot, and leaves your notes, the transcripts and the audio list untouched. <sub>`test_regenerate_replaces_an_unedited_format_2_day_and_keeps_notes_and_transcripts`</sub>
-- Checks that regenerating a day you edited does not call the model: your mood and journal words stay. <sub>`test_regenerate_leaves_a_day_the_owner_edited`</sub>
-- Checks that a dry run lists what would change without writing anything or calling the AI, that a day without any transcript text is skipped, and that a date range limits which days are processed. <sub>`test_regenerate_dry_run_range_and_days_without_text`</sub>
+- Checks that bulk regenerate uses the same safe update as Flash Generate on an older day that already has a journal: the title, mood and journal words stay, a new bullet can be added, notes and transcripts stay, and a second run does nothing. <sub>`test_regenerate_updates_an_existing_format_2_day_like_generate`</sub>
+- Checks that bulk regenerate updates a day you edited instead of skipping it: your mood and journal words stay, and a new bullet can be added. <sub>`test_regenerate_leaves_a_day_the_owner_edited`</sub>
+- Checks that a dry run lists `would update` without writing anything or calling the AI, that a day without any transcript text is skipped, and that a date range limits which days are processed. <sub>`test_regenerate_dry_run_range_and_days_without_text`</sub>

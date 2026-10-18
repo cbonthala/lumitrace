@@ -1,6 +1,6 @@
 # 0057. The day file has no At a glance section and no English translation
 
-**Status:** accepted
+**Status:** superseded in part by [0059](0059-restore-structured-facts-with-three-way-merge.md)
 **Date:** 2026-10-18
 
 ## Context
@@ -27,3 +27,5 @@ Format 4 writes the title, the journal, My notes, and the Telugu transcript.
 * `lumitrace-prism regenerate` rewrites an unedited day into format 4, which removes the section.
 * An edited day is still left alone by regenerate. The first Generate or 4:05 write uses
   `force=True`; later source is merged without rewriting existing journal words (ADR 0058).
+
+ADR 0059 restores At a glance in format 5. The no-translation decision remains in force.

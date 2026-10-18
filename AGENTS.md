@@ -52,7 +52,8 @@ component docs).
  is the first journal generation (Generate or 4:05), which uses
  `apply_generation(..., force=True)` and may replace a journal typed before that run. Once
  `generated_at` is set, changed recordings or My notes only add section-classified bullets
- through `merge_generation_additive` (ADR 0058).
+ through the safe section merge; complete facts use `merge_generation_three_way`, with the
+ previous model reply under `_system/generated-facts/` as base (ADR 0058, 0059).
 3. **Keep the raw transcript and the audio.**
 4. **Storage, speech-to-text and AI models are swappable through config** (`lumitrace/config.py`).
    Never import a backend directly; use `get_storage(settings)` and LiteLLM model strings.
@@ -87,6 +88,8 @@ Cross-component rules that are not visible in any one module:
 * Every time the Prism writes a day file it writes the identical text to
   `generated_snapshot_path(date)` right after (same `generated_at`). Spectrum's edit signals
   depend on this (`docs/spectrum.md` → Edit signals).
+* The Prism also writes `generated_facts_path(date)` after successful generation. It is the
+  model-owned base for future fact merges and must not replace the exact generated snapshot.
 * Spectrum is the only writer of the derived index tables and `edit_signals`; the Lens
   only writes `feedback`. The `_system/` folders and their writers are listed in
   `docs/contracts.md`.

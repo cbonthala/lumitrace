@@ -75,3 +75,4 @@ Template:
 | [0056](0056-journal-covers-the-whole-recording.md) | The journal covers each recording to the end; Everyone meals are filled in code |
 | [0057](0057-day-file-drops-glance-and-translation.md) | Day file format 4: no At a glance section and no English translation |
 | [0058](0058-notes-and-safe-section-updates.md) | My notes feed generation; later source is inserted into existing journal sections without rewriting edits |
+| [0059](0059-restore-structured-facts-with-three-way-merge.md) | Format 5 restores structured facts and merges later model facts without losing owner edits |

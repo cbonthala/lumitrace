@@ -73,7 +73,12 @@ def _keyword_facts(entries: str) -> dict[str, Any]:
 def fake_extract_facts(*, model: str, messages: list[dict[str, str]], **_: Any) -> Any:
     """Stand in for journal generation while preserving the real fill/update split."""
     system, user = messages[0]["content"], messages[1]["content"]
-    captures = user.split("Every recording for this date, oldest first:", 1)[-1]
+    marker = (
+        "Every recording for this date, oldest first:"
+        if "update an existing day" in system
+        else "Journal entries for this day, oldest first."
+    )
+    captures = user.split(marker, 1)[-1]
     capture_texts = [
         line.strip()
         for line in captures.splitlines()
@@ -89,7 +94,8 @@ def fake_extract_facts(*, model: str, messages: list[dict[str, str]], **_: Any) 
                 {"section": "Evening", "text": text}
                 for text in capture_texts
                 if text not in journal
-            ]
+            ],
+            "facts": _keyword_facts(captures),
         }
     else:
         payload = {
@@ -282,10 +288,10 @@ def test_full_flow(stack: Stack) -> None:
     assert storage.read_text(generated_snapshot_path(DAY)) == storage.read_text(day_path)
     day = parse(storage.read_text(day_path))
     assert [c.id for c in day.captures] == ["e2e-note-1", "e2e-recording-1"]
-    assert day.facts.people == []
-    assert day.facts.places == []
+    assert day.facts.people == ["Maya"]
+    assert day.facts.places == ["the lake"]
     text = storage.read_text(day_path)
-    assert "## At a glance" not in text
+    assert "## At a glance" in text
     assert "English translation" not in text
     assert "Fish tacos for lunch" in day.journal
     assert storage.exists("2026/10/2026-10-10/2026-10-10-2130.wav")
@@ -324,7 +330,7 @@ def test_full_flow(stack: Stack) -> None:
     assert other_search["results"][0]["date"] == "2025-10-10"
 
     assert get_day["found"] is True
-    assert get_day["facts"]["people"] == []
+    assert get_day["facts"]["people"] == ["Maya"]
     assert [t["text"] for t in get_day["transcript"]] == [
         "Fish tacos for lunch with Maya.",
         "Morning run by the lake with Maya. Good start.",
@@ -334,12 +340,12 @@ def test_full_flow(stack: Stack) -> None:
     assert get_day["audio"][0]["link"].startswith("file://")
     assert get_day["photos"][0]["name"] == "photo-01.jpg"
 
-    assert meals["rows"] == []
-    assert runs["rows"] == []
-    assert places["rows"] == []
+    assert [row["item"] for row in meals["rows"]] == ["fish tacos"]
+    assert [row["kind"] for row in runs["rows"]] == ["run"]
+    assert [row["name"] for row in places["rows"]] == ["the lake"]
     assert [d["date"] for d in on_this_day["days"]] == ["2025-10-10"]
     assert on_this_day["days"][0]["years_ago"] == 1
-    assert on_this_day["days"][0]["highlights"] == []
+    assert on_this_day["days"][0]["highlights"] == ["Pumpkin patch"]
 
     assert feedback["saved"] is True
     assert feedback["dates"] == ["2026-10-10"]
@@ -379,13 +385,13 @@ def test_full_flow(stack: Stack) -> None:
     )
     assert late["generation"] == "update"
     day = parse(storage.read_text(day_path))
-    assert day.facts.mood is None
+    assert day.facts.mood == "content"
     assert "Best tacos in town, honestly." in day.journal
     assert "## Evening" in day.journal
     assert "Late walk with Leo under the stars." in day.journal
     assert "## Later" not in day.journal
-    assert day.facts.people == []
-    assert day.facts.family == []
+    assert day.facts.people == ["Maya", "Leo"]
+    assert [member.name for member in day.facts.family] == ["Leo"]
     assert [c.id for c in day.captures] == ["e2e-note-1", "e2e-recording-1", "e2e-note-2"]
     assert day.is_user_edited()
     assert storage.read_text(generated_snapshot_path(DAY)) == storage.read_text(day_path)
@@ -398,8 +404,8 @@ def test_full_flow(stack: Stack) -> None:
         ("query_facts", {"kind": "activities"}),
     )
     assert stars["results"][0]["date"] == "2026-10-10"
-    assert people["rows"] == []
-    assert leo["rows"] == []
-    assert activities["rows"] == []
+    assert [row["name"] for row in people["rows"]] == ["Leo"]
+    assert [row["text"] for row in leo["rows"]] == ["saw the stars"]
+    assert [row["kind"] for row in activities["rows"]] == ["run", "walk (leo)"]
     kept = {(s["section"], s["field"]) for s in signals()}
     assert ("journal", None) in kept, "the journal edit signal was lost"

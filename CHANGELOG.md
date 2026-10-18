@@ -7,6 +7,9 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- **Day file format 5 restores structured facts** (ADR 0059). At a glance again writes Highlight,
+  Food, Places, People, Health, Feelings, Memories, Weather and Things we did. Format 4 still
+  parses and its next Generate repairs the missing facts. English translations remain absent.
 - **Day file format 4** (ADR 0057). A new write has the title, the journal, My notes and the
   Telugu transcript. It does not include At a glance or an English translation. Older files
   still parse. The next system write drops both. Fact search stays filled only for days that
@@ -29,6 +32,14 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Prism
 
+- **Bulk regenerate uses the Flash Generate button** (ADR 0059). `lumitrace-prism regenerate`
+  calls `generate_day` for each day. An existing journal is updated safely, including a day you
+  edited. It no longer skips edited days or replaces an unedited journal from scratch.
+- **Generate keeps structured facts current without losing owner edits** (ADR 0059). Fill and
+  update replies include complete facts. The previous model facts are kept separately under
+  `_system/generated-facts/` and used as the base of a three-way merge; owner additions, changes
+  and removals win. Missing state triggers a one-time format-4 facts repair, while an actual
+  fact-free day remains unchanged on later clicks.
 - **Capture status chips match the journal.** A recording in progress says Transcribing…, and a saved capture whose journal is still waiting says Not in journal. In journal appears only after that capture's words are in the journal. The history list follows the day file, so Generate and the 4:05 a.m. run flip the chip without sending the clip again.
 - **My notes feed safe journal updates** (ADR 0058). The first journal uses every recording plus
   My notes. Later recordings or changed notes return missing bullets classified as Summary,

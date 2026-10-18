@@ -33,15 +33,17 @@ from lumitrace.frames.dayfile import (
     CaptureKind,
     DayFacts,
     DayFile,
+    GeneratedFactsState,
     apply_generation,
     audio_file_name,
     day_dir,
     day_file_path,
     default_title,
     entry_date,
+    generated_facts_path,
     generated_snapshot_path,
     merge_capture,
-    merge_generation_additive,
+    merge_generation_three_way,
     next_photo_names,
     parse,
     render,
@@ -168,7 +170,7 @@ class CaptureProcessor:
         with self._day_lock:
             return self._generate_pending_locked()
 
-    def generate_day(self, day_date: dt.date) -> str:
+    def generate_day(self, day_date: dt.date, *, nudge: bool = True) -> str:
         """Generate or safely update one day from its transcripts and My notes.
 
         The first call fills the title and journal. Later calls process changed source material
@@ -177,7 +179,23 @@ class CaptureProcessor:
         ``failed`` keeps the due marker so a later run tries again.
         """
         with self._day_lock:
-            return self._generate_closed(day_date)
+            return self._generate_closed(day_date, nudge=nudge)
+
+    def generation_mode(self, day_date: dt.date) -> str:
+        """Return ``full``, ``update``, ``unchanged`` or ``skipped`` without calling the model."""
+        day = self._read_day(day_date)
+        if day is None or not (day.notes.strip() or any(c.text.strip() for c in day.captures)):
+            return "skipped"
+        source_hash = day.compute_source_hash()
+        facts_state = self._read_generated_facts(day_date)
+        if (
+            day.meta.generated_at is not None
+            and day.meta.generated_source_hash == source_hash
+            and facts_state is not None
+            and facts_state.source_hash == source_hash
+        ):
+            return "unchanged"
+        return "update" if day.meta.generated_at is not None else "full"
 
     def _process_locked(self, req: CaptureRequest, attempt: int) -> ProcessResult:
         local = req.captured_at.astimezone(self.settings.tz)
@@ -386,9 +404,8 @@ class CaptureProcessor:
             outcomes.append((day_date, self._generate_closed(day_date)))
         return outcomes
 
-    def _generate_closed(self, day_date: dt.date) -> str:
-        day = self._read_day(day_date)
-        if day is None or not (day.notes.strip() or any(c.text.strip() for c in day.captures)):
+    def _generate_closed(self, day_date: dt.date, *, nudge: bool = True) -> str:
+        if self.generation_mode(day_date) == "skipped":
             self._clear_due(day_date)
             return "skipped"
         record = ActivityRecord(
@@ -409,7 +426,8 @@ class CaptureProcessor:
         self.activity.append(record)
         if generation != "failed":
             self._clear_due(day_date)
-            self._nudge_day(day_date)
+            if nudge:
+                self._nudge_day(day_date)
         return generation
 
     def _nudge_day(self, day_date: dt.date) -> None:
@@ -444,16 +462,13 @@ class CaptureProcessor:
         day_date: dt.date,
         record: ActivityRecord,
     ) -> str:
+        mode = self.generation_mode(day_date)
+        if mode in ("skipped", "unchanged"):
+            return mode
         day = self._read_day(day_date)
-        if day is None or not (day.notes.strip() or any(c.text.strip() for c in day.captures)):
-            return "skipped"
+        assert day is not None
         source_hash = day.compute_source_hash()
-        if (
-            day.meta.generated_at is not None
-            and day.meta.generated_source_hash == source_hash
-        ):
-            return "unchanged"
-        mode = "update" if day.meta.generated_at is not None else "full"
+        facts_state = self._read_generated_facts(day_date)
         generated = self._run_ai(mode, day, record)
         if generated is None:
             return "failed"
@@ -464,15 +479,24 @@ class CaptureProcessor:
                 fresh,
                 generated,
                 record.models.get("stt"),
+                base_facts=(
+                    facts_state.facts
+                    if facts_state is not None
+                    and facts_state.source_hash == fresh.meta.generated_source_hash
+                    else None
+                ),
                 generated_source_hash=source_hash,
             )
             self._write_day(updated)
+            self._write_generated_facts(
+                day_date,
+                source_hash=source_hash,
+                facts=generated.facts,
+            )
             step.detail = {"mode": mode}
         return mode
 
-    def _run_ai(
-        self, mode: str, day: DayFile, record: ActivityRecord
-    ) -> _Generated | None:
+    def _run_ai(self, mode: str, day: DayFile, record: ActivityRecord) -> _Generated | None:
         gen = self.generator
         if mode == "full":
             filled = self._llm_step(
@@ -505,7 +529,7 @@ class CaptureProcessor:
             sections.setdefault(item.section, []).append(item.text)
         return _Generated(
             mode=mode,
-            facts=DayFacts(),
+            facts=addition.facts,
             journal_sections=sections,
             models={"update_day": updated[0].model},
             prompt_labels=[updated[1].label],
@@ -541,6 +565,7 @@ class CaptureProcessor:
         generated: _Generated,
         stt_model: str | None,
         *,
+        base_facts: DayFacts | None,
         generated_source_hash: str,
     ) -> DayFile:
         models_used = {**day.meta.models_used, **generated.models}
@@ -561,8 +586,9 @@ class CaptureProcessor:
                 generated_source_hash=generated_source_hash,
                 force=True,
             )
-        return merge_generation_additive(
+        return merge_generation_three_way(
             day,
+            base_facts=base_facts,
             facts=generated.facts,
             journal_sections=generated.journal_sections,
             prompt_version=prompt_version,
@@ -579,6 +605,38 @@ class CaptureProcessor:
         except FileNotFoundError:
             return None
         return parse(text, fallback_date=day_date)
+
+    def _read_generated_facts(self, day_date: dt.date) -> GeneratedFactsState | None:
+        path = generated_facts_path(day_date)
+        if not self.storage.exists(path):
+            return None
+        try:
+            state = GeneratedFactsState.model_validate_json(self.storage.read_text(path))
+        except Exception as exc:
+            log.warning("cannot read generated facts for %s: %s", day_date, safe_error(exc))
+            return None
+        if state.date != day_date:
+            log.warning(
+                "generated facts date mismatch for %s: %s",
+                day_date,
+                state.date,
+            )
+            return None
+        return state
+
+    def _write_generated_facts(
+        self,
+        day_date: dt.date,
+        *,
+        source_hash: str,
+        facts: DayFacts,
+    ) -> None:
+        state = GeneratedFactsState(date=day_date, source_hash=source_hash, facts=facts)
+        self.storage.write_text(
+            generated_facts_path(day_date),
+            state.model_dump_json(indent=2) + "\n",
+            content_type="application/json",
+        )
 
     def _write_day(self, day: DayFile) -> None:
         text = render(day)

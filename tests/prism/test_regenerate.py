@@ -6,6 +6,7 @@ from lumitrace.config import Settings
 from lumitrace.frames.dayfile import (
     FORMAT_VERSION,
     day_file_path,
+    generated_facts_path,
     generated_snapshot_path,
     parse,
 )
@@ -30,7 +31,7 @@ def _write(storage: LocalStorage, day: dt.date, text: str, *, snapshot: bool) ->
     return path
 
 
-def test_regenerate_replaces_an_unedited_format_2_day_and_keeps_notes_and_transcripts(
+def test_regenerate_updates_an_existing_format_2_day_like_generate(
     api_settings: Settings,
     api_storage: LocalStorage,
     fake_llm: FakeLLM,
@@ -38,22 +39,30 @@ def test_regenerate_replaces_an_unedited_format_2_day_and_keeps_notes_and_transc
 ) -> None:
     path = _write(api_storage, DAY, sample_day_v2_markdown, snapshot=True)
     before = parse(sample_day_v2_markdown)
+    generator = _generator(api_settings, fake_llm)
 
-    outcomes = regenerate_days(api_settings, api_storage, _generator(api_settings, fake_llm))
+    outcomes = regenerate_days(api_settings, api_storage, generator)
 
-    assert [(o.date, o.status) for o in outcomes] == [(DAY, "regenerated")]
+    assert [(o.date, o.status) for o in outcomes] == [(DAY, "update")]
     live = api_storage.read_text(path)
     assert api_storage.read_text(generated_snapshot_path(DAY)) == live
     day = parse(live)
     assert day.meta.lumitrace_format == FORMAT_VERSION
-    assert day.meta.prompt_version == "fill_day"
-    assert day.title == "Saturday, October 10, 2026 · Taco day"
-    assert day.journal.startswith("## Summary")
-    assert not day.is_user_edited()
+    assert day.meta.prompt_version == "update_day"
+    assert day.title == before.title
+    assert "Fish tacos and a horchata" in day.journal
+    assert "You added another detail to the day." in day.journal
+    assert day.facts.mood == "happy"
+    assert day.facts.people == ["Maya", "Leo"]
+    assert api_storage.exists(generated_facts_path(DAY))
     assert day.notes == before.notes
     assert [c.text for c in day.captures] == [c.text for c in before.captures]
     assert day.meta.audio == before.meta.audio
-    assert fake_llm.tasks() == ["fill_day"]
+    assert fake_llm.tasks() == ["update_day"]
+
+    again = regenerate_days(api_settings, api_storage, generator)
+    assert [o.status for o in again] == ["unchanged"]
+    assert fake_llm.tasks() == ["update_day"]
 
 
 def test_regenerate_leaves_a_day_the_owner_edited(
@@ -68,13 +77,13 @@ def test_regenerate_leaves_a_day_the_owner_edited(
 
     outcomes = regenerate_days(api_settings, api_storage, _generator(api_settings, fake_llm))
 
-    assert [o.status for o in outcomes] == ["skipped"]
+    assert [o.status for o in outcomes] == ["update"]
     day = parse(api_storage.read_text(path))
     assert day.facts.mood == "great"
     assert "My own words." in day.journal
-    assert day.journal == parse(edited).journal
+    assert "You added another detail to the day." in day.journal
     assert day.is_user_edited()
-    assert fake_llm.tasks() == []
+    assert fake_llm.tasks() == ["update_day"]
 
 
 def test_regenerate_dry_run_range_and_days_without_text(
@@ -95,7 +104,7 @@ def test_regenerate_dry_run_range_and_days_without_text(
     dry = regenerate_days(api_settings, api_storage, generator, dry_run=True)
     assert [(o.date, o.status) for o in dry] == [
         (other, "skipped"),
-        (DAY, "would regenerate"),
+        (DAY, "would update"),
     ]
     assert api_storage.read_text(day_file_path(DAY)) == sample_day_v2_markdown
     assert fake_llm.calls == []

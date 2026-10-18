@@ -165,9 +165,7 @@ def test_glossary_is_sent_to_every_prompt(api_settings: Settings) -> None:
         llm = FakeLLM()
         gen = Generator(LLMClient(settings, completion_fn=llm), settings.prompts_dir)
         gen.fill_day(dt.date(2026, 10, 10), [capture])
-        gen.update_day(
-            dt.date(2026, 10, 10), [capture], "Owner note.", "## Summary\n\nEarlier."
-        )
+        gen.update_day(dt.date(2026, 10, 10), [capture], "Owner note.", "## Summary\n\nEarlier.")
         for _, _, messages in llm.calls:
             system = messages[0]["content"]
             assert (notes in system) is expected
@@ -192,9 +190,7 @@ def test_journal_gets_the_transcript_and_keyterms_not_a_translation(
         translation="We went to the park.",
     )
     gen.fill_day(dt.date(2026, 10, 10), [capture], "Owner note.")
-    gen.update_day(
-        dt.date(2026, 10, 10), [capture], "Owner note.", "## Summary\n\nEarlier."
-    )
+    gen.update_day(dt.date(2026, 10, 10), [capture], "Owner note.", "## Summary\n\nEarlier.")
     assert [c[0] for c in llm.calls] == ["fill_day", "update_day"]
     for _, _, messages in llm.calls:
         user = messages[1]["content"]
@@ -212,7 +208,8 @@ def test_update_reply_classifies_additions_by_journal_section() -> None:
             "additions": [
                 {"section": "Afternoon", "text": "- Walked to the park."},
                 {"section": "Thoughts", "text": "Felt grateful."},
-            ]
+            ],
+            "facts": {"places": ["the park"]},
         },
         [],
     )
@@ -220,8 +217,14 @@ def test_update_reply_classifies_additions_by_journal_section() -> None:
         ("Afternoon", "Walked to the park."),
         ("Thoughts", "Felt grateful."),
     ]
+    assert update.facts.places == ["the park"]
     with pytest.raises(ValueError):
-        parse_day_update({"additions": [{"section": "Later", "text": "No."}]}, [])
+        parse_day_update(
+            {"additions": [{"section": "Later", "text": "No."}], "facts": {}},
+            [],
+        )
+    with pytest.raises(ValueError):
+        parse_day_update({"additions": []}, [])
 
 
 def test_llm_client_passes_config_and_falls_back(api_settings: Settings) -> None:

@@ -22,8 +22,9 @@ def _parser() -> argparse.ArgumentParser:
     regen = sub.add_parser(
         "regenerate",
         help="regenerate past days from their transcripts with the current prompts and format",
-        description="Replace the facts, title and journal of days you have not edited; days you "
-        "edited only gain the new facts. Notes, transcripts, audio and photos are never touched.",
+        description="Run the same Generate action as the Flash button for each stored day. "
+        "The first generation fills the day; later ones update the journal and facts without "
+        "rewriting your words. Notes, transcripts, audio and photos are never touched.",
     )
     regen.add_argument("--from", dest="start", type=dt.date.fromisoformat, metavar="YYYY-MM-DD")
     regen.add_argument("--to", dest="end", type=dt.date.fromisoformat, metavar="YYYY-MM-DD")

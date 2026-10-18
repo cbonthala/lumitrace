@@ -32,6 +32,7 @@ def test_path_conventions() -> None:
     assert D.photo_file_name(123) == "photo-123.jpg"
     assert D.photo_file_path(DAY, 2) == "2026/10/2026-10-10/photo-02.jpg"
     assert D.generated_snapshot_path(DAY) == "_system/generated/2026/10/2026-10-10.md"
+    assert D.generated_facts_path(DAY) == "_system/generated-facts/2026/10/2026-10-10.json"
     assert D.system_path("runs", "/2026/") == "_system/runs/2026"
     with pytest.raises(ValueError):
         D.photo_file_name(0)
@@ -148,10 +149,10 @@ def test_sample_fixture_roundtrips(sample_day_markdown: str) -> None:
     assert rec.text.startswith("Long day.")
     assert not day.is_user_edited()
     rendered = D.render(day)
-    assert "## At a glance" not in rendered
+    assert "## At a glance" in rendered
     assert "English translation" not in rendered
     rewritten = D.parse(rendered)
-    assert rewritten.facts == D.DayFacts()
+    assert rewritten.facts == day.facts
     assert rewritten.journal == day.journal
     assert rewritten.notes == day.notes
     assert rewritten.title == day.title
@@ -170,7 +171,7 @@ def test_parses_files_written_before_the_rename(sample_day_markdown: str, old_na
     assert day.meta.model_extra == {}
     rendered = D.render(day)
     assert f"{old_name}:" not in rendered
-    assert "## At a glance" not in rendered
+    assert "## At a glance" in rendered
 
 
 def test_reads_format_1_files_and_writes_the_current_format(
@@ -187,9 +188,9 @@ def test_reads_format_1_files_and_writes_the_current_format(
     front = rendered.split("\n---\n", 1)[0]
     assert "mood" not in front and "meals" not in front
     assert f"lumitrace_format: {D.FORMAT_VERSION}" in front
-    assert "## At a glance" not in rendered
+    assert "## At a glance" in rendered
     rewritten = D.parse(rendered)
-    assert rewritten.facts == D.DayFacts()
+    assert rewritten.facts == old.facts
     assert (rewritten.title, rewritten.journal) == (old.title, old.journal)
     assert not rewritten.is_user_edited()
 
@@ -209,9 +210,9 @@ def test_reads_format_2_files_and_moves_their_facts_into_the_current_sections(
     assert day.meta.lumitrace_format == D.FORMAT_VERSION
     assert day.is_user_edited()  # the format 2 hash does not match, so it is never overwritten
     rendered = D.render(day)
-    assert "## At a glance" not in rendered
+    assert "## At a glance" in rendered
     rewritten = D.parse(rendered)
-    assert rewritten.facts == D.DayFacts()
+    assert rewritten.facts == day.facts
     assert rewritten.journal == day.journal
     assert rewritten.is_user_edited()
 
@@ -294,7 +295,7 @@ def test_facts_section_tolerates_hand_edits() -> None:
     for stray in ["- Sleep: 8 hours", "### Dreams", "- flying over the lake"]:
         assert stray in day.notes
     rewritten = D.parse(D.render(day))
-    assert rewritten.facts == D.DayFacts()
+    assert rewritten.facts == day.facts
     for stray in ["- Sleep: 8 hours", "### Dreams", "- flying over the lake"]:
         assert stray in rewritten.notes
 
@@ -341,7 +342,7 @@ def test_person_sections_tolerate_hand_edits() -> None:
     for stray in ["- a stray line", "### Dreams", "- flying"]:
         assert stray in day.notes
     rewritten = D.parse(D.render(day))
-    assert rewritten.facts == D.DayFacts()
+    assert rewritten.facts == day.facts
     for stray in ["- a stray line", "### Dreams", "- flying"]:
         assert stray in rewritten.notes
 
@@ -512,7 +513,7 @@ def test_roundtrip_model_equality_with_tricky_content() -> None:
     )
     md = D.render(day)
     parsed = D.parse(md)
-    assert parsed.facts == D.DayFacts()
+    assert parsed.facts == day.facts
     assert (parsed.title, parsed.journal, parsed.notes) == (day.title, day.journal, day.notes)
     assert [(c.id, c.text, c.audio, c.photos) for c in parsed.captures] == [
         (c.id, c.text, c.audio, c.photos) for c in day.captures
@@ -739,7 +740,7 @@ def test_merge_capture_never_touches_generated_or_notes(sample_day_markdown: str
     assert new.meta.audio == ["2026-10-10-2130.m4a", "2026-10-10-2300.m4a"]
     assert new.meta.photos[-1] == "photo-03.jpg"
     written = D.parse(D.render(new))
-    assert written.facts == D.DayFacts()
+    assert written.facts == day.facts
     assert (written.title, written.journal, written.notes) == (new.title, new.journal, new.notes)
     assert [c.id for c in written.captures] == [c.id for c in new.captures]
     assert not written.is_user_edited()
@@ -857,9 +858,11 @@ def test_section_merge_on_edited_day_keeps_edits(sample_day_markdown: str) -> No
     assert [a.kind for a in merged.facts.activities] == ["run (Sam)", "reading (Sam)", "yoga (Sam)"]
     assert merged.facts.activities[0].minutes == 40
     assert merged.journal.startswith(day.journal)
-    assert merged.journal.endswith("Pasta at home. Leo lost his first tooth and was very proud. "
-                                   "Late at night you finished the book you had been reading."
-                                   "\n\n- A late walk.")
+    assert merged.journal.endswith(
+        "Pasta at home. Leo lost his first tooth and was very proud. "
+        "Late at night you finished the book you had been reading."
+        "\n\n- A late walk."
+    )
     assert "## Later" not in merged.journal
     assert merged.notes == day.notes
     assert merged.meta.prompt_version == "v2"
@@ -877,6 +880,68 @@ def test_additive_merge_on_clean_day_refreshes_hash(sample_day_markdown: str) ->
     merged = D.merge_generation_additive(day, facts=_facts(people=["Sam"]))
     assert merged.facts.people[-1] == "Sam"
     assert not merged.is_user_edited()
+
+
+def test_three_way_facts_merge_keeps_owner_additions_changes_and_removals() -> None:
+    base = D.DayFacts(
+        mood="content",
+        people=["Ravi", "Zoe"],
+        places=["home"],
+        meals=[D.Meal(type="breakfast", items=["eggs", "toast"])],
+        activities=[D.Activity(kind="run", minutes=40)],
+        family=[
+            D.FamilyMember(
+                name="Leo",
+                meals=[D.Meal(type="breakfast", items=["oatmeal", "banana"])],
+                feelings=["happy"],
+            )
+        ],
+    )
+    current = base.model_copy(deep=True)
+    current.mood = "proud"
+    current.people = ["Ravi", "Owner friend"]
+    current.meals = [D.Meal(type="breakfast", items=["eggs", "coffee"])]
+    current.activities = [D.Activity(kind="run", minutes=50)]
+    current.family[0].meals = [D.Meal(type="breakfast", items=["oatmeal", "berries"])]
+    current.family[0].feelings = ["proud"]
+    incoming = D.DayFacts(
+        mood="happy",
+        people=["Ravi", "Zoe", "Priya"],
+        places=["the park"],
+        meals=[
+            D.Meal(type="breakfast", items=["eggs", "toast", "pancakes"]),
+            D.Meal(type="dinner", items=["rice"]),
+        ],
+        activities=[
+            D.Activity(kind="run", minutes=30),
+            D.Activity(kind="yoga", minutes=20),
+        ],
+        family=[
+            D.FamilyMember(
+                name="Leo",
+                meals=[D.Meal(type="breakfast", items=["oatmeal", "banana", "pancakes"])],
+                feelings=["happy", "sleepy"],
+            )
+        ],
+    )
+
+    merged = D.merge_facts_three_way(base, current, incoming)
+
+    assert merged.mood == "proud"
+    assert merged.people == ["Ravi", "Priya", "Owner friend"]
+    assert merged.places == ["the park"]
+    assert merged.meals == [
+        D.Meal(type="breakfast", items=["eggs", "pancakes", "coffee"]),
+        D.Meal(type="dinner", items=["rice"]),
+    ]
+    assert merged.activities == [
+        D.Activity(kind="run", minutes=50),
+        D.Activity(kind="yoga", minutes=20),
+    ]
+    assert merged.family[0].meals == [
+        D.Meal(type="breakfast", items=["oatmeal", "pancakes", "berries"])
+    ]
+    assert merged.family[0].feelings == ["sleepy", "proud"]
 
 
 def test_section_merge_inserts_missing_sections_in_journal_order() -> None:

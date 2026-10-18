@@ -26,15 +26,16 @@ Full specification with an example: ``docs/frames-format.md``. Summary of the la
     transcript text
     <!-- lumitrace:transcript:end -->
 
-Format 4 does not write ``## At a glance`` or an English translation (ADR 0057). :func:`parse`
-still reads both from older files. The next :func:`render` drops them. Format 1 kept facts in
+Format 5 writes the structured ``## At a glance`` facts again, but still does not write an
+English translation (ADR 0059). :func:`parse` reads every older layout. Format 1 kept facts in
 the front matter; :func:`parse` still reads those too.
 
 Edit protection: ``FrontMatter.generated_hash`` is a hash of the facts, title and journal as the
-system last wrote them. A format 4 write hashes empty facts. If the current content no longer
+system last wrote them. If the current content no longer
 matches, the owner edited it (:meth:`DayFile.is_user_edited`) and :func:`apply_generation`
-refuses to replace it; use :func:`merge_generation_additive` instead. Text found outside the
-known regions is moved into the notes region on the next render, so it is never lost.
+refuses to replace it; use :func:`merge_generation_three_way` for complete facts and additive
+journal updates. Text found outside the known regions is moved into the notes region on the next
+render, so it is never lost.
 
 Files written under the project's earlier names use ``lifelog:`` (LifeLog, 0.1.0),
 ``bookshelf:`` (Bookshelf) or ``lumen:`` (Lumen) markers and a ``lifelog_format``,
@@ -66,7 +67,7 @@ from pydantic import (
     model_validator,
 )
 
-FORMAT_VERSION = 4
+FORMAT_VERSION = 5
 SYSTEM_DIR = "_system"
 AUDIO_EXT = ".m4a"
 PHOTO_EXT = ".jpg"
@@ -190,6 +191,15 @@ def generated_snapshot_path(day: dt.date) -> str:
     """``_system/generated/YYYY/MM/YYYY-MM-DD.md``: exact copy of the day file as the system
     last wrote it. The indexer diffs the live file against it to record edit signals."""
     return system_path("generated", f"{day:%Y}", f"{day:%m}", f"{day.isoformat()}.md")
+
+
+def generated_facts_path(day: dt.date) -> str:
+    """``_system/generated-facts/YYYY/MM/YYYY-MM-DD.json``: the model's last complete facts.
+
+    This is the base for an owner-safe three-way merge. It is deliberately separate from
+    :func:`generated_snapshot_path`, whose exact live-file copy is used for edit signals.
+    """
+    return system_path("generated-facts", f"{day:%Y}", f"{day:%m}", f"{day.isoformat()}.json")
 
 
 _DAY_PATH_RE = re.compile(r"^(\d{4})/(\d{2})/(\d{4})-(\d{2})-(\d{2})/(\d{4}-\d{2}-\d{2})\.md$")
@@ -603,6 +613,14 @@ class DayFacts(BaseModel):
         return self == DayFacts()
 
 
+class GeneratedFactsState(BaseModel):
+    """The model-owned base used to merge a later complete facts reply with owner edits."""
+
+    date: dt.date
+    source_hash: str
+    facts: DayFacts
+
+
 FACT_FIELDS: tuple[str, ...] = tuple(DayFacts.model_fields)
 FORMAT_1_FACT_KEYS: tuple[str, ...] = (
     "mood",
@@ -1006,9 +1024,7 @@ def merge_journal_sections(markdown: str, additions: dict[str, list[str]]) -> st
     """
     result = _JOURNAL_HEADING_RE.sub(
         lambda match: (
-            "## Evening"
-            if match.group(1).strip().casefold() == "later"
-            else match.group(0)
+            "## Evening" if match.group(1).strip().casefold() == "later" else match.group(0)
         ),
         markdown.strip(),
     )
@@ -1064,18 +1080,13 @@ def merge_journal_sections(markdown: str, additions: dict[str, list[str]]) -> st
 
 
 def render(day: DayFile) -> str:
-    """Render a day file: title, journal, notes and transcripts.
+    """Render a day file: structured facts, journal, notes and transcripts.
 
-    Format 4 does not write ``## At a glance`` or an English translation (ADR 0057).
-    ``parse`` still reads both from older files. Dropping them on an unedited day refreshes
-    ``generated_hash`` so that drop is not itself an edit.
+    Format 5 restores ``## At a glance`` while continuing to omit English translations.
     """
     written = day.model_copy(deep=True)
-    written.facts = DayFacts()
     for capture in written.captures:
         capture.translation = ""
-    if written.meta.generated_hash is not None and not day.is_user_edited():
-        written.meta.generated_hash = written.compute_generated_hash()
     front = yaml.safe_dump(
         _front_matter_dict(written.meta),
         sort_keys=False,
@@ -1090,6 +1101,9 @@ def render(day: DayFile) -> str:
             front,
             "---\n\n",
             f"# {written.title}\n\n",
+            f"{FACTS_HEADING}\n\n",
+            _region(FACTS_START, render_facts_section(written.facts), FACTS_END),
+            "\n",
             _region(JOURNAL_START, written.journal, JOURNAL_END),
             "\n",
             f"{NOTES_HEADING}\n\n",
@@ -1599,6 +1613,145 @@ def _add_meals(target: list[Meal], new: Iterable[Meal]) -> None:
             _add_unique(existing.items, meal.items)
 
 
+def _merge_text_items(base: list[str], current: list[str], incoming: list[str]) -> list[str]:
+    """Three-way merge one normalized text list, with owner additions and removals winning."""
+    base_keys = {item.casefold() for item in base}
+    current_keys = {item.casefold() for item in current}
+    removed = base_keys - current_keys
+    result = [item for item in incoming if item.casefold() not in removed]
+    result_keys = {item.casefold() for item in result}
+    for item in current:
+        key = item.casefold()
+        if key not in base_keys and key not in result_keys:
+            result.append(item)
+            result_keys.add(key)
+    return result
+
+
+def _merge_meal_items(base: list[Meal], current: list[Meal], incoming: list[Meal]) -> list[Meal]:
+    """Three-way merge meals by type, then their food/drink items."""
+    base_by_type = {meal.type: meal for meal in base}
+    current_by_type = {meal.type: meal for meal in current}
+    incoming_by_type = {meal.type: meal for meal in incoming}
+    result: list[Meal] = []
+    for meal_type in MEAL_TYPES:
+        before = base_by_type.get(meal_type)
+        local = current_by_type.get(meal_type)
+        new = incoming_by_type.get(meal_type)
+        if before is not None and local is None:
+            continue
+        if local is None:
+            if new is not None:
+                result.append(new.model_copy(deep=True))
+            continue
+        items = _merge_text_items(
+            before.items if before else [],
+            local.items,
+            new.items if new else [],
+        )
+        if items:
+            result.append(Meal(type=meal_type, items=items))
+    return result
+
+
+def _merge_activities(
+    base: list[Activity], current: list[Activity], incoming: list[Activity]
+) -> list[Activity]:
+    """Three-way merge activities by kind, including owner changes to minutes."""
+    base_by_kind = {item.kind.casefold(): item for item in base}
+    current_by_kind = {item.kind.casefold(): item for item in current}
+    removed = set(base_by_kind) - set(current_by_kind)
+    result: list[Activity] = []
+    handled: set[str] = set()
+    for new in incoming:
+        key = new.kind.casefold()
+        handled.add(key)
+        if key in removed:
+            continue
+        before = base_by_kind.get(key)
+        local = current_by_kind.get(key)
+        if local is None:
+            result.append(new.model_copy(deep=True))
+        elif before is None:
+            result.append(local.model_copy(deep=True))
+        else:
+            minutes = new.minutes if local.minutes == before.minutes else local.minutes
+            result.append(new.model_copy(update={"minutes": minutes}, deep=True))
+    for local in current:
+        key = local.kind.casefold()
+        before = base_by_kind.get(key)
+        if key not in handled and (before is None or local != before):
+            result.append(local.model_copy(deep=True))
+    return result
+
+
+def _merge_family_member(
+    base: FamilyMember | None,
+    current: FamilyMember,
+    incoming: FamilyMember | None,
+) -> FamilyMember:
+    before = base or FamilyMember(name=current.name)
+    new = incoming or FamilyMember(name=current.name)
+    return FamilyMember(
+        name=new.name if current.name == before.name else current.name,
+        meals=_merge_meal_items(before.meals, current.meals, new.meals),
+        health=_merge_text_items(before.health, current.health, new.health),
+        feelings=_merge_text_items(before.feelings, current.feelings, new.feelings),
+        moments=_merge_text_items(before.moments, current.moments, new.moments),
+    )
+
+
+def _merge_family(
+    base: list[FamilyMember],
+    current: list[FamilyMember],
+    incoming: list[FamilyMember],
+) -> list[FamilyMember]:
+    base_by_name = {member.name.casefold(): member for member in base}
+    current_by_name = {member.name.casefold(): member for member in current}
+    incoming_by_name = {member.name.casefold(): member for member in incoming}
+    removed = set(base_by_name) - set(current_by_name)
+    result: list[FamilyMember] = []
+    handled: set[str] = set()
+    for new in incoming:
+        key = new.name.casefold()
+        handled.add(key)
+        if key in removed:
+            continue
+        local = current_by_name.get(key)
+        if local is None:
+            result.append(new.model_copy(deep=True))
+        else:
+            result.append(_merge_family_member(base_by_name.get(key), local, new))
+    for local in current:
+        key = local.name.casefold()
+        before = base_by_name.get(key)
+        if key not in handled and (before is None or local != before):
+            result.append(_merge_family_member(before, local, incoming_by_name.get(key)))
+    return result
+
+
+def merge_facts_three_way(base: DayFacts, current: DayFacts, incoming: DayFacts) -> DayFacts:
+    """Merge complete model facts into the live facts while preserving owner edits.
+
+    ``base`` is the model's previous complete reply, ``current`` is the live day file, and
+    ``incoming`` is the new complete reply. Scalars changed by the owner stay changed. For
+    collections, owner additions and removals win while untouched model values can change.
+    """
+    data: dict[str, Any] = {}
+    for name in ("mood", "mood_score", "city", "weather", "remember"):
+        before = getattr(base, name)
+        local = getattr(current, name)
+        data[name] = getattr(incoming, name) if local == before else local
+    for name in ("people", "places", "highlights", "memories"):
+        data[name] = _merge_text_items(
+            getattr(base, name), getattr(current, name), getattr(incoming, name)
+        )
+    data["meals"] = _merge_meal_items(base.meals, current.meals, incoming.meals)
+    data["activities"] = _merge_activities(base.activities, current.activities, incoming.activities)
+    data["family"] = _merge_family(base.family, current.family, incoming.family)
+    return DayFacts.model_validate(data)
+
+
 def merge_generation_additive(
     day: DayFile,
     *,
@@ -1639,6 +1792,50 @@ def merge_generation_additive(
         _add_meals(existing_member.meals, member.meals)
     _add_activities(current.activities, facts.activities)
     result.facts = DayFacts.model_validate(current.model_dump())
+    if journal_sections is not None:
+        result.journal = merge_journal_sections(result.journal, journal_sections)
+    _set_provenance(result, prompt_version, models_used, generated_at)
+    if generated_source_hash is not None:
+        result.meta.generated_source_hash = generated_source_hash
+    if not was_edited:
+        result.meta.generated_hash = result.compute_generated_hash()
+    return result
+
+
+def merge_generation_three_way(
+    day: DayFile,
+    *,
+    base_facts: DayFacts | None,
+    facts: DayFacts,
+    journal_sections: dict[str, list[str]] | None = None,
+    prompt_version: str | None = None,
+    models_used: dict[str, str] | None = None,
+    generated_at: dt.datetime | None = None,
+    generated_source_hash: str | None = None,
+) -> DayFile:
+    """Apply complete new facts and additive journal bullets without losing owner edits.
+
+    A missing base occurs for days written before generated-facts state existed. Edited legacy
+    days use the older additive facts merge for that first update; clean days can safely accept
+    the complete reply. Every later update has a base and uses :func:`merge_facts_three_way`.
+    """
+    was_edited = day.is_user_edited()
+    if base_facts is None and was_edited:
+        return merge_generation_additive(
+            day,
+            facts=facts,
+            journal_sections=journal_sections,
+            prompt_version=prompt_version,
+            models_used=models_used,
+            generated_at=generated_at,
+            generated_source_hash=generated_source_hash,
+        )
+    result = day.model_copy(deep=True)
+    result.facts = (
+        facts.model_copy(deep=True)
+        if base_facts is None
+        else merge_facts_three_way(base_facts, result.facts, facts)
+    )
     if journal_sections is not None:
         result.journal = merge_journal_sections(result.journal, journal_sections)
     _set_provenance(result, prompt_version, models_used, generated_at)

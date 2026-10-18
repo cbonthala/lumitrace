@@ -64,8 +64,8 @@ Hybrid search over passages (title, journal, notes, transcript, facts).
 ### `get_day(date)`
 
 Reads the day file from storage (the source of truth; works even before the index exists) and
-returns `found`, `path`, `title`, `facts` (empty on a format 4 file; filled when an older file
-still has At a glance), `journal`, `notes`,
+returns `found`, `path`, `title`, `facts` (structured At a glance values; a format-4 file is
+empty until Generate repairs it), `journal`, `notes`,
 `transcript` (one item per capture: `time`, `kind`, `location`, `audio`, `photos`, `text`,
 `translation`: `null` unless an older file still has a translation block),
 `audio` and `photos` (`{name, path, link}` with `link` from `storage.get_share_link`, i.e. a

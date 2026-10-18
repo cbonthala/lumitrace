@@ -110,11 +110,14 @@ proxy): `docs/flash.md`.
   The web app keeps captures in the browser and sends them when you're back online.
 * Add extra source material under **My notes**. Generate and the 4:05 a.m. run read it alongside
   every recording but never modify it. **Generate** beside a day in Flash History writes the
-  first journal now; later clicks process only changed source.
-* Edit the title or journal in Obsidian after its first generation. Those words are kept. New
+  first journal and structured facts now; later clicks process changed source or repair a
+  format-4 day whose facts are missing.
+* Edit the title, journal or At a glance facts in Obsidian after the first generation. Those
+  edits are kept. New
   recordings or changed My notes add bullets directly to Morning, Afternoon, Evening, Thoughts
-  or Summary—there is no Later section and no full rewrite. A journal typed before its first
-  generation is still replaced. The file has no At a glance section or English translation.
+  or Summary, and merge complete new facts with owner changes winning—there is no Later section
+  and no full rewrite. A journal typed before its first generation is still replaced. The file
+  has no English translation.
 * Ask your AI app about your days; answers cite the dates they come from. If an answer is wrong,
   say so and the app records feedback.
 

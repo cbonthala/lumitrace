@@ -84,13 +84,14 @@ Precise signatures: `docs/contracts.md`.
 ```
 Lumitrace/
   2026/10/2026-10-10/
-    2026-10-10.md          front matter, journal, notes, Telugu transcript
+    2026-10-10.md          front matter, structured facts, journal, notes, Telugu transcript
     2026-10-10-2130.m4a    compressed voice note
     photo-01.jpg           resized copy without EXIF (originals stay in Google Photos)
   _system/
     inbox/<capture id>/    raw uploads waiting for the worker (deleted when done)
     captures/<id>.json     capture status, no journal content
     generated/YYYY/MM/     exact copy of each day file as the system last wrote it
+    generated-facts/YYYY/MM/ previous complete model facts for three-way merging
     activity/YYYY/MM.jsonl activity records: models, timings, cost, errors
     feedback/YYYY/MM/      one JSON file per MCP feedback call
     index-backup/          daily copy of the SQLite index
@@ -110,12 +111,14 @@ Lumitrace/
    waits until 4:05 a.m.
 5. One LiteLLM call (`LUMITRACE_LLM_WRITE_JOURNAL_MODEL`, prompts in `prompts/`). At 4:05, or
    the first write of a day that has already closed, `fill_day` then
-   `apply_generation(..., force=True)` uses every recording plus My notes. Once a journal exists,
-   changed source uses `update_day`; it returns missing bullets classified into the normal
-   journal sections, and `merge_generation_additive` inserts them without rewriting existing
-   words. `generated_source_hash` makes unchanged Generate calls and capture replays no-ops.
-6. Write the day file and its snapshot again (same text, same `generated_at`), nudge Spectrum,
-   append an activity record, mark the capture `done`.
+   `apply_generation(..., force=True)` uses every recording plus My notes and returns the journal
+   plus complete structured facts. Once a journal exists, `update_day` returns missing journal
+   bullets plus complete facts. Journal bullets are inserted without rewriting existing words;
+   facts use a three-way merge whose base is `_system/generated-facts/`, so owner additions,
+   changes and removals win. A missing base repairs a format-4 day.
+6. Write the day file, exact snapshot and generated-facts base, nudge Spectrum, append an
+   activity record and mark the capture `done`. `generated_source_hash` plus the facts base make
+   unchanged Generate calls and capture replays no-ops.
 
 ## Spectrum: indexer (`lumitrace/spectrum/`)
 

@@ -49,6 +49,8 @@ def parse_day_draft(raw: Any, members: Sequence[str]) -> DayDraft:
     facts_raw = raw.get("facts")
     if not isinstance(facts_raw, dict):
         facts_raw = {key: raw[key] for key in DayFacts.model_fields if key in raw}
+    if not facts_raw and not isinstance(raw.get("facts"), dict):
+        raise ValueError("day reply has no facts object")
     facts = with_day_meals(keep_family(parse_facts(facts_raw), members))
     draft = DayDraft.model_validate(
         {"headline": raw.get("headline"), "journal": raw.get("journal")}
@@ -80,17 +82,20 @@ class JournalAddition(BaseModel):
 
 
 class DayUpdate(BaseModel):
-    """New journal bullets, classified into the existing journal sections."""
+    """New journal bullets plus a complete facts candidate for owner-safe merging."""
 
     additions: list[JournalAddition] = Field(default_factory=list, max_length=20)
+    facts: DayFacts = Field(default_factory=DayFacts)
 
 
 def parse_day_update(raw: Any, members: Sequence[str]) -> DayUpdate:
     """Validate an update-day reply."""
-    del members  # Kept in the signature alongside ``parse_day_draft`` for callers/tests.
     if not isinstance(raw, dict):
         raise ValueError("update reply is not a JSON object")
-    return DayUpdate.model_validate({"additions": raw.get("additions") or []})
+    if not isinstance(raw.get("facts"), dict):
+        raise ValueError("update reply has no facts object")
+    facts = with_day_meals(keep_family(parse_facts(raw["facts"]), members))
+    return DayUpdate.model_validate({"additions": raw.get("additions") or [], "facts": facts})
 
 
 def parse_facts(raw: Any) -> DayFacts:
@@ -281,7 +286,7 @@ class Generator:
         notes: str,
         journal: str,
     ) -> tuple[LLMResult[DayUpdate], Prompt]:
-        """Classify genuinely new information into sections without rewriting the journal."""
+        """Return missing journal bullets and complete facts without rewriting the journal."""
         prompt = self.prompt("update_day")
         family = self.settings.family_members
         messages = prompt.render(
@@ -302,7 +307,8 @@ class Generator:
                     {"section": "Summary", "text": capture.text.strip()}
                     for capture in captures
                     if capture.text.strip() and capture.text.strip() not in journal
-                ]
+                ],
+                "facts": {},
             },
         )
         return result, prompt

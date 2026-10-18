@@ -6,8 +6,10 @@ description: Fill a Lumitrace day file (prompts/day-template.md) from Telugu cod
 # Telugu transcript to Lumitrace day file
 
 ## Before you start
-- Read `prompts/day-template.md`. It is a checklist. The same file is pasted into the fill-day prompt.
-- The day file you write has a title, the journal (Summary, Morning, Afternoon, Evening, Thoughts), My notes, and the Telugu transcript. Do not write an At a glance section. Do not write a translation.
+- Read `prompts/day-template.md`. It defines the structured facts and is pasted into the
+  fill-day prompt.
+- The day file has a title, At a glance facts, the journal (Summary, Morning, Afternoon,
+  Evening, Thoughts), My notes, and the Telugu transcript. Do not write a translation.
 - Read `secrets/family.md` at the repository root. It holds the family (names, relations, birth dates) and the notes (other people, relation words, foods, places, usual routines). It is git-ignored.
   - Missing? Copy `docs/templates/family.example.md` to `secrets/family.md` and fill it in.
 - The person with `relation: me` is the author.
@@ -16,7 +18,8 @@ description: Fill a Lumitrace day file (prompts/day-template.md) from Telugu cod
 ## What the input looks like
 - Audio is mostly Telugu, often mixed with English words.
 - The Prism gives one text per recording: the code-mixed transcript (English words in English, Telugu in Telugu script). There is no English translation (ADR 0048).
-- An older day file may still show a translation or an At a glance section. Ignore both. The Telugu transcript is the source. Do not write either back.
+- An older day file may still show a translation. Ignore it. The Telugu transcript is the
+  source; write the structured facts from the transcript and My notes.
 - Names, relations and spellings are in `secrets/family.md`.
 - The journal is written in **English**.
 
@@ -36,7 +39,7 @@ description: Fill a Lumitrace day file (prompts/day-template.md) from Telugu cod
    - Telugu verb endings show who did it.
 3. Tag each event: who, what, where, when, any feeling word.
 4. Check names and sound-alikes against the family file.
-5. Cover each checklist topic inside the journal. Do not add an At a glance section.
+5. Cover each checklist topic in the structured facts and inside the journal.
 6. Make it quick to read: short bullets, one fact each.
 7. Run the check list.
 

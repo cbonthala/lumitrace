@@ -104,9 +104,9 @@ and never paste real tokens or personal content here.
 
   1. `lumitrace-prism regenerate --dry-run` lists what would change.
   2. Fill in `secrets/family.md` (copy `docs/templates/family.example.md`) before regenerating.
-  3. `lumitrace-prism regenerate --from 2026-10-01 --to 2026-10-15 --nudge` redoes a range;
-     omit the dates for every day. In Docker: `docker compose run --rm prism lumitrace-prism regenerate ...`.
-  Days you edited are skipped. A later recording updates that day on its own.
+  3. `lumitrace-prism regenerate --from 2026-10-01 --to 2026-10-15 --nudge` runs Generate for a
+     range; omit the dates for every day. In Docker: `docker compose run --rm prism lumitrace-prism regenerate ...`.
+  This is the same safe update as the Flash Generate button, including days you edited.
 
 ### Recovering from a lost or corrupt index
 

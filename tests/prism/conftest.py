@@ -63,7 +63,8 @@ class FakeLLM:
                             "section": "Evening",
                             "text": "You added another detail to the day.",
                         }
-                    ]
+                    ],
+                    "facts": self.facts(user),
                 }
             )
         else:
@@ -80,7 +81,12 @@ class FakeLLM:
 
     @staticmethod
     def facts(user: str) -> dict[str, Any]:
-        entries = user.split("Journal entries for this day", 1)[-1]
+        marker = (
+            "Journal entries for this day"
+            if "Journal entries for this day" in user
+            else "Every recording for this date"
+        )
+        entries = user.split(marker, 1)[-1]
         facts: dict[str, Any] = {
             "mood": "content",
             "mood_score": 4,

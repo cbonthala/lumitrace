@@ -76,6 +76,30 @@ def test_owner_edits_become_signals(indexer: Indexer, storage: LocalStorage) -> 
     assert day["user_edited"] == 1
 
 
+def test_owner_fact_edits_become_field_signals(indexer: Indexer, storage: LocalStorage) -> None:
+    write_day(storage, make_day(D1))
+    indexer.sync()
+
+    def edit_facts(day: DayFile) -> None:
+        day.facts.mood = "excited"
+        day.facts.places.append("the library")
+
+    _edit(storage, D1, edit_facts)
+    result = indexer.sync()
+
+    rows = _signals(indexer.conn)
+    assert {(row["section"], row["field"]) for row in rows} == {
+        ("facts", "mood"),
+        ("facts", "places"),
+    }
+    by_field = {row["field"]: row for row in rows}
+    assert json.loads(by_field["mood"]["before"]) == "calm"
+    assert json.loads(by_field["mood"]["after"]) == "excited"
+    assert json.loads(by_field["places"]["after"]) == ["the park", "the library"]
+    assert by_field["places"]["diff"] is None
+    assert result.edit_signals == 2
+
+
 def test_signals_are_deduplicated_and_superseded(indexer: Indexer, storage: LocalStorage) -> None:
     write_day(storage, make_day(D1))
     indexer.sync()

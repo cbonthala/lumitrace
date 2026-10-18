@@ -65,10 +65,10 @@ Format details and an example: `docs/frames-format.md`.
 Paths: `day_dir(d)`, `day_file_path(d)`, `audio_file_name(d, local_time)`,
 `audio_file_path(d, local_time)`, `photo_file_name(n)`, `photo_file_path(d, n)`,
 `next_photo_names(existing, count)`, `unique_file_name(name, existing)`, `system_path(*parts)`,
-`generated_snapshot_path(d)`, `parse_day_file_path(path) -> date | None`,
+`generated_snapshot_path(d)`, `generated_facts_path(d)`, `parse_day_file_path(path) -> date | None`,
 `date_of_path(path) -> date | None`, `classify_path(path) -> "day"|"audio"|"photo"|"system"|"other"`.
-Constants: `SYSTEM_DIR = "_system"`, `FORMAT_VERSION = 4`, `FACTS_HEADING = "## At a glance"`,
-`FACT_SECTIONS`, `FAMILY_FIELDS`, `MEAL_TYPES` (breakfast, lunch, dinner, snacks, drinks),
+Constants: `SYSTEM_DIR = "_system"`, `FORMAT_VERSION = 5`, `FACTS_HEADING = "## At a glance"`,
+`FACT_SECTIONS`, `FAMILY_FIELDS`, `MEAL_TYPES` (breakfast, lunch, dinner, snacks),
 `NONE_TEXT = "none"`, `JOURNAL_SECTIONS` (Summary, Morning, Afternoon, Evening, Thoughts),
 `MARKER_PREFIXES = ("lumitrace", "lumen",
 "bookshelf", "lifelog")` (`parse` accepts all; `render` writes `lumitrace:`), `FORMAT_KEY =
@@ -92,11 +92,13 @@ Models (pydantic):
   schema of fact extraction. Values are normalised (one line; a comma splits meal items except
   inside parentheses) so
   render and parse agree. `FACT_FIELDS`.
+* `GeneratedFactsState`: `date`, `source_hash`, `facts`; the model-owned base for facts
+  three-way merging.
 * `FrontMatter`: `date`, `audio`, `photos`, `prompt_version`, `models_used` (task → model),
   `generated_at`, `generated_hash`, `generated_source_hash`, `lumitrace_format` (read from `lumen_format`,
   `bookshelf_format` or `lifelog_format` in files written under the earlier names); unknown keys preserved. Facts are
-  not in the front matter since format 2. `FORMAT_VERSION` is 4. `render` does not write the
-  facts section or a translation (ADR 0057). `parse` still reads both from older files.
+  not in the front matter since format 2. `FORMAT_VERSION` is 5. `render` writes the structured
+  facts section but no translation (ADR 0059). `parse` still reads all older formats.
 * `Capture`: `id`, `kind: "recording" | "note"`, `captured_at` (aware), `text`, `translation`
   (read from an older file; `render` always writes `""`),
   `audio`, `photos`, `location`; `Capture.make_id(kind, captured_at)`.
@@ -107,7 +109,7 @@ Models (pydantic):
 Functions:
 
 * `parse(markdown, *, fallback_date=None) -> DayFile` (raises `DayFileParseError`)
-* `render(day) -> str` (format 4: no At a glance, no translation; `parse` of that text has empty facts)
+* `render(day) -> str` (format 5: At a glance facts, no translation)
 * `render_facts_section(facts, *, include_empty=True) -> str` (every line, `none` when empty;
   `include_empty=False` is the index's view without them),
   `parse_facts_section(markdown) -> (DayFacts, stray)` (the "At a glance" region; Spectrum makes
@@ -122,6 +124,10 @@ Functions:
   Summary, Morning, Afternoon, Evening or Thoughts without changing existing words)
 * `merge_generation_additive(day, *, facts, journal_sections=None, prompt_version=None,
   models_used=None, generated_at=None, generated_source_hash=None) -> DayFile`
+* `merge_facts_three_way(base, current, incoming) -> DayFacts`
+* `merge_generation_three_way(day, *, base_facts, facts, journal_sections=None,
+  prompt_version=None, models_used=None, generated_at=None,
+  generated_source_hash=None) -> DayFile`
 
 ## Index: `lumitrace.index.schema`
 
@@ -175,6 +181,7 @@ Everything here lives in the owner's storage, never in the repository. `classify
 | `_system/inbox/<capture id>/` | Prism | raw uploads (`audio.<ext>`, `photo-NN.<ext>`, `manifest.json` last) waiting to be processed; deleted when the capture is `done` |
 | `_system/captures/<capture id>.json` | Prism | capture status (`queued` / `processing` / `done` / `failed`), no journal content; kept for `GET /captures/{id}` |
 | `_system/generated/YYYY/MM/YYYY-MM-DD.md` | Prism | exact day file as last written by the system (`generated_snapshot_path`); written right after every day-file write, same text and `generated_at` |
+| `_system/generated-facts/YYYY/MM/YYYY-MM-DD.json` | Prism | previous complete model facts and source hash; base for owner-safe three-way fact merges |
 | `_system/journal-due/YYYY-MM-DD.txt` | Prism | a day whose transcripts are saved and whose journal has not been written yet; removed when the morning run, Generate in Flash, or a late capture for a closed day finishes (ADR 0046, 0055) |
 | `_system/activity/YYYY/MM.jsonl` | Prism | activity records, one JSON line per processing attempt: models, per-step time/cost, errors; no journal content |
 | `_system/feedback/YYYY/MM/<UTC timestamp>-<id>.json` | Lens | copy of each `feedback` call (also a row in the index) |

@@ -121,7 +121,7 @@ app itself in `lumitrace/prism/web/` (ADR 0019; user guide: `docs/flash.md` → 
 | `GET /session` | none | `{"signed_in", "username", "sign_in_available", "version"}` for the cookie sent (never an error) |
 | `GET /captures?days=7&limit=30` | token or cookie | the capture statuses changed in the last `days` (1–60), newest capture first, at most `limit` (1–200). No journal content. `generation` here is whether that capture is in the journal now (`deferred` until Generate or 4:05, then `unchanged`), which can differ from `GET /captures/{id}` |
 | `GET /summary` | token or cookie | `{"today", "days": 7, "days_logged", "logged_dates", "captures", "streak"}` |
-| `POST /journal` | token or cookie | JSON `{"date": "YYYY-MM-DD"}` or `{}` (the open day). Rewrites that day's title and journal from every transcript, even if those were edited (ADR 0055). The file has no At a glance section (ADR 0057). `200` with `{"entry_date", "status", "message"}`: `status` is `full`, `skipped` (no words) or `failed`. The message has no journal text. A date after today is `422`. If a recording is still being saved after two minutes, `409` |
+| `POST /journal` | token or cookie | JSON `{"date": "YYYY-MM-DD"}` or `{}` (the open day). The first call fills the journal and structured facts; later calls safely process changed source, or repair missing format-4 facts, without replacing owner edits (ADR 0058, 0059). `200` with `{"entry_date", "status", "message"}`: `status` is `full`, `update`, `unchanged`, `skipped` or `failed`. The message has no journal text. A date after today is `422`. If a recording is still being saved after two minutes, `409` |
 | `GET /lens/apps` | token or cookie | the AI apps connected to the Lens, passed through from its admin API (`docs/lens.md` → Connected apps) |
 | `POST /lens/apps/{id}/sign-out` | token or cookie | disconnect one app now (it needs the Lens password again) |
 | `POST /lens/apps/sign-out-all` | token or cookie | disconnect every app; `{"signed_out": n}` |
@@ -249,9 +249,8 @@ activity record.
    is re-read and `merge_capture` adds the transcript block; the day file and its
    `_system/generated/` snapshot are written. From here on the capture is safe even if the AI
    steps fail (ADR 0011).
-6. **Journal timing** (`pipeline/processor.py`, `journal_schedule.py`, ADR 0046). The journal is
-   written **once per day**, not on every recording. The day file has no At a glance section
-   (ADR 0057).
+6. **Journal timing** (`pipeline/processor.py`, `journal_schedule.py`, ADR 0046). The journal and
+   structured facts are first written after the day closes, not on every recording.
    * While the day is still open (before `LUMITRACE_DAY_ROLLOVER_HOUR`, 4 a.m. in the owner's
      timezone) the capture is saved and `generation` is `deferred`. A marker is left at
      `_system/journal-due/YYYY-MM-DD.txt`.
@@ -270,7 +269,7 @@ activity record.
    * If that run fails, the marker stays and the next start tries again.
 7. **AI steps** (`pipeline/generate.py`, `pipeline/llm.py`), when the journal is written and the
    day has any words:
-   * The day's journal does not exist yet → **full**: one `fill_day` call (ADR 0049, 0058).
+   * The day's journal does not exist yet → **full**: one `fill_day` call (ADR 0049, 0058, 0059).
      The model sees every Telugu transcript, My notes, the family-file glossary, the keyterms,
      and `prompts/day-template.md`. It returns JSON `{headline, journal, facts}`. Facts are
      validated against `DayFacts` (`keep_family` gives every member in `secrets/family.md` a
@@ -281,16 +280,17 @@ activity record.
      `"<Weekday, Month D, YYYY> · <headline>"`, and the fixed journal headings
      (`normalize_journal`, `docs/frames-format.md` → The journal). This is the 4:05 a.m. write.
      It replaces a journal typed earlier that same night. Notes and transcripts stay.
-   * The journal exists and its source changed → **update**: one `update_day` call. The model sees
-     the authoritative current journal, every recording and My notes, then returns only missing
-     bullets classified as Summary, Morning, Afternoon, Evening or Thoughts.
-     `merge_generation_additive` inserts those bullets mechanically. It never creates a Later
-     section or changes words already on the page, including edits made while the model runs.
-     `generated_source_hash` prevents repeats and makes an unchanged Generate a no-op.
+   * The journal exists and its source changed, or the generated-facts base is missing →
+     **update**: one `update_day` call. The model sees the authoritative current journal, every
+     recording and My notes, then returns missing section-classified bullets and complete facts.
+     Journal bullets are inserted mechanically. Facts use the previous model reply from
+     `_system/generated-facts/` as the base of a three-way merge; owner additions, changes and
+     removals win. A format-4 day has no base, so Generate repairs it without rewriting the
+     journal. `generated_source_hash` plus the base prevent repeat calls.
    * If the call fails on every model, the day keeps the transcript and `generation` is `failed`.
    * Front matter: `prompt_version` (`fill_day` or `update_day`) and `models_used`
      (`stt`, `fill_day` or `update_day`: the model that answered), merged with what was there.
-8. **Write** the day file and its snapshot again.
+8. **Write** the day file, exact snapshot and generated-facts base.
 9. **Nudge** the indexer (`nudge_indexer` with the day file, audio and photo paths). A capture
    nudges as soon as its transcript is saved, and the morning journal nudges again. A failed or
    refused nudge is recorded but never fails the capture; the indexer also polls.
@@ -318,13 +318,15 @@ models set to `fake`, the whole API runs offline.
 ### Regenerating days
 
 `lumitrace-prism regenerate [--from D] [--to D] [--dry-run] [--nudge]` (code:
-`lumitrace/prism/regenerate.py`) redoes past days from their stored transcripts with the current
-prompts and the current day format. A day you did not edit (its hash matches, or the file equals
-its `_system/generated` snapshot) gets a new title and journal. A day you edited is left
-alone. Notes, transcripts, audio and photos are never touched. It writes the day file
-and the identical snapshot, like the Prism does. It calls the AI models for every day (cost),
-so start with `--dry-run` and a short date range. Days without transcript text, and days you
-edited, are skipped.
+`lumitrace/prism/regenerate.py`) runs the same action as the Flash **Generate** button for each
+stored day. The first generation fills the title, journal and facts. A day that already has a
+journal, including one you edited, gets the safe update: new journal bullets and the three-way
+facts merge. Notes, transcripts, audio and photos are never touched. It writes the day file,
+the identical snapshot and the generated-facts base, like the button does. `--nudge` asks
+Spectrum to index each written day. It calls the AI models (cost), so start with `--dry-run`
+and a short date range. A dry run reports `would full` or `would update`. Days without source
+text are `skipped`. A day already generated from the current source and facts base is
+`unchanged`.
 
 ### Prompts
 
@@ -418,6 +420,7 @@ One JSON line per processing attempt, appended to the file for the month the att
 | `YYYY/MM/YYYY-MM-DD/YYYY-MM-DD-HHMM.m4a` | compressed audio |
 | `YYYY/MM/YYYY-MM-DD/photo-NN.jpg` | resized photos |
 | `_system/generated/YYYY/MM/YYYY-MM-DD.md` | snapshot of each day file write |
+| `_system/generated-facts/YYYY/MM/YYYY-MM-DD.json` | previous complete model facts used as the three-way merge base |
 | `_system/inbox/<id>/` | raw uploads waiting to be processed (deleted when done) |
 | `_system/captures/<id>.json` | capture status (no journal content) |
 | `_system/activity/YYYY/MM.jsonl` | activity records |

@@ -1,8 +1,8 @@
 <!--
-  LUMITRACE DAY TEMPLATE (ADR 0057). A checklist for the journal. The day file does not contain
-  an "At a glance" section or a translation of the transcript. The journal uses Summary,
-  Morning, Afternoon, Evening and Thoughts. "Audio and transcript" is the Transcript region
-  (Telugu, as spoken).
+  LUMITRACE DAY TEMPLATE (ADR 0059). The topics below become the structured "At a glance"
+  section and are also a checklist for the journal. The day file does not contain a translation
+  of the transcript. The journal uses Summary, Morning, Afternoon, Evening and Thoughts.
+  "Audio and transcript" is the Transcript region (Telugu, as spoken).
 
   HOW TO READ THIS FILE
   - Everything in <!-- comments --> is an instruction for whoever fills the file. Delete none of it.
@@ -30,7 +30,7 @@
 ---
 date: 2026-10-10
 family: [Sam, Maya, Leo]
-lumitrace_format: 3
+lumitrace_format: 5
 ---
 
 # Saturday, October 10, 2026 · <3-6 words naming the best moment>

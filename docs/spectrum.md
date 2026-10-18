@@ -83,9 +83,10 @@ Processing changes:
 Each day file is written in **one transaction**: `files` upsert, `days` and fact rows replaced,
 passages and vectors replaced, edit signals. The MCP server always sees a whole day, old or new.
 
-Facts come from an older day file's "At a glance" section (`DayFile.facts`, parsed by
+Facts come from the day file's "At a glance" section (`DayFile.facts`, parsed by
 `lumitrace.frames.dayfile`); Spectrum copies them and never re-derives facts from the text.
-A format 4 file has no such section, so its fact tables are empty. The journal is still indexed.
+A format-4 file stays empty until its next Generate call repairs the section. The journal is
+still indexed before that repair.
 Day file format 3 (topic first): `meals.meal_type` is one of `breakfast`, `lunch`, `dinner`,
 `snacks`; one `meals` row per item with the `person` whose block it is under (`''` for
 `Everyone`); `not mentioned` placeholders never become rows; one `places`, `people` and

@@ -7,6 +7,9 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 ## Foundation
 
+- 2026-10-18 — Removing the visible facts region also removed the only structured source for
+  precise meal, place, people and family queries → keep the narrative journal and structured
+  facts together, and test both search and `query_facts` end to end (ADR 0059).
 - 2026-10-10 — mcp resolved to 2.x, where `FastMCP` is now `mcp.server.mcpserver.MCPServer`;
   v1 examples online won't work as-is → use the 2.x API.
 - 2026-10-10 — With the `drive.file` scope, files created outside Lumen are invisible to it →

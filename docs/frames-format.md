@@ -1,4 +1,4 @@
-# Frames: day file format (format version 4)
+# Frames: day file format (format version 5)
 
 The Frames are the day files: one Markdown file per day, the source of truth. Code:
 `lumitrace/frames/dayfile.py` (format) and `lumitrace/frames/storage/` (where they live). Always use
@@ -15,6 +15,7 @@ All paths are relative to the `Lumitrace` root folder.
 | Audio | `YYYY-MM-DD-HHMM.m4a` in the day folder | `audio_file_name(d, local_time)` |
 | Photos | `photo-NN.jpg` in the day folder (01, 02, ...) | `photo_file_name(n)`, `next_photo_names()` |
 | System snapshot | `_system/generated/YYYY/MM/YYYY-MM-DD.md` | `generated_snapshot_path(d)` |
+| Generated facts base | `_system/generated-facts/YYYY/MM/YYYY-MM-DD.json` | `generated_facts_path(d)` |
 
 * **Entry date:** `entry_date(captured_at, tz, rollover_hour)`. Captures before 4 a.m. local time
   belong to the previous day. The audio file name uses the *entry date* plus the *local capture
@@ -29,6 +30,11 @@ All paths are relative to the `Lumitrace` root folder.
 ---
 
 # Title                      DayFile.title (default: "Saturday, October 10, 2026")
+
+## At a glance
+<!-- lumitrace:facts:start (...) -->      DayFile.facts: structured, owner-editable facts
+### Highlight / Food / Places / ...       fixed topic-first layout
+<!-- lumitrace:facts:end -->
 
 <!-- lumitrace:journal:start (...) -->    DayFile.journal: generated Markdown, "##" sections
 ## Summary                                Summary, Morning, Afternoon, Evening, Thoughts
@@ -73,17 +79,16 @@ The front matter holds only the date, the media and provenance.
 | `generated_at` | ISO-8601 datetime or null | last generation |
 | `generated_hash` | string or null | edit detection, see below |
 | `generated_source_hash` | string or null | recordings and My notes already incorporated into the journal |
-| `lumitrace_format` | int | `4` (read from `lumen_format`, `bookshelf_format` or `lifelog_format` in files written under the earlier names) |
+| `lumitrace_format` | int | `5` (read from `lumen_format`, `bookshelf_format` or `lifelog_format` in files written under the earlier names) |
 | *anything else* | | preserved as is (e.g. Obsidian `tags`) |
 
-### "At a glance": older files only (`DayFacts`)
+### "At a glance" (`DayFacts`)
 
-A new write does not include this section (ADR 0057). `render` drops it. `parse` still reads it
-from files that have it, and Spectrum still indexes those files. The next system write of that
-day removes the section. The journal is where food, places, people, health, feelings and
-memories go.
+Format 5 restores this section (ADR 0059). The journal remains the quick narrative; At a glance
+is the structured source for exact food, places, people, health, feelings, memories and activity
+queries.
 
-While the section is present, the layout is
+The layout is
 **topic first** (decision 0045): each topic is a `###` section and, where it differs per person,
 holds one `#### name` block per family member. A family member named in `secrets/family.md` gets
 a block in every such section on every generated day, in the configured order and spelling, so a
@@ -143,16 +148,19 @@ words are never re-normalised or replaced; a missing heading is inserted in the 
   it (`parse_facts_section(..., source_format=2)`) and converts it: a member's food becomes
   that member's meals (snacks when no meal is known), their places and activities become day
   places and things we did marked `(Name)`, school/work becomes things we did, moments become
-  memories, and the rest keep their names. The next `render` writes format 4 and drops the section.
-* **Format 3** is the topic-first "At a glance" layout above. `parse` still reads it. The next
-  `render` writes format 4 and drops the section.
+  memories, and the rest keep their names. The next `render` writes format 5 and preserves the
+  converted facts.
+* **Format 3** is the topic-first "At a glance" layout above. `parse` still reads it and the next
+  `render` writes format 5.
+* **Format 4** omitted At a glance. `parse` reads it as empty facts. Its next Generate call runs
+  even when the source hash is unchanged and repairs the facts without replacing the journal.
 * **Format 1** (0.1.0) kept the facts in the front matter and had no facts region; `parse` reads
-  those keys as the facts and the next `render` writes format 4 without a facts section.
+  those keys as the facts and the next `render` writes format 5 with a facts section.
 
 **Edit detection across formats.** `generated_hash` covers the rendered facts, so a day written
-in format 1 or 2 cannot reproduce its old hash and looks edited after migration. To redo old
-days safely, compare the live file with its `_system/generated` snapshot: identical means the
-owner never edited it (`lumitrace-prism regenerate` does exactly this, `docs/prism.md`).
+in format 1 or 2 cannot reproduce its old hash and looks edited after migration. Generate and
+`lumitrace-prism regenerate` still update that day: they keep the title and journal words, add
+missing bullets, and merge facts. They do not replace an existing journal (`docs/prism.md`).
 
 ### Capture metadata
 
@@ -187,16 +195,18 @@ We went to the park, and Leo played on the slide for a long time.
   They are direct generation input: the first write and later safe updates use them alongside
   the recordings.
 * **Transcript** blocks are append-only; edits to their text are kept.
-* **Generated content** (title and journal; facts too, when an older file still has them) carries
-  `generated_hash`, a hash of exactly what the system wrote. A format 4 write hashes empty facts.
-  Dropping "At a glance" on a day that was not edited refreshes the hash, so that drop is not
-  itself an edit. `DayFile.is_user_edited()` compares the stored hash with the current content.
+* **Generated content** (facts, title and journal) carries `generated_hash`, a hash of exactly
+  what the system wrote. `DayFile.is_user_edited()` compares the stored hash with the current
+  content.
   * `apply_generation(...)` replaces facts/title/journal, and raises `UserEditsDetected` if the
     owner edited them (unless `force=True`). Only the first journal generation uses
     `force=True`.
   * `merge_generation_additive(...)` only adds: it inserts model-returned bullets into Summary,
     Morning, Afternoon, Evening or Thoughts. A later recording or changed My notes uses this,
     whether or not the owner edited the file. On an edited day it keeps the old hash.
+  * `merge_generation_three_way(...)` applies the complete new facts using the model's previous
+    `_system/generated-facts/` value as base. Owner additions, changes and removals win. Journal
+    bullets still use the additive section merge.
 * `generated_source_hash` covers capture ids, times, text and locations plus My notes. It prevents
   repeated Generate clicks and capture replays from adding the same source twice.
 * **Stray text** typed outside the regions (or a region whose markers were deleted) is moved into
@@ -206,12 +216,13 @@ We went to the park, and Leo played on the slide for a long time.
 
 The Prism also writes the exact rendered file to `generated_snapshot_path(d)` every time
 it writes a day file; Spectrum diffs the live file against that snapshot to record
-`edit_signals`.
+`edit_signals`. The separate generated-facts JSON stores the model-owned merge base; it must
+not replace the exact snapshot.
 
 ## Example
 
 The fenced file below is an older format 3 day (`tests/fixtures/sample-day.md`). `parse` still
-reads it. A new `render` omits "At a glance" and any translation. Format 2 is
+reads it. A new `render` preserves "At a glance" and omits any translation. Format 2 is
 `tests/fixtures/sample-day-v2.md` and format 1 is `tests/fixtures/sample-day-v1.md`.
 
 ```markdown
@@ -391,14 +402,16 @@ path = day_file_path(day_date)
 day = parse(storage.read_text(path), fallback_date=day_date) if storage.exists(path) else None
 day = merge_capture(day, capture, day_date)
 source_hash = day.compute_source_hash()
+facts_state = read_generated_facts(day_date)  # None for a format-4 day
 if day.meta.generated_at is None:
     day = apply_generation(
-        day, facts=DayFacts(), journal=journal, title=title,
+        day, facts=generated_facts, journal=journal, title=title,
         generated_source_hash=source_hash, force=True, ...
     )
-elif day.meta.generated_source_hash != source_hash:
-    day = merge_generation_additive(
-        day, facts=DayFacts(), journal_sections={"Evening": ["new bullet"]},
+elif day.meta.generated_source_hash != source_hash or facts_state is None:
+    day = merge_generation_three_way(
+        day, base_facts=facts_state.facts if facts_state else None,
+        facts=generated_facts, journal_sections={"Evening": ["new bullet"]},
         generated_source_hash=source_hash, ...
     )
 else:
@@ -406,6 +419,7 @@ else:
 text = render(day)
 storage.write_text(path, text)
 storage.write_text(generated_snapshot_path(day_date), text)
+write_generated_facts(day_date, source_hash, generated_facts)
 ```
 
 ## Changing the format

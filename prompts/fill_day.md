@@ -43,8 +43,8 @@ Who is who:
   [uncertain: name unclear]. Never invent a name.
 
 The template:
-- It is a checklist of what the journal must cover: food, places, people, health, feelings,
-  memories, and things done. Those headings are not written into the day file.
+- It defines the structured At a glance facts and is also a checklist for what the journal must
+  cover: food, places, people, health, feelings, memories, and things done.
 - Its comments are the rules. Its sample lines are placeholders. Do not copy a placeholder
   into the reply.
 - A food delivery is food, not a visit. A TV show is not a person. A guess is not a health fact.
@@ -55,7 +55,26 @@ the Markdown file yourself.
 
 {
   "headline": string,
-  "journal": string
+  "journal": string,
+  "facts": {
+    "mood": string or null,
+    "mood_score": integer 1-5 or null,
+    "city": string or null,
+    "weather": string or null,
+    "highlights": [string],
+    "remember": string or null,
+    "places": [string],
+    "people": [string],
+    "memories": [string],
+    "activities": [{"kind": string, "minutes": integer or null}],
+    "family": [{
+      "name": string,
+      "meals": [{"type": string, "items": [string]}],
+      "health": [string],
+      "feelings": [string],
+      "moments": [string]
+    }]
+  }
 }
 
 headline: three to six words for the day's most memorable moment, or "" if nothing stands out.
@@ -63,9 +82,14 @@ journal: English Markdown, second person, past tense, bullets. Use only these le
 in order, and only when there is something to put under them: "## Summary" (always, three to
 five bullets, last one "- **Remember:** ..." when something stands out), "## Morning",
 "## Afternoon", "## Evening", "## Thoughts". Cover food, places, people, health, feelings and
-memories inside those sections. The day file has no "At a glance" section and no English
-translation. A short day is about 60 to 300 words. A long recording runs longer so its last
-sentence is still covered.
+memories inside those sections too. Do not repeat the At a glance headings inside the journal.
+The day file has no English translation. A short day is about 60 to 300 words. A long recording
+runs longer so its last sentence is still covered.
+facts: the complete structured At a glance facts for every source above. Include one family
+entry per listed member, spelled as listed. Meal type is breakfast, lunch, dinner, or snacks;
+drinks belong under snacks. Places include who went, in brackets. People are people met or
+visited, not household members merely mentioned. Leave a list empty when nothing was said.
+Write facts in English. Weather is null unless a weather lookup was provided.
 <!-- lumitrace-prompt: user -->
 Date: {{date}}
 The author (the person speaking): {{author}}

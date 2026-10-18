@@ -65,8 +65,8 @@ def test_edited_day_gets_section_update(
     assert day.journal.startswith("## Summary\n\nMy own words about the run.")
     assert day.journal.endswith("## Evening\n\n- You added another detail to the day.")
     assert "## Later" not in day.journal
-    assert day.facts.mood is None
-    assert day.facts.people == []
+    assert day.facts.mood == "proud"
+    assert day.facts.people == ["Maya", "Leo"]
     assert day.notes == "Private thought."
     assert day.is_user_edited()
     assert day.meta.prompt_version == "update_day"
