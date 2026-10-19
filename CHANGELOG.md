@@ -48,6 +48,12 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Prism
 
+- **Flash History delete control is a compact trash can.** The old circular recorder icon was
+  cramped and off-centre in the list; unused takes now show a filled can in a small rounded
+  square next to the status chip.
+- **Flash History has a Refresh button.** It fetches the last 7 days of captures from the Prism
+  without reloading the page (so the Home Screen app does not have to restart), sends anything
+  still waiting on this device first, and the History tab does the same fetch when you open it.
 - **Flash can discard a take the journal has not used** (ADR 0064). History shows a trash
   control on **Not in journal** (and **Journal failed**) rows. Confirming deletes the audio,
   photos, transcript and status; a take already in the journal is refused.

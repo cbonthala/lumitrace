@@ -135,7 +135,10 @@
     </div>
 
     <section class="card list" data-tab="history">
-      <div class="sec"><h2>Recent captures</h2><span class="muted">By day</span></div>
+      <div class="sec">
+        <h2>Recent captures</h2>
+        <button class="btn small" id="history-refresh" type="button" aria-label="Refresh history">Refresh</button>
+      </div>
       <div id="captures"></div>
       <p class="empty muted" id="captures-empty" hidden>Nothing yet. Record your day.</p>
     </section>

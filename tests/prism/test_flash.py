@@ -405,8 +405,29 @@ def test_history_can_discard_a_capture_not_in_the_journal(client: TestClient) ->
     assert "function discardCapture" in script
     assert 'method: "DELETE"' in script
     assert "Delete capture" in script
+    assert "item-del" in script
+    assert "TRASH_ICON" in script
+    assert "fill-rule=\"evenodd\"" in script
+    assert "M8 7l1 12h6l1-12" not in script
     assert "not in the journal yet" in script
     assert "IN_JOURNAL.has(capture.generation)" in script
+
+
+def test_history_refresh_fetches_captures_without_reloading(client: TestClient) -> None:
+    page = client.get("/flash/").text
+    script = client.get("/flash/app.js").text
+    assert 'id="history-refresh"' in page
+    assert 'aria-label="Refresh history"' in page
+    assert "function refreshHistory" in script
+    assert 'api("/captures?days=7&limit=50")' in script
+    assert "History updated." in script
+    start = script.index("function refreshHistory")
+    end = script.index("async function refreshSummary")
+    refresh = script[start:end]
+    assert "flushOutbox" in refresh
+    assert "location.reload" not in refresh
+    go = script[script.index("function go(") : script.index("function wire(")]
+    assert 'tab === "history"' in go and "refreshAll" in go
 
 
 def test_send_requires_an_explicit_filing_date(client: TestClient) -> None:

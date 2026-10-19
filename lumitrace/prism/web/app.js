@@ -1111,6 +1111,8 @@ function clockTime(iso) {
 
 let generatingDay = "";
 
+const TRASH_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M16.5 4.48v.23c1.32.08 2.62.25 3.88.51a.75.75 0 1 1-.26 1.48l-.21-.04-1 13.07A3 3 0 0 1 15.92 22H8.08a3 3 0 0 1-2.99-2.77L4.09 6.66l-.21.03a.75.75 0 1 1-.26-1.47 48.6 48.6 0 0 1 3.88-.52v-.22c0-1.57 1.21-2.9 2.82-2.95a52.7 52.7 0 0 1 3.37 0c1.6.05 2.81 1.38 2.81 2.95Zm-6.5-1.48a51.2 51.2 0 0 1 3 0c.54.02 1 .45 1 1.02v.23a49.4 49.4 0 0 0-5 0v-.23c0-.57.46-1.007 1-1.02ZM9.25 8a.75.75 0 0 0-.75.75v8.5a.75.75 0 0 0 1.5 0v-8.5A.75.75 0 0 0 9.26 8h-.01Zm5.25 0a.75.75 0 0 0-.75.75v8.5a.75.75 0 0 0 1.5 0v-8.5A.75.75 0 0 0 14.5 8Z"/></svg>';
+
 function captureRow({ kind, capturedAt, photos, local, chip, onChip, onDiscard }) {
   const row = el("div", "item");
   const [icon, title] = describe(kind, local, photos);
@@ -1126,10 +1128,10 @@ function captureRow({ kind, capturedAt, photos, local, chip, onChip, onDiscard }
   if (bits.length) meta.append(el("div", "b", bits.join(" · ")));
   row.append(meta);
   if (onDiscard) {
-    const trash = el("button", "btn iconbtn danger");
+    const trash = el("button", "btn item-del");
     trash.type = "button";
     trash.setAttribute("aria-label", "Delete capture");
-    trash.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M8 7l1 12h6l1-12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    trash.innerHTML = TRASH_ICON;
     trash.addEventListener("click", onDiscard);
     row.append(trash);
   }
@@ -1268,11 +1270,7 @@ async function renderBanner() {
     : `⏳ ${pending.length} captures saved on this device, waiting to send`;
 }
 
-async function refreshCaptures() {
-  try {
-    state.serverCaptures = await api("/captures?days=7&limit=50");
-  } catch { /* keep the last list */ }
-  await renderCaptures();
+function scheduleCapturePoll() {
   const busy = state.serverCaptures.some((c) => c.status === "queued" || c.status === "processing");
   clearTimeout(state.pollTimer);
   state.pollTimer = setTimeout(async () => {
@@ -1280,6 +1278,40 @@ async function refreshCaptures() {
     await refreshCaptures();
     if (wasBusy) refreshSummary();
   }, busy ? 4000 : 30000);
+}
+
+async function refreshCaptures() {
+  try {
+    state.serverCaptures = await api("/captures?days=7&limit=50");
+  } catch { /* keep the last list */ }
+  await renderCaptures();
+  scheduleCapturePoll();
+}
+
+async function refreshHistory() {
+  const btn = $("history-refresh");
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = "Refreshing…";
+  try {
+    await flushOutbox();
+    try {
+      state.serverCaptures = await api("/captures?days=7&limit=50");
+    } catch (err) {
+      toast(err instanceof HttpError ? err.message : "Can't reach the server.", true);
+      await renderBanner();
+      await renderCaptures();
+      return;
+    }
+    await renderBanner();
+    await renderCaptures();
+    scheduleCapturePoll();
+    refreshSummary();
+    toast("History updated.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Refresh";
+  }
 }
 
 async function refreshSummary() {
@@ -1463,6 +1495,7 @@ function go(tab) {
   document.body.dataset.tab = tab;
   window.scrollTo(0, 0);
   if (tab === "settings") refreshApps();
+  if (tab === "history") refreshAll();
 }
 
 function wire() {
@@ -1527,6 +1560,7 @@ function wire() {
     renderPlace();
     if (e.target.checked) getCoords();
   });
+  $("history-refresh").addEventListener("click", refreshHistory);
   $("apps-refresh").addEventListener("click", refreshApps);
   $("apps-sign-out-all").addEventListener("click", disconnectAllApps);
   $("clear-history").addEventListener("click", () => {

@@ -55,9 +55,10 @@ body:not([data-auth="out"]) .login { display: none; }
 h1 { margin: 2px 0 0; font-size: 26px; font-weight: 700; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 18px; }
 .capture-col { display: grid; gap: 16px; align-content: start; }
-.sec { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.sec { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
 .sec h2 { font-size: 15px; margin: 0; font-weight: 650; white-space: nowrap; }
 .sec span { font-size: 12.5px; text-align: right; }
+.sec .btn { flex: none; }
 
 /* tabs (phone): show only the current tab's sections */
 @media (max-width: 899px) {
@@ -229,6 +230,14 @@ textarea::placeholder, input::placeholder { color: #5e648a; }
 .item { display: flex; gap: 8px; align-items: center; padding: 5px 0; border-top: 1px solid var(--line); }
 .item .iconbtn { width: 36px; height: 36px; flex: none; margin-left: 0; }
 .item .iconbtn svg { width: 16px; height: 16px; }
+.btn.item-del {
+  width: 34px; height: 34px; padding: 0; margin: 0;
+  flex: none; display: grid; place-items: center;
+  border-radius: 10px; border-color: transparent;
+  background: #ff6b7a14; color: var(--err);
+}
+.btn.item-del svg { width: 18px; height: 18px; display: block; }
+.btn.item-del:hover, .btn.item-del:active { background: #ff6b7a28; }
 .day-group .item:first-of-type { border-top: 0; }
 .ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--panel2); font-size: 14px; flex: none; }
 .item .a .when { color: var(--muted); font-weight: 550; font-variant-numeric: tabular-nums; margin-right: 6px; }

@@ -61,6 +61,10 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 ## Prism (recording API)
 
+- 2026-10-19 — The Flash Home Screen app keeps a live page, so a capture from Shortcuts (or
+  another device) does not show in History until a full reload, and iOS makes that reload
+  awkward → a Refresh control on Recent captures fetches `/captures` in place, and opening the
+  History tab does the same.
 - 2026-10-19 — A take filed under the wrong day before Generate still sat in History with no
   way to remove it, and deleting only the audio would leave the transcript as source → discard
   the whole unused capture from the day file, media and status, and refuse once it is in the
