@@ -193,12 +193,22 @@ def format_capture(capture: Capture) -> str:
     head = f"### {capture.captured_at:%H:%M} · {label}"
     if capture.location:
         head += f" (location: {capture.location})"
-    return f"{head}\n\n{capture.text.strip() or '(no words)'}"
+    meta: list[str] = []
+    if capture.audio:
+        meta.append(f"audio: {capture.audio}")
+    if capture.photos:
+        meta.append("photos: " + ", ".join(capture.photos))
+    body = capture.text.strip() or "(no words)"
+    if meta:
+        body = "\n".join(meta) + "\n\n" + body
+    return f"{head}\n\n{body}"
 
 
 def format_captures(captures: Sequence[Capture]) -> str:
-    """Every non-empty transcript, in order, with nothing cut off."""
-    return "\n\n".join(format_capture(c) for c in captures if c.text.strip())
+    """Every capture that has words, audio or photos, in order, with nothing cut off."""
+    return "\n\n".join(
+        format_capture(c) for c in captures if c.text.strip() or c.audio or c.photos
+    )
 
 
 def meals_from_family(facts: DayFacts) -> list[Meal]:

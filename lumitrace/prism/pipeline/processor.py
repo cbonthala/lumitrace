@@ -15,7 +15,9 @@ Order matters for safety:
 2. Write audio, photos and the day file with the new transcript block. From here on the capture
    is saved even if the AI steps fail.
 3. When the journal is written, re-read the day file and apply the result to the *fresh* copy,
-   so an edit the owner made in the meantime is detected and kept.
+   so an edit the owner made in the meantime is detected and kept. Captures from the in-memory
+   day are merged back first: a stale Drive or Obsidian write in that window must not drop a
+   take we just saved (ADR 0065).
 """
 
 from __future__ import annotations
@@ -561,7 +563,7 @@ class CaptureProcessor:
             return "failed"
         with record.step("write_day") as step:
             fresh = self._read_day(day_date)
-            assert fresh is not None
+            fresh = day if fresh is None else self._with_known_captures(fresh, day)
             updated = self._apply(
                 fresh,
                 generated,
@@ -693,6 +695,19 @@ class CaptureProcessor:
         except Exception:
             log.warning("%s failed for capture %s", name, record.capture_id)
             return None
+
+    @staticmethod
+    def _with_known_captures(fresh: DayFile, known: DayFile) -> DayFile:
+        """Keep owner edits on ``fresh``, and put back captures ``known`` still has.
+
+        Generation re-reads the live file so an Obsidian edit during the model call is kept.
+        That same window can also write an older copy that omits a capture we just merged.
+        ``merge_capture`` is a no-op for ids that are already present.
+        """
+        day = fresh
+        for capture in known.captures:
+            day = merge_capture(day, capture, known.date)
+        return day
 
     @staticmethod
     def _apply(

@@ -81,3 +81,5 @@ Template:
 | [0062](0062-flash-talk-map-before-recording.md) | Flash shows a Format 6 talk map before the microphone starts |
 | [0063](0063-flash-requires-filing-date.md) | Flash requires an explicit filing date, including today, before Send |
 | [0064](0064-discard-unused-captures.md) | Flash can discard a capture the journal has not used |
+| [0065](0065-photo-only-captures.md) | Photo-only captures stay in the day file and are sent to fill/update |
+| [0066](0066-later-source-retitles-model-heading.md) | Later source may retitle a heading the owner has not edited |

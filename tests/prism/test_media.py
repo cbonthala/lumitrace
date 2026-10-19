@@ -16,9 +16,10 @@ import pytest
 from PIL import Image
 
 from lumitrace.config import Settings
-from lumitrace.frames.dayfile import day_file_path, parse
+from lumitrace.frames.dayfile import Capture, day_file_path, parse, render
 from lumitrace.frames.storage.local import LocalStorage
 from lumitrace.prism.pipeline.audio import compress_audio, original_ext
+from lumitrace.prism.pipeline.generate import format_captures
 from lumitrace.prism.pipeline.llm import LLMClient
 from lumitrace.prism.pipeline.photos import resize_photo
 from lumitrace.prism.pipeline.processor import CaptureProcessor, CaptureRequest, UploadedFile
@@ -211,3 +212,75 @@ def test_processor_numbers_photos_and_skips_bad_ones(
         assert max(img.size) == settings_dim
     day = parse(api_storage.read_text(day_file_path(OCT10)))
     assert day.meta.photos == ["photo-01.jpg", "photo-02.jpg", "photo-03.jpg"]
+
+
+def test_format_captures_includes_a_photo_only_note() -> None:
+    at = dt.datetime(2026, 10, 10, 15, 5, tzinfo=dt.UTC)
+    spoken = Capture(id="rec", kind="recording", captured_at=at, text="Walked with Maya.")
+    photo = Capture(id="pic", kind="note", captured_at=at, photos=["photo-01.jpg"])
+    silent = Capture(id="empty", kind="note", captured_at=at)
+    rendered = format_captures([spoken, photo, silent])
+    assert "photos: photo-01.jpg" in rendered
+    assert "Walked with Maya." in rendered
+    assert rendered.count("(no words)") == 1
+
+
+def test_photo_only_note_stays_in_the_day_file_after_generate(
+    processor: CaptureProcessor,
+    api_settings: Settings,
+    api_storage: LocalStorage,
+    fake_llm: FakeLLM,
+) -> None:
+    spoken_at = dt.datetime(2026, 10, 10, 21, 30, tzinfo=api_settings.tz)
+    spoken_path = "_system/inbox/walk/audio.m4a"
+    api_storage.write_bytes(spoken_path, b"Walked with Maya.")
+    first = processor.process(
+        CaptureRequest(
+            id="walk",
+            kind="recording",
+            received_at=spoken_at,
+            captured_at=spoken_at,
+            audio=UploadedFile(path=spoken_path, filename="Recording.m4a", size=17),
+        )
+    )
+    assert first.generation == "full"
+
+    fills = {"n": 0}
+
+    def clobber_the_new_capture(task: str) -> None:
+        if task != "fill_day":
+            return
+        fills["n"] += 1
+        if fills["n"] < 2:
+            return
+        day = parse(api_storage.read_text(day_file_path(OCT10)))
+        day.captures = [capture for capture in day.captures if capture.id != "photo-note"]
+        day.meta.photos = []
+        api_storage.write_text(day_file_path(OCT10), render(day))
+
+    fake_llm.before_reply = clobber_the_new_capture
+    at = dt.datetime(2026, 10, 10, 22, 0, tzinfo=api_settings.tz)
+    inbox = "_system/inbox/photo-note/photo-01.png"
+    api_storage.write_bytes(inbox, image_bytes())
+    result = processor.process(
+        CaptureRequest(
+            id="photo-note",
+            kind="note",
+            received_at=at,
+            captured_at=at,
+            photos=[UploadedFile(path=inbox, filename="IMG_1.png")],
+        )
+    )
+    assert result.generation == "update"
+    assert result.photos == ["photo-01.jpg"]
+    text = api_storage.read_text(day_file_path(OCT10))
+    day = parse(text)
+    assert [capture.id for capture in day.captures] == ["walk", "photo-note"]
+    assert day.meta.photos == ["photo-01.jpg"]
+    assert "![[photo-01.jpg]]" in text
+    prompt = next(
+        call[2][1]["content"]
+        for call in fake_llm.calls
+        if call[0] == "fill_day" and "photo-01.jpg" in call[2][1]["content"]
+    )
+    assert "photos: photo-01.jpg" in prompt

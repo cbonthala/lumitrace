@@ -315,6 +315,8 @@ File: `tests/prism/test_media.py`
 - Checks that iPhone HEIC photos are read and converted to JPEG (skipped when no HEIC encoder is available to make a test photo). <sub>`test_resize_reads_heic`</sub>
 - Checks that a file that is not an image is refused. <sub>`test_resize_rejects_non_images`</sub>
 - Checks that photos are numbered in order across captures of the same day (`photo-01`, then `photo-02` and `photo-03`), a broken photo is skipped with a warning, and saved photos are resized. <sub>`test_processor_numbers_photos_and_skips_bad_ones`</sub>
+- Checks that a photo-only note (no transcript text) is included when captures are formatted for fill/update, with its filename listed. <sub>`test_format_captures_includes_a_photo_only_note`</sub>
+- Checks that a photo-only note on a closed day stays in the Frame after generate, including front matter and the wiki embed, even if the live file is overwritten without that capture while the model runs, and that fill_day is shown the filename. <sub>`test_photo_only_note_stays_in_the_day_file_after_generate`</sub>
 
 ### Speech-to-text options
 

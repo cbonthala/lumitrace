@@ -61,6 +61,10 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 ## Prism (recording API)
 
+- 2026-10-19 — A photo-only Send on a closed day wrote `photo-01.jpg` and merged an eighth
+  capture, then fill_day re-read an older Frame and wrote seven captures back → merge the
+  in-memory captures into the fresh file before applying generated content, and include
+  photo-only takes in `format_captures` (ADR 0065).
 - 2026-10-19 — The Flash Home Screen app keeps a live page, so a capture from Shortcuts (or
   another device) does not show in History until a full reload, and iOS makes that reload
   awkward → a Refresh control on Recent captures fetches `/captures` in place, and opening the

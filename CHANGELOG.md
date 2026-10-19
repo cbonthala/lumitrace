@@ -48,6 +48,12 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Prism
 
+- **Later recordings may retitle a model-owned heading** (ADR 0066). Fill and update both
+  return a headline from every take. Code applies `Weekday, Month D, YYYY · headline` only when
+  the live title still matches the last model title. A heading you typed stays.
+- **Photo-only Flash Sends stay in the day file** (ADR 0065). A JPEG in the day folder is
+  listed in front matter and as `![[photo-NN.jpg]]` in the transcript even when generate
+  re-reads a stale copy of the Frame. Fill and update prompts receive those filenames.
 - **Flash History delete control is a compact trash can.** The old circular recorder icon was
   cramped and off-centre in the list; unused takes now show a filled can in a small rounded
   square next to the status chip.

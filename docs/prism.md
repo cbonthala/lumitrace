@@ -254,9 +254,13 @@ activity record.
    warning.
 5. **Save the capture:** audio (`audio_file_name()` + `unique_file_name()`, e.g.
    `2026-10-10-2130.m4a`, `2026-10-10-2130-2.m4a`) and photos go into the day folder; the day file
-   is re-read and `merge_capture` adds the transcript block; the day file and its
+   is re-read and `merge_capture` adds the transcript block (front matter `photos` and
+   `![[photo-NN.jpg]]` wiki embeds; there is no public URL). The day file and its
    `_system/generated/` snapshot are written. From here on the capture is safe even if the AI
-   steps fail (ADR 0011).
+   steps fail (ADR 0011, 0065). When generate later re-reads the live file so an owner edit is
+   kept, captures from that in-memory day are merged back first so a stale Drive copy cannot
+   drop a take that was just saved. Photo-only notes (no transcript text) are still sent to
+   fill/update as capture metadata.
 6. **Day-content timing** (`pipeline/processor.py`, `journal_schedule.py`, ADR 0046). The
    structured timeline and trackers are first written after the day closes, not on every
    recording.
