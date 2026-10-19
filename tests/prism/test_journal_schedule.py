@@ -234,8 +234,75 @@ def test_morning_run_merges_new_audio_after_generate_now(
     assert fake_llm.tasks() == ["fill_day", "fill_day"]
     second = fake_llm.calls[1][2][1]["content"]
     assert "Run with Maya." in second and "Tacos with Leo." in second
-    content = parse(api_storage.read_text(day_file_path(OCT10))).content
-    assert content.timeline.time_not_stated == ["A day with 2 entries."]
+    day = parse(api_storage.read_text(day_file_path(OCT10)))
+    assert day.content.timeline.time_not_stated == ["A day with 2 entries."]
+    assert day.title == "Saturday, October 10, 2026 · Taco day"
+
+
+def test_later_fill_retitles_from_new_recordings(
+    processor: CaptureProcessor, api_settings: Settings, api_storage: LocalStorage, fake_llm
+) -> None:
+    clock = [dt.datetime(2026, 10, 10, 15, tzinfo=api_settings.tz)]
+    processor._now_fn = lambda: clock[0]
+    fake_llm.headlines = ["Morning run", "Taco day"]
+    processor.process(make_request(api_settings, api_storage, "a", spoken="Run with Maya."))
+    assert processor.generate_day(OCT10) == "full"
+    assert parse(api_storage.read_text(day_file_path(OCT10))).title.endswith("Morning run")
+
+    processor.process(
+        make_request(api_settings, api_storage, "b", hour=22, spoken="Tacos with Leo.")
+    )
+    clock[0] = dt.datetime(2026, 10, 11, 4, 6, tzinfo=api_settings.tz)
+    assert processor.generate_pending() == [(OCT10, "update")]
+    day = parse(api_storage.read_text(day_file_path(OCT10)))
+    assert day.title == "Saturday, October 10, 2026 · Taco day"
+    assert fake_llm.tasks() == ["fill_day", "fill_day"]
+
+
+def test_later_fill_keeps_an_owner_title(
+    processor: CaptureProcessor, api_settings: Settings, api_storage: LocalStorage, fake_llm
+) -> None:
+    clock = [dt.datetime(2026, 10, 10, 15, tzinfo=api_settings.tz)]
+    processor._now_fn = lambda: clock[0]
+    fake_llm.headlines = ["Morning run", "Would replace"]
+    processor.process(make_request(api_settings, api_storage, "a", spoken="Run with Maya."))
+    assert processor.generate_day(OCT10) == "full"
+
+    def rename(day) -> None:
+        day.title = "My own title"
+
+    owner_edits(api_storage, rename)
+    processor.process(
+        make_request(api_settings, api_storage, "b", hour=16, spoken="Tacos with Leo.")
+    )
+    clock[0] = dt.datetime(2026, 10, 11, 4, 6, tzinfo=api_settings.tz)
+    assert processor.generate_pending() == [(OCT10, "update")]
+    assert parse(api_storage.read_text(day_file_path(OCT10))).title == "My own title"
+    assert fake_llm.tasks() == ["fill_day", "fill_day"]
+
+
+def test_later_update_retitles_when_only_the_timeline_was_edited(
+    processor: CaptureProcessor, api_settings: Settings, api_storage: LocalStorage, fake_llm
+) -> None:
+    clock = [dt.datetime(2026, 10, 10, 15, tzinfo=api_settings.tz)]
+    processor._now_fn = lambda: clock[0]
+    fake_llm.headlines = ["Morning run", "Taco day"]
+    processor.process(make_request(api_settings, api_storage, "a", spoken="Run with Maya."))
+    assert processor.generate_day(OCT10) == "full"
+
+    def rewrite_timeline(day) -> None:
+        day.content.timeline.time_not_stated = ["My own words about the run."]
+
+    owner_edits(api_storage, rewrite_timeline)
+    processor.process(
+        make_request(api_settings, api_storage, "b", hour=22, spoken="Tacos with Leo.")
+    )
+    clock[0] = dt.datetime(2026, 10, 11, 4, 6, tzinfo=api_settings.tz)
+    assert processor.generate_pending() == [(OCT10, "update")]
+    day = parse(api_storage.read_text(day_file_path(OCT10)))
+    assert day.title == "Saturday, October 10, 2026 · Taco day"
+    assert "My own words about the run." in day.content.timeline.time_not_stated
+    assert fake_llm.tasks() == ["fill_day", "update_day"]
 
 
 def test_scheduler_stops_while_it_is_waiting(processor: CaptureProcessor) -> None:

@@ -9,7 +9,7 @@ folder. Edit the file. Git keeps the history. Code: `lumitrace/prism/pipeline/pr
 ```
 prompts/
   fill_day.md        first write: headline, timeline and complete trackers
-  update_day.md      exact timeline patches plus complete structured state
+  update_day.md      headline, exact timeline patches plus complete structured state
   day-template.md    the Format 6 Markdown shape, pasted into both tasks
 ```
 
@@ -61,8 +61,9 @@ transcript or note text. There is no English translation. `keyterms` is the spee
 * `{{captures}}` is the full transcript of every recording. Nothing is cut before it is sent.
   The fill-day call logs that length and the model's maximum output tokens (ADR 0056).
 * `fill_day` returns `headline`, `timeline`, and a `trackers` envelope. `update_day` returns
-  exact `replacements`, `deletions` and `additions`, plus `structured` context and trackers.
-  Neither task returns Markdown.
+  a `headline`, exact `replacements`, `deletions` and `additions`, plus `structured` context and
+  trackers. Neither task returns Markdown. Code applies a new headline only when the live title
+  still matches the last model title (ADR 0066).
 * Replies validate against `lumitrace.frames.daycontent.DayContent`. Code keeps exactly one
   tracker per configured family member, in configured order and spelling.
 * `update_day` names timeline bullets exactly and may use only Morning, Afternoon, Evening,

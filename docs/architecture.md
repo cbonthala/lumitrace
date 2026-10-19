@@ -115,9 +115,10 @@ Lumitrace/
    notes and returns a headline and complete Format 6 content. It writes one chronological
    timeline plus family, health, pregnancy, routine, interests, growth and tag trackers. Once
    content exists, clean model-owned content can be refilled from all source; an edited day uses
-   `update_day`, which returns exact timeline patches and complete structured tracker state.
-   The final write uses a three-way merge whose base is `_system/generated-facts/`; owner
-   additions, changes and removals win. A legacy base is conservatively projected to Format 6.
+   `update_day`, which returns a headline, exact timeline patches and complete structured tracker
+   state. A still-model-owned title is retitled from the new headline. The final write uses a
+   three-way merge whose base is `_system/generated-facts/`; owner additions, changes and
+   removals win. A legacy base is conservatively projected to Format 6.
 6. Write the day file, exact snapshot and generated-content base, nudge Spectrum, append an
    activity record and mark the capture `done`. `generated_source_hash` plus the facts base make
    unchanged Generate calls and capture replays no-ops.

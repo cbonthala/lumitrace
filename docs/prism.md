@@ -295,16 +295,19 @@ activity record.
    * Existing model-owned content whose source changed, or `--replace-generated` was requested,
      runs `fill_day` again from every source. Because the live content still equals the saved
      model base, the complete incoming result can replace it through the normal three-way merge.
+     A new headline retitles the day when the live heading still matches the last model title
+     (ADR 0066).
    * An owner-edited day → **update**: one `update_day` call. The model sees the complete current
-     rendered day, every recording and My notes. It returns exact timeline additions,
+     rendered day, every recording and My notes. It returns a headline, exact timeline additions,
      replacements and deletions plus complete structured context and trackers. Code applies the
      patches to the saved model timeline in replacement/deletion/addition order, then merges the
      resulting complete model content against the live day. Owner additions, changes and
-     removals win.
-   * `_system/generated-facts/` stores the complete model `DayContent` and a Format 5 facts
-     projection. An older facts/journal state or generated snapshot is conservatively projected
-     to Format 6 for the first merge. `generated_source_hash` plus the saved base prevent repeat
-     calls.
+     removals win. A still-model-owned title is retitled from the new headline; a heading the
+     owner typed stays.
+   * `_system/generated-facts/` stores the complete model `DayContent`, the last model title and
+     a Format 5 facts projection. An older facts/journal state or generated snapshot is
+     conservatively projected to Format 6 for the first merge. `generated_source_hash` plus the
+     saved base prevent repeat calls.
    * If the call fails on every model, the day keeps the transcript and `generation` is `failed`.
    * Front matter: `prompt_version` (`fill_day` or `update_day`) and `models_used`
      (`stt`, `fill_day` or `update_day`: the model that answered), merged with what was there.
@@ -339,8 +342,9 @@ models set to `fake`, the whole API runs offline.
 (code: `lumitrace/prism/regenerate.py`) runs the same action as the Flash **Generate** button
 for each stored day. The first generation fills the title and Format 6 content. A later run
 refills model-owned content or uses the update prompt and three-way merge for an owner-edited
-day. Timeline and tracker additions, changes and removals are kept at their typed fields and
-cells. Notes, transcripts, audio and photos are never touched. It writes the day file, the
+day. A still-model-owned title is retitled from the new headline. Timeline and tracker additions,
+changes and removals are kept at their typed fields and cells. Notes, transcripts, audio and
+photos are never touched. It writes the day file, the
 identical snapshot and generated-content base, like the button does. `--nudge` asks Spectrum to
 index each written day. `--replace-generated` runs the update even when the recordings are
 unchanged, so a prompt fix can rewrite model-owned content; owner edits still win. It calls the AI

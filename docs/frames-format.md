@@ -213,8 +213,9 @@ words are never re-normalised or replaced; a missing heading is inserted in the 
 
 **Edit detection across formats.** `generated_hash` covers the rendered facts, so a day written
 in format 1 or 2 cannot reproduce its old hash and looks edited after migration. Generate and
-`lumitrace-prism regenerate` still update that day: they keep the title and journal words, add
-missing bullets, and merge facts. They do not replace an existing journal (`docs/prism.md`).
+`lumitrace-prism regenerate` still update that day: they keep owner-edited title and journal
+words, add missing bullets, and merge facts. A still-model-owned heading may be retitled
+(ADR 0066). They do not replace an existing owner journal (`docs/prism.md`).
 
 ### Capture metadata
 
@@ -257,7 +258,8 @@ We went to the park, and Leo played on the slide for a long time.
     unless `force=True`. The first generation uses `force=True`.
   * `merge_content_generation_three_way(...)` merges previous model content, current live
     content and incoming complete content. Owner changes to scalars, lists, rows and cells win;
-    untouched model values follow the incoming reply.
+    untouched model values follow the incoming reply. A new title is applied only when the live
+    heading still equals `base_title`, the last heading the model wrote (ADR 0066).
   * Timeline update helpers match bullet text exactly. Replacements may move a bullet between
     Morning, Afternoon, Evening, Night and Time not stated; then deletions and additions run.
     Adding an exact duplicate is a no-op.

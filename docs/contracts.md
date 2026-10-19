@@ -106,8 +106,7 @@ Constants: `SYSTEM_DIR = "_system"`, `FORMAT_VERSION = 6`, `LEGACY_FORMAT_VERSIO
 "lumitrace_format"`, `LEGACY_FORMAT_KEYS = ("lumen_format", "bookshelf_format",
 "lifelog_format")`.
 
-Dates: `entry_date(captured_at, tz="America/Chicago", rollover_hour=4) -> date`,
-`default_title(d)`.
+Dates: `entry_date(captured_at, tz="America/Chicago", rollover_hour=4) -> date`.
 
 Models (pydantic):
 
@@ -123,9 +122,10 @@ Models (pydantic):
   schema of fact extraction. Values are normalised (one line; a comma splits meal items except
   inside parentheses) so
   render and parse agree. `FACT_FIELDS`.
-* `GeneratedFactsState`: `date`, `source_hash`, legacy `facts`, optional legacy `journal`, and
-  optional `content: DayContent`; the model-owned base for three-way merging. A state written by
-  Format 6 stores complete content plus its Format 5 facts projection.
+* `GeneratedFactsState`: `date`, `source_hash`, legacy `facts`, optional legacy `journal`,
+  optional `content: DayContent`, optional `title`; the model-owned base for three-way merging.
+  A state written by Format 6 stores complete content, the last model title (ADR 0066) and its
+  Format 5 facts projection.
 * `FrontMatter`: `date`, `audio`, `photos`, `prompt_version`, `models_used` (task → model),
   `generated_at`, `generated_hash`, `generated_source_hash`, `lumitrace_format` (read from `lumen_format`,
   `bookshelf_format` or `lifelog_format` in files written under the earlier names); unknown keys preserved. Facts are
@@ -154,9 +154,11 @@ Functions:
 * `remove_capture(day, capture_id) -> DayFile` (no-op if missing; never touches journal or notes)
 * `content_for_day(day) -> DayContent` (copy Format 6 content or conservatively project a legacy
   day)
+* `default_title(d)`, `composed_title(d, headline="")`, `resolve_generated_title(current, *,
+  incoming, base)` (ADR 0066: apply a new heading only when `current` still equals `base`)
 * `apply_content_generation(day, *, content, title=None, prompt_version=None, models_used=None,
   generated_at=None, generated_source_hash=None, force=False) -> DayFile`
-* `merge_content_generation_three_way(day, *, base_content, content, title=None,
+* `merge_content_generation_three_way(day, *, base_content, content, title=None, base_title=None,
   prompt_version=None, models_used=None, generated_at=None,
   generated_source_hash=None) -> DayFile`
 * The following facts/journal APIs remain for Format 5 compatibility:

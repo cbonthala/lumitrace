@@ -288,6 +288,27 @@ def default_title(day: dt.date) -> str:
     return f"{day:%A}, {day:%B} {day.day}, {day.year}"
 
 
+def composed_title(day: dt.date, headline: str = "") -> str:
+    """Date heading, with an optional memorable headline after a middle dot."""
+    date = default_title(day)
+    text = headline.strip()
+    return f"{date} · {text}" if text else date
+
+
+def resolve_generated_title(current: str, *, incoming: str, base: str | None) -> str:
+    """Keep an owner-edited title; otherwise take the new model headline.
+
+    ``base`` is the last title the model wrote. Missing ``base`` (older generated-facts
+    files) leaves ``current`` unchanged, so a title we cannot attribute is not replaced.
+    """
+    incoming = incoming.strip()
+    if not incoming:
+        return current
+    if base is not None and current.strip() == base.strip():
+        return incoming
+    return current
+
+
 # --- Models ---------------------------------------------------------------------------------
 
 
@@ -642,6 +663,8 @@ class GeneratedFactsState(BaseModel):
     """
     content: DayContent | None = None
     """Format 6 model-owned base. Missing on files generated with Format 5 or older."""
+    title: str | None = None
+    """Last title the model wrote. Missing on files generated before ADR 0066."""
 
 
 FACT_FIELDS: tuple[str, ...] = tuple(DayFacts.model_fields)
@@ -1790,12 +1813,17 @@ def merge_content_generation_three_way(
     base_content: DayContent | None,
     content: DayContent,
     title: str | None = None,
+    base_title: str | None = None,
     prompt_version: str | None = None,
     models_used: dict[str, str] | None = None,
     generated_at: dt.datetime | None = None,
     generated_source_hash: str | None = None,
 ) -> DayFile:
-    """Merge complete Format 6 content while retaining owner changes at field and cell level."""
+    """Merge complete Format 6 content while retaining owner changes at field and cell level.
+
+    ``title`` is the incoming model heading. It is applied only when ``base_title`` still
+    matches the live title (ADR 0066). Notes and captures are never touched.
+    """
     was_edited = day.is_user_edited()
     result = day.model_copy(deep=True)
     current = content_for_day(result)
@@ -1808,7 +1836,9 @@ def merge_content_generation_three_way(
     )
     result.facts = DayFacts.model_validate(to_legacy_facts(result.content))
     result.journal = ""
-    result.title = (title or "").strip() or result.title
+    result.title = resolve_generated_title(
+        result.title, incoming=(title or "").strip(), base=base_title
+    )
     result.meta.lumitrace_format = FORMAT_VERSION
     _set_provenance(result, prompt_version, models_used, generated_at)
     if generated_source_hash is not None:

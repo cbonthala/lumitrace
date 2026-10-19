@@ -44,6 +44,11 @@ class FakeLLM:
         self.fail_models: set[str] = set()
         self.bad_json_models: set[str] = set()
         self.before_reply: Callable[[str], None] | None = None
+        self.headline = "Taco day"
+        self.headlines: list[str] = []
+
+    def next_headline(self) -> str:
+        return self.headlines.pop(0) if self.headlines else self.headline
 
     def __call__(self, *, model: str, messages: list[dict[str, str]], **_: Any) -> Any:
         task = task_of(messages)
@@ -58,6 +63,7 @@ class FakeLLM:
         elif task == "update_day":
             content = json.dumps(
                 {
+                    "headline": self.next_headline(),
                     "additions": [
                         {
                             "section": "Evening",
@@ -75,7 +81,7 @@ class FakeLLM:
             structured = self.content(user)
             content = json.dumps(
                 {
-                    "headline": "Taco day",
+                    "headline": self.next_headline(),
                     "timeline": {
                         "highlight": structured["highlight"],
                         "context": structured["context"],

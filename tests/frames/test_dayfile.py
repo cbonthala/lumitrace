@@ -360,6 +360,44 @@ def test_format6_three_way_merge_keeps_owner_cell_list_and_timeline_edits() -> N
     assert D.parse(D.render(merged)).content == merged.content
 
 
+def test_composed_title_and_resolve_keep_an_owner_heading() -> None:
+    assert D.composed_title(DAY) == "Saturday, October 10, 2026"
+    assert D.composed_title(DAY, "Taco day") == "Saturday, October 10, 2026 · Taco day"
+    model = D.composed_title(DAY, "Taco day")
+    incoming = D.composed_title(DAY, "Birthday dinner")
+    assert D.resolve_generated_title(model, incoming=incoming, base=model) == incoming
+    kept = D.resolve_generated_title("My own title", incoming=incoming, base=model)
+    assert kept == "My own title"
+    assert D.resolve_generated_title(model, incoming=incoming, base=None) == model
+
+
+def test_three_way_merge_retitles_when_the_heading_is_still_the_models() -> None:
+    base = _format6_content()
+    generated = D.apply_content_generation(
+        D.DayFile.new(DAY), content=base, title=D.composed_title(DAY, "Taco day")
+    )
+    incoming = base.model_copy(deep=True)
+    incoming.timeline.highlight = "Birthday dinner"
+    merged = D.merge_content_generation_three_way(
+        generated,
+        base_content=base,
+        content=incoming,
+        title=D.composed_title(DAY, "Birthday dinner"),
+        base_title=generated.title,
+    )
+    assert merged.title == "Saturday, October 10, 2026 · Birthday dinner"
+
+    generated.title = "My own title"
+    kept = D.merge_content_generation_three_way(
+        generated,
+        base_content=base,
+        content=incoming,
+        title=D.composed_title(DAY, "Birthday dinner"),
+        base_title="Saturday, October 10, 2026 · Taco day",
+    )
+    assert kept.title == "My own title"
+
+
 def test_clean_format6_three_way_merge_refreshes_generated_hash() -> None:
     base = _format6_content()
     generated = D.apply_content_generation(D.DayFile.new(DAY), content=base)

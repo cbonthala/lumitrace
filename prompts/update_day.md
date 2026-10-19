@@ -435,9 +435,15 @@ Do not add unlisted keys.
 Do not emit `—`, “not recorded,” or `<br>`.
 Use empty arrays for empty collections and null for missing scalars.
 
+The `headline` is only the memorable part after the weekday date. Name the whole day from every
+recording and My notes, including later takes. Prefer a specific memory, quote, event, or
+feeling. Code applies it only when the owner has not edited the title, and prefixes
+`Saturday, October 10, 2026 · `.
+
 Return this shape:
 
 {
+  "headline": string,
   "replacements": [
     {
       "find_section": "Morning" or "Afternoon" or "Evening" or "Night" or "Time not stated",

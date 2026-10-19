@@ -45,6 +45,7 @@ from lumitrace.frames.dayfile import (
     GeneratedFactsState,
     apply_content_generation,
     audio_file_name,
+    composed_title,
     content_for_day,
     day_dir,
     day_file_path,
@@ -58,6 +59,7 @@ from lumitrace.frames.dayfile import (
     parse,
     remove_capture,
     render,
+    resolve_generated_title,
     system_path,
     unique_file_name,
 )
@@ -187,9 +189,10 @@ class CaptureProcessor:
 
         The first call fills the title and journal. A later call with new recordings or notes
         rewrites the journal when it is still the model's, and otherwise corrects contradicted
-        model sentences and adds what is missing. Facts follow the new complete reply except
-        where the owner changed them. ``replace_generated`` runs that update even when the
-        source was already processed, so a prompt fix can rewrite model-owned text.
+        model sentences and adds what is missing. A still-model-owned title is retitled from the
+        new headline. Facts follow the new complete reply except where the owner changed them.
+        ``replace_generated`` runs that update even when the source was already processed, so a
+        prompt fix can rewrite model-owned text.
         ``skipped`` means there is no source material; ``unchanged`` means it was already used.
         ``failed`` keeps the due marker so a later run tries again.
         """
@@ -564,18 +567,31 @@ class CaptureProcessor:
         with record.step("write_day") as step:
             fresh = self._read_day(day_date)
             fresh = day if fresh is None else self._with_known_captures(fresh, day)
+            before_title = fresh.title
+            base_title = self._title_base(fresh, facts_state, generated.mode)
             updated = self._apply(
                 fresh,
                 generated,
                 record.models.get("stt"),
                 base_content=base_content,
+                base_title=base_title,
                 generated_source_hash=source_hash,
             )
             self._write_day(updated)
+            incoming_title = (
+                composed_title(fresh.date, generated.headline) if generated.headline else ""
+            )
+            applied = (
+                incoming_title
+                and base_title is not None
+                and before_title.strip() == base_title.strip()
+            )
+            stored_title = incoming_title if applied else base_title
             self._write_generated_facts(
                 day_date,
                 source_hash=source_hash,
                 content=generated.content,
+                title=stored_title,
             )
             step.detail = {"mode": mode, "rewrite_content": generated.rewrite_content}
         return mode
@@ -594,6 +610,17 @@ class CaptureProcessor:
             )
         if snapshot is not None:
             return content_for_day(snapshot)
+        return None
+
+    @staticmethod
+    def _title_base(day: DayFile, facts_state: GeneratedFactsState | None, mode: str) -> str | None:
+        """Last title the model wrote, or a safe stand-in when that was never stored."""
+        if facts_state is not None and facts_state.title:
+            return facts_state.title
+        if mode == "full":
+            return default_title(day.date)
+        if not day.is_user_edited():
+            return day.title
         return None
 
     @staticmethod
@@ -668,6 +695,7 @@ class CaptureProcessor:
         return _Generated(
             mode=mode,
             content=model_content,
+            headline=addition.headline,
             models={"update_day": updated[0].model},
             prompt_labels=[updated[1].label],
         )
@@ -716,25 +744,16 @@ class CaptureProcessor:
         stt_model: str | None,
         *,
         base_content: DayContent | None,
+        base_title: str | None,
         generated_source_hash: str,
     ) -> DayFile:
         models_used = {**day.meta.models_used, **generated.models}
         if stt_model:
             models_used["stt"] = stt_model
         prompt_version = join_prompt_labels(generated.prompt_labels) or None
-        if generated.mode == "full":
-            title = default_title(day.date)
-            if generated.headline:
-                title = f"{title} · {generated.headline}"
-            if day.is_user_edited():
-                return merge_content_generation_three_way(
-                    day,
-                    base_content=base_content or DayContent(),
-                    content=generated.content,
-                    prompt_version=prompt_version,
-                    models_used=models_used,
-                    generated_source_hash=generated_source_hash,
-                )
+        incoming_title = composed_title(day.date, generated.headline) if generated.headline else ""
+        title = resolve_generated_title(day.title, incoming=incoming_title, base=base_title)
+        if generated.mode == "full" and not day.is_user_edited():
             return apply_content_generation(
                 day,
                 content=generated.content,
@@ -744,10 +763,13 @@ class CaptureProcessor:
                 generated_source_hash=generated_source_hash,
                 force=True,
             )
+        merge_base = base_content if generated.mode != "full" else (base_content or DayContent())
         return merge_content_generation_three_way(
             day,
-            base_content=base_content,
+            base_content=merge_base,
             content=generated.content,
+            title=incoming_title,
+            base_title=base_title,
             prompt_version=prompt_version,
             models_used=models_used,
             generated_source_hash=generated_source_hash,
@@ -797,12 +819,14 @@ class CaptureProcessor:
         *,
         source_hash: str,
         content: DayContent,
+        title: str | None = None,
     ) -> None:
         state = GeneratedFactsState(
             date=day_date,
             source_hash=source_hash,
             facts=DayFacts.model_validate(to_legacy_facts(content)),
             content=content,
+            title=title,
         )
         self.storage.write_text(
             generated_facts_path(day_date),

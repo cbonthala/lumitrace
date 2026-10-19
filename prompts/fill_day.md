@@ -387,6 +387,10 @@ Use `[]` for an empty collection and `null` for a missing scalar.
 Do not emit `—`, “not recorded,” or placeholder text.
 Do not include `<br>`; the renderer creates table formatting.
 
+The `headline` is only the memorable part after the weekday date. Name the whole day from every
+recording and My notes, not only the first take. Prefer a specific memory, quote, event, or
+feeling. Code prefixes `Saturday, October 10, 2026 · `.
+
 Return this shape:
 
 {

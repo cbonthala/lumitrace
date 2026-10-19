@@ -61,6 +61,10 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 ## Prism (recording API)
 
+- 2026-10-19 — A later fill already rewrote highlight and trackers from every recording, but
+  `_apply` only set the `#` title on the first `full` write, so an evening take left “Taco day”
+  on the heading → store the last model title in generated-facts and apply a new headline only
+  when the live title still matches it (ADR 0066).
 - 2026-10-19 — A photo-only Send on a closed day wrote `photo-01.jpg` and merged an eighth
   capture, then fill_day re-read an older Frame and wrote seven captures back → merge the
   in-memory captures into the fresh file before applying generated content, and include

@@ -249,7 +249,17 @@ def test_update_reply_classifies_additions_by_journal_section() -> None:
         ("Afternoon", "Walked to the park."),
         ("Time not stated", "Felt grateful."),
     ]
+    assert update.headline == ""
     assert update.content.timeline.context.places_visited[0].name == "the park"
+    named = parse_day_update(
+        {
+            "headline": "Park day",
+            "additions": [],
+            "structured": {"trackers": {}},
+        },
+        [],
+    )
+    assert named.headline == "Park day"
     with pytest.raises(ValueError):
         parse_day_update(
             {

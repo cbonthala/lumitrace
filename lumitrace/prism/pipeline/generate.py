@@ -86,8 +86,14 @@ class DayUpdate(BaseModel):
     additions: list[TimelineAddition] = Field(default_factory=list, max_length=20)
     replacements: list[TimelineReplacement] = Field(default_factory=list, max_length=20)
     deletions: list[TimelineDeletion] = Field(default_factory=list, max_length=20)
+    headline: str = ""
     content: DayContent
     facts: DayFacts = Field(default_factory=DayFacts)
+
+    @field_validator("headline", mode="before")
+    @classmethod
+    def _strip_headline(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else ("" if value is None else value)
 
 
 def parse_day_update(raw: Any, members: Sequence[str]) -> DayUpdate:
@@ -142,6 +148,7 @@ def parse_day_update(raw: Any, members: Sequence[str]) -> DayUpdate:
             "additions": additions,
             "replacements": replacements,
             "deletions": deletions,
+            "headline": raw.get("headline") or "",
             "content": content,
             "facts": facts,
         }
@@ -386,6 +393,7 @@ class Generator:
             messages=messages,
             parse=lambda raw: parse_day_update(raw, family),
             fake=lambda: {
+                "headline": "",
                 "additions": [
                     {"section": "Time not stated", "text": capture.text.strip()}
                     for capture in captures
