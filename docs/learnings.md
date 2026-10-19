@@ -61,6 +61,9 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 ## Prism (recording API)
 
+- 2026-10-19 — Format 5 generated-facts JSON has facts and journal but no `content`; constructing
+  an empty `DayFile()` as the merge base raises `ValidationError` on every production day →
+  project the previous model page with `from_legacy_day` (ADR 0061).
 - 2026-10-19 — A model-owned Format 6 rewrite still has to three-way merge if the owner typed
   while generation ran; replacing the page would drop that sentence → apply complete content
   through `merge_content_generation_three_way` whenever the live page is already edited

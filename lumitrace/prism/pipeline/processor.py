@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field
 from lumitrace.frames.daycontent import (
     DayContent,
     apply_timeline_patches,
+    from_legacy_day,
     to_legacy_facts,
 )
 from lumitrace.frames.dayfile import (
@@ -532,10 +533,10 @@ class CaptureProcessor:
         if facts_state is not None:
             if facts_state.content is not None:
                 return facts_state.content
-            legacy = DayFile()
-            legacy.facts = facts_state.facts
-            legacy.journal = facts_state.journal or ""
-            return content_for_day(legacy)
+            return from_legacy_day(
+                facts_state.facts.model_dump(mode="json"),
+                facts_state.journal or "",
+            )
         if snapshot is not None:
             return content_for_day(snapshot)
         return None

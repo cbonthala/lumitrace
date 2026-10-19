@@ -854,5 +854,6 @@ File: `tests/prism/test_regenerate.py`
 
 - Checks that bulk regenerate rewrites an older day's model-owned journal and facts, keeps the title, notes and transcripts, and a second run does nothing. <sub>`test_regenerate_updates_an_existing_format_2_day_like_generate`</sub>
 - Checks that `--replace-generated` rewrites a clean journal even when the recordings are unchanged, and still keeps a journal you edited. <sub>`test_replace_generated_rewrites_a_clean_journal_and_keeps_an_edit`</sub>
+- Checks that `--replace-generated` converts a Format 5 generated-facts file that has no `content` field into Format 6 instead of failing validation. <sub>`test_replace_generated_converts_format_5_facts_without_content`</sub>
 - Checks that bulk regenerate updates a day you edited instead of skipping it: your timeline words stay, and a new Evening bullet can be added. <sub>`test_regenerate_preserves_legacy_owner_timeline_edits`</sub>
 - Checks that a dry run lists `would update` without writing anything or calling the AI, that a day without any transcript text is skipped, and that a date range limits which days are processed. <sub>`test_regenerate_dry_run_range_and_days_without_text`</sub>

@@ -7,6 +7,9 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- **Regenerate converts Format 5 generated-facts JSON** into Format 6 without crashing: the
+  previous model base is projected from stored facts and journal instead of constructing an
+  empty `DayFile()`.
 - **Day file format 6 is one structured family day** (ADR 0061). New generations write a
   chronological timeline, day context, per-person food, health, routine, interests and growth
   tables, a pregnancy/baby tracker and tags inside one owner-editable content region. Empty

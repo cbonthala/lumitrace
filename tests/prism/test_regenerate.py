@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 
 from lumitrace.config import Settings
 from lumitrace.frames.dayfile import (
@@ -116,6 +117,42 @@ def test_replace_generated_rewrites_a_clean_journal_and_keeps_an_edit(
     day = parse(api_storage.read_text(path))
     assert "My own words stay." in day.content.timeline.time_not_stated
     assert fake_llm.tasks()[-1] == "update_day"
+
+
+def test_replace_generated_converts_format_5_facts_without_content(
+    api_settings: Settings,
+    api_storage: LocalStorage,
+    fake_llm: FakeLLM,
+    sample_day_markdown: str,
+) -> None:
+    path = _write(api_storage, DAY, sample_day_markdown, snapshot=True)
+    day = parse(sample_day_markdown)
+    api_storage.write_text(
+        generated_facts_path(DAY),
+        json.dumps(
+            {
+                "date": DAY.isoformat(),
+                "source_hash": day.compute_source_hash(),
+                "facts": day.facts.model_dump(mode="json"),
+                "journal": day.journal,
+            }
+        )
+        + "\n",
+    )
+
+    outcomes = regenerate_days(
+        api_settings,
+        api_storage,
+        _generator(api_settings, fake_llm),
+        replace_generated=True,
+    )
+
+    assert [(o.date, o.status) for o in outcomes] == [(DAY, "update")]
+    live = parse(api_storage.read_text(path))
+    assert live.meta.lumitrace_format == FORMAT_VERSION
+    assert live.content is not None
+    assert live.content.timeline.time_not_stated == ["A day with 3 entries."]
+    assert fake_llm.tasks() == ["fill_day"]
 
 
 def test_regenerate_dry_run_range_and_days_without_text(
