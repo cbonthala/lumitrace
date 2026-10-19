@@ -101,8 +101,8 @@
       </div>
       <div class="rec-idle" id="rec-idle">
         <div class="t">Log My Day</div>
-        <div class="s">Tap to record. Pause, listen, and crop before you send. Or add a photo
-          and tap Send with no recording.</div>
+          <div class="s">Tap for a day map, then talk. Pause, listen, and crop before you send.
+          Or add a photo and tap Send with no recording.</div>
       </div>
       <div class="s rec-hint" id="rec-hint" hidden>Keep the screen on. Recording stops if you lock the phone.</div>
       <div class="chips">
@@ -230,5 +230,117 @@
   </nav>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="prompt-scrim" id="prompt-scrim" hidden>
+  <div class="prompt-sheet" role="dialog" aria-modal="true" aria-labelledby="prompt-title">
+    <div class="prompt-handle" aria-hidden="true"></div>
+    <div class="prompt-head">
+      <div id="prompt-prep-head">
+        <h2 id="prompt-title">Walk through the day</h2>
+        <p>Skip blanks. Say names — the file only keeps what you speak.</p>
+      </div>
+      <div id="prompt-live-head" hidden>
+        <div class="prompt-live-row">
+          <span class="prompt-live-state" id="prompt-state">● Recording</span>
+          <span class="prompt-timer" id="prompt-timer">00:00</span>
+        </div>
+        <p>Look at a card, then say it. Tap it when you’ve covered it.</p>
+      </div>
+    </div>
+    <div class="prompt-map" id="prompt-map">
+      <div class="prompt-kicker">In order</div>
+      <div class="prompt-times" aria-label="Time of day">
+        <b data-field="timeline.morning"><i>☀️</i>Morn</b><em>→</em>
+        <b data-field="timeline.afternoon"><i>🌤</i>Aft</b><em>→</em>
+        <b data-field="timeline.evening"><i>🌙</i>Eve</b><em>→</em>
+        <b data-field="timeline.night"><i>🌚</i>Night</b>
+      </div>
+      <p class="prompt-note" data-field="timeline.time_not_stated">No time? Still say it.</p>
+
+      <div class="prompt-kicker">Day</div>
+      <div class="prompt-grid three">
+        <div class="prompt-tile" data-field="family.name"><span class="i">👤</span><b>Who</b><span>names, not “we”</span></div>
+        <div class="prompt-tile" data-field="timeline.context.places_visited"><span class="i">📍</span><b>Where</b><span>places you went</span></div>
+        <div class="prompt-tile" data-field="timeline.context.people_met"><span class="i">👋</span><b>People</b><span>who they are to you</span></div>
+        <div class="prompt-tile" data-field="timeline.context.weather"><span class="i">🌦</span><b>Weather</b><span>only if you felt it</span></div>
+        <div class="prompt-tile" data-field="timeline.context.special_occasions"><span class="i">🎉</span><b>Special</b><span>visit, fest, appt</span></div>
+        <div class="prompt-tile" data-field="timeline.context.media"><span class="i">🖼</span><b>Photos</b><span>say what’s in them</span></div>
+      </div>
+
+      <div class="prompt-kicker">Food · each person, not “we”</div>
+      <div class="prompt-grid four">
+        <div class="prompt-tile" data-field="family.food.breakfast"><span class="i">🥐</span><b>Breakfast</b><span>ate / skipped</span></div>
+        <div class="prompt-tile" data-field="family.food.lunch"><span class="i">🍛</span><b>Lunch</b><span>homemade?</span></div>
+        <div class="prompt-tile" data-field="family.food.dinner"><span class="i">🍽</span><b>Dinner</b><span>leftover?</span></div>
+        <div class="prompt-tile" data-field="family.food.snacks_drinks"><span class="i">🍪</span><b>Snacks</b><span>drinks too</span></div>
+      </div>
+      <div class="prompt-tile" data-field="family.food.food_response"><span class="i">😋</span><b>Food response</b><span>liked, refused, still hungry, asked for more</span></div>
+
+      <div class="prompt-kicker">Body · each person</div>
+      <div class="prompt-grid three">
+        <div class="prompt-tile" data-field="family.health_fitness.sleep"><span class="i">😴</span><b>Sleep</b><span>bed, wake, naps</span></div>
+        <div class="prompt-tile" data-field="family.health_fitness.exercise_movement"><span class="i">🚶</span><b>Move</b><span>what, how long</span></div>
+        <div class="prompt-tile" data-field="family.health_fitness.energy"><span class="i">⚡</span><b>Energy</b><span>1–5 + a word</span></div>
+        <div class="prompt-tile" data-field="family.health_fitness.mood"><span class="i">😊</span><b>Mood</b><span>1–5 + a word</span></div>
+        <div class="prompt-tile" data-field="family.health_fitness.body_digestion"><span class="i">🩹</span><b>Tummy</b><span>pain, bloated, well</span></div>
+        <div class="prompt-tile" data-field="family.health_fitness.symptoms_medication"><span class="i">💊</span><b>Meds</b><span>symptoms, doses</span></div>
+      </div>
+
+      <div class="prompt-kicker">Pregnancy · only if it came up</div>
+      <div class="prompt-grid three">
+        <div class="prompt-tile" data-field="pregnancy_baby.maternal_symptoms"><span class="i">🤰</span><b>Felt</b><span>nausea, tired, pain</span></div>
+        <div class="prompt-tile" data-field="pregnancy_baby.cravings_aversions"><span class="i">🍽</span><b>Cravings</b><span>wanted or avoided</span></div>
+        <div class="prompt-tile" data-field="pregnancy_baby.supplements_medication"><span class="i">💊</span><b>Vitamins</b><span>prenatal, taken</span></div>
+        <div class="prompt-tile" data-field="pregnancy_baby.rest_self_care"><span class="i">😌</span><b>Rest</b><span>nap, water, stretch</span></div>
+        <div class="prompt-tile" data-field="pregnancy_baby.baby_movement"><span class="i">🦶</span><b>Kicks</b><span>if you felt them</span></div>
+        <div class="prompt-tile" data-field="pregnancy_baby.appointment_scan"><span class="i">🩺</span><b>Scan</b><span>visit, outcome</span></div>
+        <div class="prompt-tile" data-field="pregnancy_baby.gestational_age"><span class="i">📅</span><b>Week</b><span>only if you know</span></div>
+        <div class="prompt-tile" data-field="pregnancy_baby.heartbeat_growth"><span class="i">💗</span><b>Heartbeat</b><span>numbers from a scan</span></div>
+        <div class="prompt-tile" data-field="pregnancy_baby.questions_concerns"><span class="i">❓</span><b>Concerns</b><span>to ask the doctor</span></div>
+      </div>
+
+      <div class="prompt-kicker">Day / work · each person</div>
+      <div class="prompt-grid four">
+        <div class="prompt-tile" data-field="family.daily_routine.work_daycare"><span class="i">🏫</span><b>Daycare</b><span>or work, who went</span></div>
+        <div class="prompt-tile" data-field="family.daily_routine.responsibilities_activities"><span class="i">🧹</span><b>Chores</b><span>errands, care</span></div>
+        <div class="prompt-tile" data-field="family.daily_routine.reading_learning"><span class="i">📖</span><b>Reading</b><span>book, practice</span></div>
+        <div class="prompt-tile" data-field="family.daily_routine.screen_media"><span class="i">📺</span><b>Screens</b><span>show, game</span></div>
+      </div>
+
+      <div class="prompt-kicker">Likes · each person</div>
+      <div class="prompt-grid three">
+        <div class="prompt-tile" data-field="family.interests_preferences.enjoyed"><span class="i">❤️</span><b>Enjoyed</b><span>the best bit</span></div>
+        <div class="prompt-tile" data-field="family.interests_preferences.disliked_avoided"><span class="i">🙅</span><b>Disliked</b><span>refused, avoided</span></div>
+        <div class="prompt-tile" data-field="family.interests_preferences.current_interests"><span class="i">🎯</span><b>Still into</b><span>ongoing favorite</span></div>
+      </div>
+
+      <div class="prompt-kicker">Growth · each person</div>
+      <div class="prompt-grid four">
+        <div class="prompt-tile" data-field="family.growth_learning.learned_practiced"><span class="i">🧠</span><b>Practiced</b><span>tried today</span></div>
+        <div class="prompt-tile" data-field="family.growth_learning.progress_change"><span class="i">📈</span><b>Changed</b><span>better / different</span></div>
+        <div class="prompt-tile" data-field="family.growth_learning.new_skill_behavior"><span class="i">✨</span><b>New</b><span>first time</span></div>
+        <div class="prompt-tile" data-field="family.growth_learning.words_quotes"><span class="i">💬</span><b>Quote</b><span>exact words</span></div>
+      </div>
+
+      <div class="prompt-kicker">Keep one of each</div>
+      <div class="prompt-grid two">
+        <div class="prompt-tile keep" data-field="timeline.highlight"><span class="i">⭐</span><b>Highlight</b><span>the one thing</span></div>
+        <div class="prompt-tile keep" data-field="timeline.remember"><span class="i">💭</span><b>Remember</b><span>quote, hug, face</span></div>
+      </div>
+    </div>
+    <div class="prompt-actions prep" id="prompt-prep-actions">
+      <button class="btn talk" id="prompt-talk" type="button">Start talking</button>
+    </div>
+    <div class="prompt-actions live" id="prompt-live-actions" hidden>
+      <button class="btn iconbtn danger" id="prompt-discard" type="button" aria-label="Discard recording">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M8 7l1 12h6l1-12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="btn iconbtn" id="prompt-pause" type="button" aria-label="Pause recording">
+        <svg class="only-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>
+        <svg class="only-resume" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+      </button>
+      <button class="recbtn stop prompt-stop" id="prompt-stop" type="button" aria-label="Stop recording"></button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

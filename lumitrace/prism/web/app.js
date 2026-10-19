@@ -374,6 +374,7 @@ function setRecPhase(phase) {
   $("rec-state").classList.toggle("paused", phase === "paused");
   $("rec-review").hidden = phase !== "review";
   syncCardSend();
+  syncPromptSheet();
 }
 
 function setPlayIcon(playing) {
@@ -397,12 +398,86 @@ function syncCardSend() {
   }
 }
 
+function promptSheetOpen() {
+  const scrim = $("prompt-scrim");
+  return Boolean(scrim && !scrim.hidden);
+}
+
+function promptRecording() {
+  return state.phase === "recording" || state.phase === "paused";
+}
+
+function clearPromptMarks() {
+  document.querySelectorAll("#prompt-scrim .said").forEach((el) => el.classList.remove("said"));
+}
+
+function syncPromptSheet() {
+  const live = promptRecording();
+  const open = promptSheetOpen();
+  if (open) document.body.dataset.prompt = live ? "live" : "open";
+  else delete document.body.dataset.prompt;
+  const prepHead = $("prompt-prep-head");
+  const liveHead = $("prompt-live-head");
+  const prepAct = $("prompt-prep-actions");
+  const liveAct = $("prompt-live-actions");
+  if (prepHead) prepHead.hidden = live;
+  if (liveHead) liveHead.hidden = !live;
+  if (prepAct) prepAct.hidden = live;
+  if (liveAct) liveAct.hidden = !live;
+  if ($("prompt-state")) {
+    $("prompt-state").textContent = state.phase === "paused" ? "Paused" : "● Recording";
+    $("prompt-state").classList.toggle("paused", state.phase === "paused");
+  }
+  const canPause = typeof state.recorder?.pause === "function";
+  if ($("prompt-pause")) {
+    $("prompt-pause").hidden = live && !canPause;
+    $("prompt-pause").classList.toggle("is-resume", state.phase === "paused");
+    $("prompt-pause").setAttribute(
+      "aria-label",
+      state.phase === "paused" ? "Resume recording" : "Pause recording",
+    );
+  }
+}
+
+function openPromptSheet() {
+  const scrim = $("prompt-scrim");
+  if (!scrim || state.phase !== "idle" || state.recorder || state.starting) return;
+  clearPromptMarks();
+  scrim.hidden = false;
+  document.body.dataset.prompt = "open";
+  syncPromptSheet();
+  $("prompt-talk")?.focus();
+}
+
+function closePromptSheet(force = false) {
+  const scrim = $("prompt-scrim");
+  if (!scrim) return;
+  if (!force && promptRecording()) return;
+  scrim.hidden = true;
+  delete document.body.dataset.prompt;
+  clearPromptMarks();
+}
+
+function beginRecordingFromPrompt() {
+  if (state.starting || state.phase === "review" || state.recorder) return;
+  state.starting = true;
+  startRecording().finally(() => {
+    state.starting = false;
+    syncPromptSheet();
+  });
+}
+
 function toggleRecording() {
   if (state.starting || state.phase === "review") return;
   if (!state.recorder) {
-    state.starting = true;
-    startRecording().finally(() => { state.starting = false; });
-  } else if (Date.now() - state.recording.started.getTime() >= MIN_RECORDING_MS) {
+    if ($("prompt-scrim")) openPromptSheet();
+    else {
+      state.starting = true;
+      startRecording().finally(() => { state.starting = false; });
+    }
+    return;
+  }
+  if (Date.now() - state.recording.started.getTime() >= MIN_RECORDING_MS) {
     stopRecording();
   }
 }
@@ -462,7 +537,9 @@ async function startRecording() {
   setRecPhase("recording");
   rec.timer = setInterval(() => {
     const s = Math.floor(recordedMs(rec) / 1000);
-    $("timer").textContent = `${pad(s / 60)}:${pad(s % 60)}`;
+    const label = `${pad(s / 60)}:${pad(s % 60)}`;
+    $("timer").textContent = label;
+    if ($("prompt-timer")) $("prompt-timer").textContent = label;
   }, 250);
   try {
     rec.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -483,6 +560,7 @@ function stopTracks(rec) {
   rec.audioCtx?.close().catch(() => {});
   rec.wakeLock?.release().catch(() => {});
   $("timer").textContent = "00:00";
+  if ($("prompt-timer")) $("prompt-timer").textContent = "00:00";
 }
 
 function finishRecording() {
@@ -510,6 +588,9 @@ async function stopRecording() {
   unlock?.resume?.();
   $("rec-btn").disabled = true;
   $("pause-btn").disabled = true;
+  if ($("prompt-stop")) $("prompt-stop").disabled = true;
+  if ($("prompt-pause")) $("prompt-pause").disabled = true;
+  if ($("prompt-discard")) $("prompt-discard").disabled = true;
   try {
     const blob = await finishRecording();
     const seconds = Math.round(recordedMs(rec) / 1000);
@@ -517,14 +598,19 @@ async function stopRecording() {
     state.recording = null;
     if (!blob.size) {
       setRecPhase("idle");
+      closePromptSheet();
       toast("Nothing was recorded.", true);
       unlock?.close?.().catch(() => {});
       return;
     }
+    closePromptSheet(true);
     await openReview(blob, rec, seconds, unlock);
   } finally {
     $("rec-btn").disabled = false;
     $("pause-btn").disabled = false;
+    if ($("prompt-stop")) $("prompt-stop").disabled = false;
+    if ($("prompt-pause")) $("prompt-pause").disabled = false;
+    if ($("prompt-discard")) $("prompt-discard").disabled = false;
   }
 }
 
@@ -904,6 +990,7 @@ async function discardRecording() {
   state.recorder = null;
   state.recording = null;
   setRecPhase("idle");
+  closePromptSheet();
   toast("Recording discarded.");
 }
 
@@ -1270,6 +1357,11 @@ async function logout() {
 // --- wiring --------------------------------------------------------------------------------
 
 function go(tab) {
+  if (promptRecording()) {
+    if (tab !== "capture") toast("Stop or discard the recording first.", true);
+    return;
+  }
+  closePromptSheet();
   document.body.dataset.tab = tab;
   window.scrollTo(0, 0);
   if (tab === "settings") refreshApps();
@@ -1282,6 +1374,24 @@ function wire() {
   document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => go(b.dataset.go)));
 
   $("rec-btn").addEventListener("click", toggleRecording);
+  $("prompt-talk")?.addEventListener("click", beginRecordingFromPrompt);
+  $("prompt-pause")?.addEventListener("click", togglePause);
+  $("prompt-stop")?.addEventListener("click", toggleRecording);
+  $("prompt-discard")?.addEventListener("click", discardRecording);
+  $("prompt-map")?.addEventListener("click", (e) => {
+    if (!promptRecording()) return;
+    const tile = e.target.closest("[data-field]");
+    if (tile) tile.classList.toggle("said");
+  });
+  $("prompt-scrim")?.addEventListener("click", (e) => {
+    if (e.target === $("prompt-scrim") && !promptRecording()) closePromptSheet();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && promptSheetOpen() && !promptRecording()) {
+      e.preventDefault();
+      closePromptSheet();
+    }
+  });
   $("pause-btn").addEventListener("click", togglePause);
   $("discard-btn").addEventListener("click", discardRecording);
   $("play-btn").addEventListener("click", togglePlayback);

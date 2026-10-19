@@ -4,15 +4,19 @@ and the weekly summary. All data is fictional."""
 from __future__ import annotations
 
 import datetime as dt
+import re
 import time
 from collections.abc import Iterator
+from types import NoneType, UnionType
+from typing import Annotated, Union, get_args, get_origin
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pydantic import SecretStr
+from pydantic import BaseModel, SecretStr
 
 from lumitrace.config import Settings
+from lumitrace.frames import daycontent as dc
 from lumitrace.frames.dayfile import (
     Capture,
     DayFile,
@@ -34,6 +38,45 @@ from tests.prism.conftest import AUTH, wait_idle
 USERNAME = "sam"
 PASSWORD = "correct horse battery"
 TZ = dt.timezone(dt.timedelta(hours=-5))
+
+# Speakable Format 6 fields. Tags are derived; pregnant_person comes from the family file.
+_PROMPT_SKIP = frozenset({"tags", "pregnancy_baby.pregnant_person"})
+_PROMPT_ATOMIC = {dc.Meal, dc.Rating, dc.PlaceContext, dc.PersonContext, dc.ExerciseMovement}
+
+
+def _unwrap_annotation(annotation: object) -> object:
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+    if origin is Annotated:
+        return _unwrap_annotation(args[0])
+    if origin in (Union, UnionType):
+        useful = [item for item in args if item is not NoneType]
+        return _unwrap_annotation(useful[0]) if len(useful) == 1 else annotation
+    if origin is list and args:
+        return _unwrap_annotation(args[0])
+    return annotation
+
+
+def day_file_prompt_fields() -> set[str]:
+    """Every DayContent path the record sheet should prompt for, except derived skips."""
+
+    def paths(model: type[BaseModel], prefix: str = "") -> list[str]:
+        found: list[str] = []
+        for name, info in model.model_fields.items():
+            path = f"{prefix}.{name}" if prefix else name
+            inner = _unwrap_annotation(info.annotation)
+            nested = (
+                isinstance(inner, type)
+                and issubclass(inner, BaseModel)
+                and inner not in _PROMPT_ATOMIC
+            )
+            if nested:
+                found.extend(paths(inner, path))
+            else:
+                found.append(path)
+        return found
+
+    return {path for path in paths(dc.DayContent) if path not in _PROMPT_SKIP}
 
 
 @pytest.fixture
@@ -313,6 +356,30 @@ def test_generate_journal_writes_the_day_from_saved_recordings(
     empty = flash_client.post("/journal", json={"date": "2026-10-01"}, headers=headers)
     assert empty.status_code == 200 and empty.json()["status"] == "skipped"
     assert "Nothing to write" in empty.json()["message"]
+
+
+def test_record_prompt_covers_every_day_file_field(client: TestClient) -> None:
+    page = client.get("/flash/").text
+    script = client.get("/flash/app.js").text
+    found = set(re.findall(r'data-field="([^"]+)"', page))
+    expected = day_file_prompt_fields()
+    missing = sorted(expected - found)
+    extra = sorted(found - expected)
+    assert not missing, f"prompt sheet missing day-file fields: {missing}"
+    assert not extra, f"prompt sheet has unknown fields: {extra}"
+    assert 'id="prompt-scrim"' in page and 'id="prompt-talk"' in page
+    assert 'id="prompt-stop"' in page and 'id="prompt-live-head"' in page
+    assert 'id="prompt-pause"' in page and 'id="prompt-discard"' in page
+    assert 'id="prompt-map"' in page
+    assert "Skip, just record" not in page
+    toggle = script[script.index("function toggleRecording") : script.index("function togglePause")]
+    assert "openPromptSheet" in toggle
+    start = script[
+        script.index("function beginRecordingFromPrompt") : script.index("function toggleRecording")
+    ]
+    assert "closePromptSheet" not in start
+    assert "classList.toggle(\"said\")" in script
+    assert "function startRecording" in script
 
 
 def test_recording_is_reviewed_before_it_is_sent(client: TestClient) -> None:

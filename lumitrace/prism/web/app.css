@@ -162,9 +162,11 @@ body[data-tab="settings"] .tabs [data-go="settings"] { color: var(--text); }
 }
 .iconbtn svg { width: 22px; height: 22px; display: block; }
 .iconbtn .only-resume, .iconbtn .only-pause { display: none; }
-#pause-btn .only-pause, #play-btn .only-play { display: block; }
-#pause-btn.is-resume .only-pause, #play-btn.is-playing .only-play { display: none; }
-#pause-btn.is-resume .only-resume, #play-btn.is-playing .only-pause { display: block; }
+#pause-btn .only-pause, #prompt-pause .only-pause, #play-btn .only-play { display: block; }
+#pause-btn.is-resume .only-pause, #prompt-pause.is-resume .only-pause,
+#play-btn.is-playing .only-play { display: none; }
+#pause-btn.is-resume .only-resume, #prompt-pause.is-resume .only-resume,
+#play-btn.is-playing .only-pause { display: block; }
 .iconbtn.danger { color: var(--err); }
 .rec-foot { width: 100%; display: flex; justify-content: flex-end; }
 .rec-foot .btn { margin-left: 0; }
@@ -268,6 +270,90 @@ textarea::placeholder, input::placeholder { color: #5e648a; }
   z-index: 10;
 }
 .toast.err { border-color: #ff6b7a66; }
+
+/* talk map: Format 6 day-file fields before and during a Log My Day recording */
+body[data-prompt="open"], body[data-prompt="live"] { overflow: hidden; }
+.prompt-live-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+}
+.prompt-live-state { color: var(--err); font-size: 13px; font-weight: 650; }
+.prompt-live-state.paused { color: var(--warn); }
+.prompt-timer { font-variant-numeric: tabular-nums; font-size: 28px; font-weight: 300; letter-spacing: 1px; }
+body[data-prompt="live"] [data-field] { cursor: pointer; }
+body[data-prompt="live"] [data-field].said {
+  opacity: .42; border-color: #3ddc9766;
+}
+.prompt-scrim {
+  position: fixed; inset: 0; background: #05060ccc; z-index: 20;
+  display: grid; align-items: end;
+}
+.prompt-scrim[hidden] { display: none; }
+.prompt-sheet {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 22px 22px 0 0; max-height: min(92dvh, 820px);
+  display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto;
+  box-shadow: 0 -24px 60px #000a;
+}
+.prompt-handle {
+  width: 42px; height: 4px; border-radius: 999px; background: #3a4066;
+  margin: 8px auto 2px;
+}
+.prompt-head { padding: 2px 16px 8px; }
+.prompt-head h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.prompt-head p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
+.prompt-map {
+  min-height: 0; overflow: auto; padding: 0 12px 10px;
+  display: grid; gap: 7px; -webkit-overflow-scrolling: touch;
+}
+.prompt-kicker {
+  margin: 4px 4px 0; font-size: 10px; font-weight: 700; letter-spacing: 1.05px;
+  text-transform: uppercase; color: var(--accent);
+}
+.prompt-note { margin: 0 4px; font-size: 11.5px; color: var(--muted); }
+.prompt-times {
+  display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
+  align-items: center; gap: 4px; padding: 8px 6px;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 14px;
+}
+.prompt-times b {
+  display: grid; justify-items: center; gap: 1px; font-size: 11.5px; font-weight: 650;
+  text-align: center;
+}
+.prompt-times b i, .prompt-tile .i { font-style: normal; font-size: 15px; line-height: 1; }
+.prompt-times em { color: #3a4066; font-style: normal; font-size: 12px; text-align: center; }
+.prompt-grid { display: grid; gap: 6px; }
+.prompt-grid.two { grid-template-columns: 1fr 1fr; }
+.prompt-grid.three { grid-template-columns: repeat(3, 1fr); }
+.prompt-grid.four { grid-template-columns: repeat(4, 1fr); }
+.prompt-tile {
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 14px;
+  padding: 8px 8px 7px; display: grid; gap: 1px; min-width: 0;
+}
+.prompt-tile b { font-size: 12.5px; font-weight: 650; line-height: 1.2; }
+.prompt-tile span:not(.i) { font-size: 10.5px; color: var(--muted); line-height: 1.25; }
+.prompt-tile.keep { border-color: #8b7cff55; }
+.prompt-actions {
+  display: grid; gap: 8px;
+  padding: 10px 16px calc(14px + var(--safe-bottom));
+  border-top: 1px solid var(--line); background: var(--panel);
+}
+.prompt-actions.prep { grid-template-columns: 1fr; }
+.prompt-actions.live {
+  display: flex; justify-content: center; align-items: center; gap: 18px;
+}
+.prompt-actions .btn { margin: 0; justify-content: center; }
+.prompt-actions .btn.talk { background: #e5384c; border-color: #e5384c; color: #fff; }
+.prompt-stop {
+  width: 56px; height: 56px; flex: none;
+  box-shadow: 0 0 0 6px #2a1420, 0 8px 24px #e5384c55;
+}
+.prompt-stop::after { width: 18px; height: 18px; border-radius: 5px; }
+@media (min-width: 600px) {
+  .prompt-scrim { align-items: center; justify-items: center; padding: 24px; }
+  .prompt-sheet {
+    width: min(440px, 100%); border-radius: 22px; max-height: min(86dvh, 760px);
+  }
+}
 
 /* phone on its side: little height, so shrink the chrome and the record button */
 @media (orientation: landscape) and (max-height: 520px) and (max-width: 899px) {

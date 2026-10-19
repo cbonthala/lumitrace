@@ -61,6 +61,9 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 ## Prism (recording API)
 
+- 2026-10-19 — A spoken Log My Day take only fills Format 6 cells the owner actually says, and a
+  bullet checklist is too long to read at the microphone → a glanceable tile map stays on screen
+  while talking, one card per speakable day-file field, opened by the red button (ADR 0062).
 - 2026-10-19 — Sarvam returns HTTP 400 if any keyterm contains a comma or semicolon, including
   a long family-file name → split those separators into separate array items for STT only.
 - 2026-10-19 — LiteLLM `num_retries` imports tenacity at call time; the image did not install it,

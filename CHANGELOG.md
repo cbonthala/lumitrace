@@ -48,6 +48,10 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Prism
 
+- **Flash opens a talk map before recording** (ADR 0062). The red button shows glanceable
+  tiles for every speakable Format 6 day-file field. **Start talking** starts the microphone;
+  the same cards stay on screen while you talk, with Discard, Pause/Resume and Stop icons on
+  the sheet. Tap a card once you have covered it.
 - **Sarvam keyterms split on commas and semicolons.** A family name or extra keyterm that
   contains either separator is sent as separate array items. Sarvam 400s a combined string, which
   left a recording failed in Flash.
