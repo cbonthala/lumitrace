@@ -31,7 +31,7 @@ AUTH = {"Authorization": f"Bearer {TOKEN}"}
 
 def task_of(messages: list[dict[str, str]]) -> str:
     system = messages[0]["content"]
-    if "update an existing day" in system:
+    if "update an existing" in system:
         return "update_day"
     return "fill_day"
 
@@ -64,41 +64,71 @@ class FakeLLM:
                             "text": "You added another detail to the day.",
                         }
                     ],
-                    "facts": self.facts(user),
+                    "replacements": [],
+                    "deletions": [],
+                    "structured": self.content(user),
                 }
             )
         else:
             spoken = user.split("Journal entries for this day", 1)[-1]
             entries = spoken.count("· Log My Day") + spoken.count("· Quick Note")
+            structured = self.content(user)
             content = json.dumps(
                 {
                     "headline": "Taco day",
-                    "journal": f"## Summary\n\nA day with {entries} entries.",
-                    "facts": self.facts(user),
+                    "timeline": {
+                        "highlight": structured["highlight"],
+                        "context": structured["context"],
+                        "time_not_stated": [f"A day with {entries} entries."],
+                        "remember": structured["remember"],
+                    },
+                    "trackers": structured["trackers"],
                 }
             )
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
 
     @staticmethod
-    def facts(user: str) -> dict[str, Any]:
+    def content(user: str) -> dict[str, Any]:
         marker = (
             "Journal entries for this day"
             if "Journal entries for this day" in user
             else "Every recording for this date"
         )
         entries = user.split(marker, 1)[-1]
-        facts: dict[str, Any] = {
-            "mood": "content",
-            "mood_score": 4,
-            "people": [n for n in ("Maya", "Leo", "Priya") if n in entries],
-            "meals": [],
-            "activities": [],
+        lowered = entries.casefold()
+        people = [
+            {"name": name, "family_members": []}
+            for name in ("Maya", "Leo", "Priya")
+            if name in entries
+        ]
+        family: list[dict[str, Any]] = []
+        sam: dict[str, Any] = {"name": "Sam"}
+        if "tacos" in lowered:
+            sam["food"] = {
+                "lunch": {"status": "consumed", "items": ["fish tacos"]},
+            }
+        if "run" in lowered:
+            sam["health_fitness"] = {
+                "exercise_movement": [{"activity": "run", "minutes": 40}],
+            }
+        family.append(sam)
+        return {
+            "highlight": None,
+            "context": {"people_met": people},
+            "remember": None,
+            "trackers": {
+                "family": family,
+                "pregnancy_baby": {},
+                "tags": ["content"],
+            },
         }
-        if "tacos" in entries:
-            facts["meals"].append({"type": "lunch", "items": ["fish tacos"]})
-        if "run" in entries:
-            facts["activities"].append({"kind": "run", "minutes": 40})
-        return facts
+
+    @staticmethod
+    def facts(user: str) -> dict[str, Any]:
+        """Legacy helper retained for tests that exercise Format 5 parser compatibility."""
+        content = FakeLLM.content(user)
+        people = content["context"]["people_met"]
+        return {"mood": "content", "mood_score": 4, "people": people}
 
     def tasks(self) -> list[str]:
         return [c[0] for c in self.calls]

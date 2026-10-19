@@ -4,7 +4,14 @@ import datetime as dt
 import json
 import sqlite3
 
-from lumitrace.frames.dayfile import day_file_path, parse, render, system_path
+from lumitrace.frames import daycontent as C
+from lumitrace.frames.dayfile import (
+    apply_content_generation,
+    day_file_path,
+    parse,
+    render,
+    system_path,
+)
 from lumitrace.frames.storage.local import LocalStorage
 from lumitrace.index.schema import META_SYNC_TOKEN, get_meta
 from lumitrace.spectrum.core import META_RETRY_PATHS, Indexer
@@ -85,6 +92,103 @@ def test_first_sync_indexes_day_files(
     file_row = conn.execute("SELECT * FROM files WHERE path = ?", (day_file_path(D1),)).fetchone()
     assert file_row["kind"] == "day" and file_row["date"] == "2026-10-10"
     assert len(file_row["content_hash"]) == 64
+
+
+def test_sync_indexes_all_format6_content_scopes(indexer: Indexer, storage: LocalStorage) -> None:
+    content = C.DayContent(
+        timeline=C.Timeline(
+            highlight="A full Format 6 day",
+            context=C.DayContext(
+                weather="bright",
+                places_visited=[C.PlaceContext(name="River Park", family_members=["Maya"])],
+                people_met=[
+                    C.PersonContext(
+                        name="Dr. Rao",
+                        relationship="pediatrician",
+                        context="annual visit",
+                        family_members=["Maya"],
+                    )
+                ],
+            ),
+            morning=["Packed lunch"],
+            evening=["Watched fireflies"],
+        ),
+        family=[
+            C.FamilyTracker(
+                name="Maya",
+                food=C.FoodTracker(
+                    breakfast=C.Meal(status="consumed", items=["cardamom pancakes"]),
+                    lunch=C.Meal(status="skipped"),
+                ),
+                health_fitness=C.HealthFitness(
+                    exercise_movement=[C.ExerciseMovement(activity="bicycle ride", minutes=25)],
+                    energy=C.Rating(score=4, description="steady"),
+                ),
+                growth_learning=C.GrowthLearning(
+                    new_skill_behavior=["rode without training wheels"]
+                ),
+            )
+        ],
+        pregnancy_baby=C.PregnancyBaby(
+            pregnant_person="Sam",
+            gestational_age="18 weeks",
+            baby_movement=["two strong kicks"],
+        ),
+        tags=["family-adventure"],
+    )
+    day = apply_content_generation(make_day(D1), content=content, force=True)
+    write_day(storage, day)
+
+    result = indexer.sync()
+
+    assert result.indexed == 1
+    rows = indexer.conn.execute(
+        "SELECT scope, person, category, field, text, number, status, details_json "
+        "FROM content_facts WHERE date = ? ORDER BY position",
+        (D1.isoformat(),),
+    ).fetchall()
+    values = [tuple(row) for row in rows]
+    assert (
+        "family",
+        "Maya",
+        "food",
+        "breakfast",
+        "cardamom pancakes",
+        None,
+        "consumed",
+        '{"items": ["cardamom pancakes"], "status": "consumed"}',
+    ) in values
+    assert any(
+        row["field"] == "lunch" and row["status"] == "skipped" and row["text"] is None
+        for row in rows
+    )
+    assert any(
+        row["field"] == "energy" and row["number"] == 4 and row["text"] == "steady" for row in rows
+    )
+    assert any(row["scope"] == "pregnancy" and row["text"] == "two strong kicks" for row in rows)
+    assert any(row["scope"] == "tags" and row["text"] == "family-adventure" for row in rows)
+    person = next(row for row in rows if row["field"] == "people_met")
+    assert json.loads(person["details_json"])["context"] == "annual visit"
+
+    assert _fts_dates(indexer.conn, "bicycle") == {D1.isoformat()}
+    sections = {
+        row[0]
+        for row in indexer.conn.execute(
+            "SELECT DISTINCT section FROM passages WHERE date = ?", (D1.isoformat(),)
+        )
+    }
+    assert "content" in sections
+    assert "facts" not in sections
+    assert (
+        "Maya",
+        "breakfast",
+        "cardamom pancakes",
+    ) in [
+        tuple(row)
+        for row in indexer.conn.execute(
+            "SELECT person, meal_type, item FROM meals WHERE date = ?", (D1.isoformat(),)
+        )
+    ]
 
 
 def test_non_day_files_are_ignored(

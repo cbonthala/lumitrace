@@ -1,8 +1,10 @@
-# Frames: day file format (format version 5)
+# Frames: day file format (format version 6)
 
 The Frames are the day files: one Markdown file per day, the source of truth. Code:
-`lumitrace/frames/dayfile.py` (format) and `lumitrace/frames/storage/` (where they live). Always use
-`parse` / `render` and the merge helpers; never edit day files with string manipulation.
+`lumitrace/frames/dayfile.py` (file envelope and compatibility) and
+`lumitrace/frames/daycontent.py` (Format 6 content), plus `lumitrace/frames/storage/` (where they
+live). Always use `parse` / `render` and the merge helpers; never edit day files with string
+manipulation. Decision: ADR 0061.
 
 ## Location and names
 
@@ -31,15 +33,17 @@ All paths are relative to the `Lumitrace` root folder.
 
 # Title                      DayFile.title (default: "Saturday, October 10, 2026")
 
-## At a glance
-<!-- lumitrace:facts:start (...) -->      DayFile.facts: structured, owner-editable facts
-### Highlight / Food / Places / ...       fixed topic-first layout
-<!-- lumitrace:facts:end -->
-
-<!-- lumitrace:journal:start (...) -->    DayFile.journal: generated Markdown, "##" sections
-## Summary                                Summary, Morning, Afternoon, Evening, Thoughts
-...                                       (fixed names and order)
-<!-- lumitrace:journal:end -->
+<!-- lumitrace:content:start (...) -->    DayFile.content: structured, owner-editable content
+## Day timeline
+### Highlight / Day context
+### Morning / Afternoon / Evening / Night
+### Time not stated                       only when it has entries
+- **Remember:** ...
+## Family trackers
+### Food / Health and fitness / Pregnancy and baby
+### Daily routine / Interests and preferences / Growth and learning
+## Tags
+<!-- lumitrace:content:end -->
 
 ## My notes
 
@@ -60,7 +64,7 @@ raw transcript or note text               Telugu, as spoken. No translation bloc
 ```
 
 Markers are HTML comments, invisible in Obsidian's reading view. Parsing matches the marker name
-(`lumitrace:journal:start`, etc.), so the explanatory text inside the comment can change. Files
+(`lumitrace:content:start`, etc.), so the explanatory text inside the comment can change. Files
 written under the project's earlier names use `lifelog:` (LifeLog, 0.1.0), `bookshelf:`
 (Bookshelf) or `lumen:` (Lumen) markers and a `lifelog_format`, `bookshelf_format` or
 `lumen_format` key; `parse` still reads them and the next `render` writes the `lumitrace:` names
@@ -79,14 +83,59 @@ The front matter holds only the date, the media and provenance.
 | `generated_at` | ISO-8601 datetime or null | last generation |
 | `generated_hash` | string or null | edit detection, see below |
 | `generated_source_hash` | string or null | recordings and My notes already incorporated into the journal |
-| `lumitrace_format` | int | `5` (read from `lumen_format`, `bookshelf_format` or `lifelog_format` in files written under the earlier names) |
+| `lumitrace_format` | int | `6` for a Format 6 content region; a parsed legacy day remains `5` until generation migrates it |
 | *anything else* | | preserved as is (e.g. Obsidian `tags`) |
 
-### "At a glance" (`DayFacts`)
+### Format 6 content (`DayContent`)
 
-Format 5 restores this section (ADR 0059). The journal remains the quick narrative; At a glance
-is the structured source for exact food, places, people, health, feelings, memories and activity
-queries.
+`DayContent` is the generated source of truth for a new day. The old `DayFacts` and journal
+fields remain on `DayFile` as compatibility projections; they are not separately rendered in a
+Format 6 file.
+
+The timeline has:
+
+* one optional `highlight`;
+* `DayContext`: optional weather, places visited and people met (each may name the participating
+  family members), special occasions and media;
+* ordered `morning`, `afternoon`, `evening`, `night` and `time_not_stated` lists;
+* one optional `remember` detail.
+
+`Time not stated` is omitted when empty. Every other time section is rendered, using a single
+`—` bullet when empty. `Remember` follows the time sections.
+
+The family trackers have one row per `FamilyTracker.name`:
+
+| Section | Stored fields |
+|---|---|
+| Food | breakfast, lunch, dinner, snacks/drinks and food response |
+| Health and fitness | sleep, exercise/movement with optional minutes, energy and mood ratings, body/digestion, symptoms/medication |
+| Daily routine | work/daycare, responsibilities/activities, reading/learning, screen/media |
+| Interests and preferences | enjoyed, disliked/avoided, current interests |
+| Growth and learning | learned/practiced, progress/change, new skill/behavior, words/quotes |
+
+The pregnancy table is day-level: pregnant person, gestational age, maternal symptoms,
+cravings/aversions, supplements/medication, rest/self-care, baby movement, appointment/scan,
+heartbeat/growth and questions/concerns. Tags are stored without a leading `#` and rendered with
+one.
+
+**Canonical Markdown.** Empty table values render as `—`. Multiple values in one cell use
+`<br>`. A meal keeps the distinction between `not_recorded`, `skipped` and `consumed`;
+`Skipped` and `Consumed` are written explicitly when needed. Ratings render as `4/5`,
+`4/5 · energetic`, or just the description. Pipes and backslashes in table cells are escaped,
+and `parse(render(content)) == content`. The parser reads the canonical headings and table
+shape emitted by `render`; it is not a general Markdown-table importer.
+
+### Format 5 compatibility (`DayFacts` and journal)
+
+Format 5 stores an `## At a glance` facts region and a separate journal (ADR 0059). `parse`
+continues to read it. `content_for_day` conservatively projects those facts and journal sections
+to `DayContent` when generation needs to migrate the day; ordinary parse/render keeps Format 5.
+
+Format 6 also computes a best-effort `DayFacts` projection so existing fact tables and callers
+keep working. It includes the highlight, remember value, weather, places, people, special
+occasions, consumed or skipped meals, selected health/growth facts and routine activities. It
+does not represent every Format 6 field or the full timeline, so Spectrum separately indexes
+canonical content and the Lens returns it directly.
 
 The layout is
 **topic first** (decision 0045): each topic is a `###` section and, where it differs per person,
@@ -130,9 +179,10 @@ sections. A food line without a known label counts as snacks. Lines that fit now
 into `My notes` on the next system write, so nothing is lost. Hand edits are rewritten to the
 standard names and lines on the next system write.
 
-### The journal
+### The Format 5 journal
 
-A journal written by the Prism only uses these `##` headings, in this order, each only when it
+The separate journal exists only in Format 5 and older files. It uses these `##` headings, in
+this order, each only when it
 has text: `Summary`, `Morning`, `Afternoon`, `Evening`, `Thoughts` (`JOURNAL_SECTIONS`).
 `apply_generation` enforces it with `normalize_journal`: text before the first heading goes to
 Summary, repeated sections are merged, `Night`/`Tonight` count as Evening and
@@ -143,19 +193,23 @@ words are never re-normalised or replaced; a missing heading is inserted in the 
 
 ### Older formats
 
+* **Format 6** is the current content-region layout described above.
+* **Format 5** has the topic-first At a glance section plus a separate journal. It stays Format
+  5 when parsed and rendered; the next successful content generation migrates it.
 * **Format 2** (decision 0042 era) had `###` sections Food (five meal lines), Places, People,
   Activities, Family and Highlights, with a seven-line `####` block per member. `parse` reads
   it (`parse_facts_section(..., source_format=2)`) and converts it: a member's food becomes
   that member's meals (snacks when no meal is known), their places and activities become day
   places and things we did marked `(Name)`, school/work becomes things we did, moments become
-  memories, and the rest keep their names. The next `render` writes format 5 and preserves the
-  converted facts.
+  memories, and the rest keep their names. A render without generation preserves the legacy
+  compatibility layout; generation can migrate it to Format 6.
 * **Format 3** is the topic-first "At a glance" layout above. `parse` still reads it and the next
-  `render` writes format 5.
+  compatibility render writes Format 5.
 * **Format 4** omitted At a glance. `parse` reads it as empty facts. Its next Generate call runs
-  even when the source hash is unchanged and repairs the facts without replacing the journal.
+  even when the source hash is unchanged and migrates the available journal into Format 6
+  before applying the model's complete content.
 * **Format 1** (0.1.0) kept the facts in the front matter and had no facts region; `parse` reads
-  those keys as the facts and the next `render` writes format 5 with a facts section.
+  those keys as facts; compatibility rendering uses Format 5 until generation migrates it.
 
 **Edit detection across formats.** `generated_hash` covers the rendered facts, so a day written
 in format 1 or 2 cannot reproduce its old hash and looks edited after migration. Generate and
@@ -195,9 +249,19 @@ We went to the park, and Leo played on the slide for a long time.
   They are direct generation input: the first write and later safe updates use them alongside
   the recordings.
 * **Transcript** blocks are append-only; edits to their text are kept.
-* **Generated content** (facts, title and journal) carries `generated_hash`, a hash of exactly
-  what the system wrote. `DayFile.is_user_edited()` compares the stored hash with the current
-  content.
+* **Generated content** carries `generated_hash`. For Format 6 it hashes the title and complete
+  typed content; for legacy files it hashes facts, title and journal.
+  `DayFile.is_user_edited()` compares the stored hash with the current value.
+  * `apply_content_generation(...)` writes complete Format 6 content and refuses an edited day
+    unless `force=True`. The first generation uses `force=True`.
+  * `merge_content_generation_three_way(...)` merges previous model content, current live
+    content and incoming complete content. Owner changes to scalars, lists, rows and cells win;
+    untouched model values follow the incoming reply.
+  * Timeline update helpers match bullet text exactly. Replacements may move a bullet between
+    Morning, Afternoon, Evening, Night and Time not stated; then deletions and additions run.
+    Adding an exact duplicate is a no-op.
+  * The older `apply_generation`, additive journal and facts merge helpers remain compatibility
+    APIs for Format 5 callers.
   * `apply_generation(...)` replaces facts/title/journal, and raises `UserEditsDetected` if the
     owner edited them (unless `force=True`). Only the first journal generation uses
     `force=True`.
@@ -222,7 +286,7 @@ not replace the exact snapshot.
 ## Example
 
 The fenced file below is an older format 3 day (`tests/fixtures/sample-day.md`). `parse` still
-reads it. A new `render` preserves "At a glance" and omits any translation. Format 2 is
+reads it. A compatibility `render` preserves "At a glance" and omits any translation. Format 2 is
 `tests/fixtures/sample-day-v2.md` and format 1 is `tests/fixtures/sample-day-v1.md`.
 
 ```markdown
@@ -402,16 +466,19 @@ path = day_file_path(day_date)
 day = parse(storage.read_text(path), fallback_date=day_date) if storage.exists(path) else None
 day = merge_capture(day, capture, day_date)
 source_hash = day.compute_source_hash()
-facts_state = read_generated_facts(day_date)  # None for a format-4 day
+state = read_generated_facts(day_date)
+snapshot = read_generated_snapshot(day_date)
+base_content = state.content if state and state.content else (
+    content_for_day(snapshot) if snapshot else None
+)
 if day.meta.generated_at is None:
-    day = apply_generation(
-        day, facts=generated_facts, journal=journal, title=title,
+    day = apply_content_generation(
+        day, content=generated_content, title=title,
         generated_source_hash=source_hash, force=True, ...
     )
-elif day.meta.generated_source_hash != source_hash or facts_state is None:
-    day = merge_generation_three_way(
-        day, base_facts=facts_state.facts if facts_state else None,
-        facts=generated_facts, journal_sections={"Evening": ["new bullet"]},
+elif day.meta.generated_source_hash != source_hash or state is None:
+    day = merge_content_generation_three_way(
+        day, base_content=base_content, content=generated_content,
         generated_source_hash=source_hash, ...
     )
 else:
@@ -419,10 +486,11 @@ else:
 text = render(day)
 storage.write_text(path, text)
 storage.write_text(generated_snapshot_path(day_date), text)
-write_generated_facts(day_date, source_hash, generated_facts)
+write_generated_facts(day_date, source_hash, generated_content)
 ```
 
 ## Changing the format
 
 Bump `FORMAT_VERSION`, keep `parse` able to read older versions, add tests with an old-format
-fixture, and update this page, `docs/contracts.md` and `CHANGELOG.md` in the same commit.
+fixture, and update this page, `docs/contracts.md` and `CHANGELOG.md` in the same commit. Keep
+`LEGACY_FORMAT_VERSION` explicit when an old layout can still be rendered unchanged.

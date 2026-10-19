@@ -298,9 +298,9 @@ def test_generate_journal_writes_the_day_from_saved_recordings(
     assert body["message"].startswith("Journal written for")
     assert "Maya" not in body["message"] and "Tacos" not in body["message"]
     day = parse(api_storage.read_text(day_file_path(dt.date(2026, 10, 17))))
-    assert day.journal.startswith("## Summary")
-    assert day.facts.people == ["Maya", "Leo"]
-    assert "## At a glance" in api_storage.read_text(day_file_path(dt.date(2026, 10, 17)))
+    assert day.content.timeline.time_not_stated == ["A day with 2 entries."]
+    assert [person.name for person in day.content.timeline.context.people_met] == ["Maya", "Leo"]
+    assert "## Day timeline" in api_storage.read_text(day_file_path(dt.date(2026, 10, 17)))
     assert fake_llm.tasks() == ["fill_day"]
 
     again = flash_client.post("/journal", json={"date": "2026-10-17"}, headers=headers)

@@ -40,7 +40,9 @@ message that explains the accepted format. All read tools are annotated `readOnl
 
 ### `search(query, from_date?, to_date?, limit=10)`
 
-Hybrid search over passages (title, journal, notes, transcript, facts).
+Hybrid search over passages (title, Format 6 canonical content or legacy facts/journal, notes,
+transcript). Format 6 passages include the timeline, every tracker table, pregnancy details and
+tags under their Markdown headings.
 
 * Keyword: the query is split into words, stop words dropped (unless nothing else is left),
   each word quoted (so FTS5 syntax in the query is inert) and ORed; ranked by `bm25`.
@@ -64,8 +66,9 @@ Hybrid search over passages (title, journal, notes, transcript, facts).
 ### `get_day(date)`
 
 Reads the day file from storage (the source of truth; works even before the index exists) and
-returns `found`, `path`, `title`, `facts` (structured At a glance values; a format-4 file is
-empty until Generate repairs it), `journal`, `notes`,
+returns `found`, `path`, `title`, `format_version`, `content` (canonical timeline, family
+trackers, pregnancy/baby and tags for every readable format), `facts` (the structured Format 5
+compatibility view), `journal` (empty on Format 6), `notes`,
 `transcript` (one item per capture: `time`, `kind`, `location`, `audio`, `photos`, `text`,
 `translation`: `null` unless an older file still has a translation block),
 `audio` and `photos` (`{name, path, link}` with `link` from `storage.get_share_link`, i.e. a
@@ -73,9 +76,14 @@ private Google Drive link that opens only for the owner, or `file://` locally; `
 with an `error` if the file is missing), and `user_edited`. A missing day returns
 `found: false` and a `note`.
 
+For a legacy file, `content` is the same conservative projection used by generation and
+Spectrum; fetching the day does not rewrite the file. `user_edited` reflects the native
+generated hash (complete content and title for Format 6).
+
 ### `query_facts(kind, contains?, from_date?, to_date?, limit=50, person?)`
 
-`kind`: `meals` | `activities` | `people` | `places` | `family` | `mood` | `highlights`.
+`kind`: `meals` | `activities` | `people` | `places` | `family` | `mood` | `highlights` |
+`timeline` | `trackers` | `pregnancy` | `tags` | `content`.
 `contains` is a case-insensitive substring (LIKE wildcards are escaped); for meals it matches the
 item or the meal type ("breakfast"), for family the text or the category ("food"). `person`
 (case-insensitive exact name) applies to `family` and `meals`; with any other kind it is an input
@@ -84,13 +92,20 @@ error. Returns:
 * `rows`: newest first, each with `date` (meals: `person`, `meal_type`, `item`; activities: `kind`,
   `minutes`; people / places: `name`; family: `person`, `category` (`feelings`, `health`,
   `moments`; `person` is `Together` for shared memories), `text`, `minutes`; highlights: `text`; mood:
-  `mood`, `mood_score`), at most `limit` (1–500); `truncated` says if there were more.
+  `mood`, `mood_score`; new Format 6 views: `scope`, optional `person`, `category`, `field`,
+  `text`, `number`, `status`, and optional parsed `details`), at most `limit` (1–500);
+  `truncated` says if there were more.
 * `counts`: `rows`, `days`, `first_date`, `last_date` over **all** matches.
 * `aggregates` over all matches: meals `top_items` and `by_meal_type`; activities
   `total_minutes` and `by_kind` (times, days, total and average minutes); people `by_person` and
   places `by_place` (days, first and last date); family `by_person_and_category` (times, days,
   total minutes) and `top_items` (per person and category); mood `average_score`, `min_score`,
-  `max_score`, `days_with_score`, `by_mood`.
+  `max_score`, `days_with_score`, `by_mood`; Format 6 views `by_field` (row/day counts and
+  numeric totals/averages) and `top_values`.
+
+`timeline`, `trackers`, `pregnancy` and `tags` filter the corresponding `content_facts.scope`;
+`content` returns every scope. `person` applies to `trackers` and `content` as well as legacy
+family and meal queries. Legacy days are projected to canonical content for these views.
 
 ### `on_this_day(date?, years_back=10)`
 

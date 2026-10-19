@@ -11,10 +11,19 @@ import datetime as dt
 import logging
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from lumitrace.frames.daycontent import (
+    DayContent,
+    FamilyTracker,
+    TimelineAddition,
+    TimelineDeletion,
+    TimelineReplacement,
+    from_legacy_day,
+    to_legacy_facts,
+)
 from lumitrace.frames.dayfile import CAPTURE_LABELS, Capture, DayFacts, FamilyMember, Meal
 from lumitrace.prism.pipeline.llm import LLMClient, LLMResult, model_max_output_tokens
 from lumitrace.prism.pipeline.prompts import Prompt, day_template_path, load_prompt
@@ -23,97 +32,59 @@ log = logging.getLogger(__name__)
 
 
 class DayDraft(BaseModel):
-    """One reply that fills the day: the At a glance facts and the journal page."""
+    """One complete Format 6 day returned by the fill prompt."""
 
     headline: str = ""
-    journal: str
+    content: DayContent
+    journal: str = ""
+    """Compatibility projection for callers that still inspect the old field."""
     facts: DayFacts = Field(default_factory=DayFacts)
+    """Compatibility projection for Format 5 query surfaces during migration."""
 
     @field_validator("headline", "journal", mode="before")
     @classmethod
     def _strip(cls, value: Any) -> Any:
         return value.strip() if isinstance(value, str) else ("" if value is None else value)
 
-    @field_validator("journal")
-    @classmethod
-    def _not_empty(cls, value: str) -> str:
-        if not value:
-            raise ValueError("journal is empty")
-        return value
-
 
 def parse_day_draft(raw: Any, members: Sequence[str]) -> DayDraft:
-    """Validate a fill-day reply. Facts may be nested under ``facts`` or sit beside the journal."""
+    """Validate Format 6, while accepting old fake/provider replies during migration."""
     if not isinstance(raw, dict):
         raise ValueError("day reply is not a JSON object")
-    facts_raw = raw.get("facts")
-    if not isinstance(facts_raw, dict):
-        facts_raw = {key: raw[key] for key in DayFacts.model_fields if key in raw}
-    if not facts_raw and not isinstance(raw.get("facts"), dict):
-        raise ValueError("day reply has no facts object")
-    facts = with_day_meals(keep_family(parse_facts(facts_raw), members))
-    draft = DayDraft.model_validate(
-        {"headline": raw.get("headline"), "journal": raw.get("journal")}
+    if isinstance(raw.get("timeline"), dict):
+        content = keep_content_family(DayContent.model_validate(raw), members)
+        journal = ""
+    else:
+        facts_raw = raw.get("facts")
+        if not isinstance(facts_raw, dict):
+            facts_raw = {key: raw[key] for key in DayFacts.model_fields if key in raw}
+        if not facts_raw and not isinstance(raw.get("facts"), dict):
+            raise ValueError("day reply has no timeline or facts object")
+        facts = with_day_meals(keep_family(parse_facts(facts_raw), members))
+        journal = str(raw.get("journal") or "")
+        content = keep_content_family(
+            from_legacy_day(facts.model_dump(mode="json"), journal), members
+        )
+    facts = DayFacts.model_validate(to_legacy_facts(content))
+    return DayDraft(
+        headline=raw.get("headline") or "",
+        content=content,
+        journal=journal,
+        facts=facts,
     )
-    return draft.model_copy(update={"facts": facts})
 
 
-class JournalAddition(BaseModel):
-    """One new journal bullet and the existing section it belongs in."""
-
-    section: Literal["Summary", "Morning", "Afternoon", "Evening", "Thoughts"]
-    text: str = ""
-
-    @field_validator("text", mode="before")
-    @classmethod
-    def _strip(cls, value: Any) -> Any:
-        if value is None:
-            return ""
-        if not isinstance(value, str):
-            return value
-        return " ".join(value.removeprefix("-").split())
-
-    @field_validator("text")
-    @classmethod
-    def _not_empty(cls, value: str) -> str:
-        if not value:
-            raise ValueError("journal addition is empty")
-        return value
-
-
-class JournalReplacement(BaseModel):
-    """One generated sentence a newer recording or My notes contradict."""
-
-    section: Literal["Summary", "Morning", "Afternoon", "Evening", "Thoughts"] = "Summary"
-    find: str = ""
-    replace: str = ""
-
-    @field_validator("find", "replace", mode="before")
-    @classmethod
-    def _strip(cls, value: Any) -> Any:
-        if value is None:
-            return ""
-        if not isinstance(value, str):
-            return value
-        return " ".join(value.removeprefix("-").split())
-
-    @field_validator("find", "replace")
-    @classmethod
-    def _not_empty(cls, value: str) -> str:
-        if not value:
-            raise ValueError("journal replacement is empty")
-        return value
+JournalAddition = TimelineAddition
+JournalReplacement = TimelineReplacement
 
 
 class DayUpdate(BaseModel):
-    """Journal edits plus a complete facts candidate for owner-safe merging.
+    """Timeline patches plus complete structured tracker state."""
 
-    ``additions`` are bullets the page does not already contain. ``replacements`` correct a
-    generated sentence that a newer source contradicts. Facts are the whole day, not a delta.
-    """
-
-    additions: list[JournalAddition] = Field(default_factory=list, max_length=20)
-    replacements: list[JournalReplacement] = Field(default_factory=list, max_length=20)
+    additions: list[TimelineAddition] = Field(default_factory=list, max_length=20)
+    replacements: list[TimelineReplacement] = Field(default_factory=list, max_length=20)
+    deletions: list[TimelineDeletion] = Field(default_factory=list, max_length=20)
+    content: DayContent
     facts: DayFacts = Field(default_factory=DayFacts)
 
 
@@ -121,13 +92,55 @@ def parse_day_update(raw: Any, members: Sequence[str]) -> DayUpdate:
     """Validate an update-day reply."""
     if not isinstance(raw, dict):
         raise ValueError("update reply is not a JSON object")
-    if not isinstance(raw.get("facts"), dict):
-        raise ValueError("update reply has no facts object")
-    facts = with_day_meals(keep_family(parse_facts(raw["facts"]), members))
+    if isinstance(raw.get("structured"), dict):
+        structured = raw["structured"]
+        content = DayContent.model_validate(
+            {
+                "timeline": {
+                    "highlight": structured.get("highlight"),
+                    "context": structured.get("context"),
+                    "remember": structured.get("remember"),
+                },
+                "trackers": structured.get("trackers") or {},
+            }
+        )
+        additions = raw.get("additions") or []
+        replacements = raw.get("replacements") or []
+        deletions = raw.get("deletions") or []
+    elif isinstance(raw.get("facts"), dict):
+        facts = with_day_meals(keep_family(parse_facts(raw["facts"]), members))
+        content = from_legacy_day(facts.model_dump(mode="json"), "")
+        aliases = {
+            "Summary": "Time not stated",
+            "Morning": "Morning",
+            "Afternoon": "Afternoon",
+            "Evening": "Evening",
+            "Thoughts": "Time not stated",
+        }
+        additions = [
+            {"section": aliases.get(item.get("section"), "Time not stated"), "text": item["text"]}
+            for item in raw.get("additions") or []
+        ]
+        replacements = [
+            {
+                "find_section": aliases.get(item.get("section"), "Time not stated"),
+                "find": item["find"],
+                "replace_section": aliases.get(item.get("section"), "Time not stated"),
+                "replace": item["replace"],
+            }
+            for item in raw.get("replacements") or []
+        ]
+        deletions = []
+    else:
+        raise ValueError("update reply has no structured or facts object")
+    content = keep_content_family(content, members)
+    facts = DayFacts.model_validate(to_legacy_facts(content))
     return DayUpdate.model_validate(
         {
-            "additions": raw.get("additions") or [],
-            "replacements": raw.get("replacements") or [],
+            "additions": additions,
+            "replacements": replacements,
+            "deletions": deletions,
+            "content": content,
             "facts": facts,
         }
     )
@@ -159,6 +172,18 @@ def keep_family(facts: DayFacts, members: Sequence[str]) -> DayFacts:
             found[name] = member.model_copy(update={"name": name})
     ordered = [found.get(name) or FamilyMember(name=name) for name in members]
     return facts.model_copy(update={"family": ordered})
+
+
+def keep_content_family(content: DayContent, members: Sequence[str]) -> DayContent:
+    """Keep one tracker per configured family member, in configured order and spelling."""
+    by_key = {name.casefold(): name for name in members}
+    found = {}
+    for member in content.family:
+        name = by_key.get(member.name.casefold())
+        if name is not None and name not in found:
+            found[name] = member.model_copy(update={"name": name}, deep=True)
+    ordered = [found.get(name) or FamilyTracker(name=name) for name in members]
+    return content.model_copy(update={"family": ordered}, deep=True)
 
 
 def format_capture(capture: Capture) -> str:
@@ -290,6 +315,7 @@ class Generator:
             **self._people(),
             keyterms=self._keyterms(),
             template=_day_template(self.prompts_dir),
+            weather="(none)",
             notes=notes.strip() or "(none)",
             captures=_log_fill_input(day, captures, self.settings.llm_write_journal_model),
         )
@@ -303,7 +329,15 @@ class Generator:
                 )
                 if part
             )
-            return {"headline": "", "journal": f"## Summary\n\n{body}", "facts": {}}
+            return {
+                "headline": "",
+                "timeline": {"time_not_stated": [body] if body else []},
+                "trackers": {
+                    "family": [{"name": name} for name in family],
+                    "pregnancy_baby": {},
+                    "tags": [],
+                },
+            }
 
         result = self.llm.complete_json(
             task="fill_day",
@@ -328,7 +362,9 @@ class Generator:
             date=_date_label(day),
             **self._people(),
             keyterms=self._keyterms(),
+            template=_day_template(self.prompts_dir),
             journal=journal.strip() or "(empty)",
+            weather="(none)",
             notes=notes.strip() or "(none)",
             captures=format_captures(captures) or "(none)",
         )
@@ -339,11 +375,22 @@ class Generator:
             parse=lambda raw: parse_day_update(raw, family),
             fake=lambda: {
                 "additions": [
-                    {"section": "Summary", "text": capture.text.strip()}
+                    {"section": "Time not stated", "text": capture.text.strip()}
                     for capture in captures
                     if capture.text.strip() and capture.text.strip() not in journal
                 ],
-                "facts": {},
+                "replacements": [],
+                "deletions": [],
+                "structured": {
+                    "highlight": None,
+                    "context": {},
+                    "remember": None,
+                    "trackers": {
+                        "family": [{"name": name} for name in family],
+                        "pregnancy_baby": {},
+                        "tags": [],
+                    },
+                },
             },
         )
         return result, prompt

@@ -4,9 +4,11 @@ import datetime as dt
 import json
 import sqlite3
 
+from lumitrace.frames import daycontent as C
 from lumitrace.frames.dayfile import (
     Capture,
     DayFile,
+    apply_content_generation,
     day_file_path,
     generated_snapshot_path,
     merge_capture,
@@ -97,6 +99,42 @@ def test_owner_fact_edits_become_field_signals(indexer: Indexer, storage: LocalS
     assert json.loads(by_field["mood"]["after"]) == "excited"
     assert json.loads(by_field["places"]["after"]) == ["the park", "the library"]
     assert by_field["places"]["diff"] is None
+    assert result.edit_signals == 2
+
+
+def test_format6_owner_edits_become_content_signals(
+    indexer: Indexer, storage: LocalStorage
+) -> None:
+    base = make_day(D1)
+    generated = apply_content_generation(
+        base,
+        content=C.DayContent(
+            timeline=C.Timeline(morning=["Ate oatmeal"]),
+            pregnancy_baby=C.PregnancyBaby(baby_movement=["one kick"]),
+            tags=["weekday"],
+        ),
+        generated_at=base.meta.generated_at,
+        force=True,
+    )
+    write_day(storage, generated)
+    indexer.sync()
+
+    def edit_content(day: DayFile) -> None:
+        assert day.content is not None
+        day.content.timeline.morning.append("Owner-added walk")
+        day.content.pregnancy_baby.baby_movement = ["three kicks"]
+
+    _edit(storage, D1, edit_content)
+    result = indexer.sync()
+
+    rows = _signals(indexer.conn)
+    assert {(row["section"], row["field"]) for row in rows} == {
+        ("content", "timeline"),
+        ("content", "pregnancy_baby"),
+    }
+    timeline = next(row for row in rows if row["field"] == "timeline")
+    assert "Owner-added walk" in json.loads(timeline["after"])["morning"]
+    assert timeline["diff"] is None
     assert result.edit_signals == 2
 
 

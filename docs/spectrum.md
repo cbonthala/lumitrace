@@ -8,9 +8,9 @@ shared in `lumitrace/index/schema.py`. Spectrum is the only writer of the derive
 
 | Module | What it does |
 |---|---|
-| `core.py` | `Indexer`: `sync`, `index_paths`, `rebuild`, `backup`; opening the index |
-| `passages.py` | splits a `DayFile` into passages |
-| `edits.py` | compares a day file with its generated snapshot, writes `edit_signals` |
+| `core.py` | `Indexer`: `sync`, `index_paths`, `rebuild`, `backup`; legacy fact rows and flattened Format 6 `content_facts` |
+| `passages.py` | splits canonical Format 6 content or legacy facts/journal into passages |
+| `edits.py` | compares Format 6 top-level content (or legacy facts/journal) with the generated snapshot |
 | `backup.py` | SQLite backup API → `_system/index-backup/lumitrace.sqlite` |
 | `service.py` | `run`: worker thread + FastAPI app (`POST /nudge`, `GET /health`) |
 | `__main__.py` | the `lumitrace-spectrum` CLI |
@@ -83,11 +83,17 @@ Processing changes:
 Each day file is written in **one transaction**: `files` upsert, `days` and fact rows replaced,
 passages and vectors replaced, edit signals. The MCP server always sees a whole day, old or new.
 
-Facts come from the day file's "At a glance" section (`DayFile.facts`, parsed by
-`lumitrace.frames.dayfile`); Spectrum copies them and never re-derives facts from the text.
-A format-4 file stays empty until its next Generate call repairs the section. The journal is
-still indexed before that repair.
-Day file format 3 (topic first): `meals.meal_type` is one of `breakfast`, `lunch`, `dinner`,
+Spectrum stores both contracts:
+
+* Existing `days`, meals, activities, people, places, family facts and highlights come from
+  `DayFile.facts`. For Format 5 and older this is the parsed At a glance section; for Format 6 it
+  is the compatibility projection from `DayContent`.
+* Schema version 4 adds `content_facts`. `content_for_day` gives every readable file a canonical
+  `DayContent`, then Spectrum flattens its timeline, context, every family tracker, pregnancy
+  tracker and tags into rows with `scope`, optional `person`, `category`, `field`, text, number,
+  meal status, optional complete JSON details and stable position.
+
+The legacy fact schema keeps `meals.meal_type` as one of `breakfast`, `lunch`, `dinner`,
 `snacks`; one `meals` row per item with the `person` whose block it is under (`''` for
 `Everyone`); `not mentioned` placeholders never become rows; one `places`, `people` and
 `activities` row per bullet; one `family_facts` row per item under a person (`category` =
@@ -95,8 +101,8 @@ Day file format 3 (topic first): `meals.meal_type` is one of `breakfast`, `lunch
 `days.remember` is the Remember line; and `position` keeps the order in the file. `days.user_edited` is `DayFile.is_user_edited()`.
 
 **Schema changes:** if the index's `meta.schema_version` differs from `SCHEMA_VERSION` (for
-example an index made before day file format 3 changed the fact tables), `sync` and `run` rebuild
-automatically, like an embedding model change below.
+example schema 4 added `content_facts` for Format 6), `sync` and `run` rebuild automatically,
+like an embedding model change below.
 
 ## Passages and embeddings
 
@@ -106,8 +112,9 @@ section):
 | Section | Content | `heading` | `capture_id` |
 |---|---|---|---|
 | `title` | the `# title` | | |
-| `facts` | the "At a glance" section without its `none` lines (`render_facts_section(facts, include_empty=False)`, so empty sections and empty family members make no passage), split at its headings: mood/city/weather lines, then Food, Places, People, Activities, one passage per family member, Highlights | heading text (`Food`, ..., the member's name) | |
-| `journal` | split at Markdown headings, then packed paragraphs | heading text | |
+| `content` | Format 6 canonical content rendered from `DayContent`, split at timeline and tracker headings | `Highlight`, `Morning`, `Food`, `Pregnancy and baby`, `Tags`, ... | |
+| `facts` | legacy facts without empty lines (`render_facts_section(facts, include_empty=False)`), split at headings | heading text (`Food`, ..., the member's name) | |
+| `journal` | legacy journal split at Markdown headings | heading text | |
 | `notes` | same as journal; a heading with no text under it is its own passage | heading text | |
 | `transcript` | one or more passages per capture, then its English translation (if any) as more passages | `21:30 · Log My Day`; translation: `21:30 · Log My Day · English` | capture id |
 
@@ -134,8 +141,12 @@ dimension. See `docs/runbook.md` → *Changing the embedding model*.
 When a day file is indexed (or its snapshot changes), it is compared with
 `_system/generated/YYYY/MM/YYYY-MM-DD.md`, the exact file the recording API last wrote:
 
-* `facts`: one comparison per fact field; `field` = fact name, `before`/`after` = JSON, no diff.
-* `title`, `journal`, `notes`: whole text; `diff` = unified diff (`--- generated` / `+++ edited`).
+* Format 6 `content`: one comparison for each top-level field (`timeline`, `family`,
+  `pregnancy_baby`, `tags`); `before`/`after` are JSON and `diff` is empty.
+* Legacy `facts`: one comparison per fact field; `field` = fact name, `before`/`after` = JSON,
+  no diff.
+* `title`, legacy `journal`, `notes`: whole text; `diff` = unified diff
+  (`--- generated` / `+++ edited`).
 * `transcript`: one comparison per capture in the snapshot; `field` = capture id. Captures only
   in the live file are new system captures, not edits; a deleted capture has `after = ""`.
 * `prompt_version` and `models_used_json` come from the snapshot (what produced the text).
@@ -152,6 +163,10 @@ Rules (ADR 0022):
 * No snapshot (owner-created day, or a day written before snapshots existed) → no signals.
 
 Signals stay in the index (and its backup) in the owner's storage; nothing goes to the repo.
+
+`days.user_edited` uses `DayFile.is_user_edited()`, whose Format 6 hash covers the complete typed
+content. The content signal granularity is deliberately top-level, not one row per nested table
+cell.
 
 ## Backups
 

@@ -51,9 +51,9 @@ def test_regenerate_updates_an_existing_format_2_day_like_generate(
     assert day.meta.lumitrace_format == FORMAT_VERSION
     assert day.meta.prompt_version == "fill_day"
     assert day.title == before.title
-    assert day.journal == "## Summary\n\nA day with 3 entries."
-    assert day.facts.mood == "content"
-    assert day.facts.people == ["Maya", "Leo"]
+    assert day.content.timeline.time_not_stated == ["A day with 3 entries."]
+    assert day.content.tags == ["content"]
+    assert [person.name for person in day.content.timeline.context.people_met] == ["Maya", "Leo"]
     assert api_storage.exists(generated_facts_path(DAY))
     assert day.notes == before.notes
     assert [c.text for c in day.captures] == [c.text for c in before.captures]
@@ -65,10 +65,10 @@ def test_regenerate_updates_an_existing_format_2_day_like_generate(
     assert fake_llm.tasks() == ["fill_day"]
 
 
-def test_regenerate_leaves_a_day_the_owner_edited(
+def test_regenerate_preserves_legacy_owner_timeline_edits(
     api_settings: Settings, api_storage: LocalStorage, fake_llm: FakeLLM, sample_day_markdown: str
 ) -> None:
-    edited = sample_day_markdown.replace("**Mood:** happy", "**Mood:** great").replace(
+    edited = sample_day_markdown.replace(
         "A full, happy Saturday", "My own words. A full, happy Saturday"
     )
     path = _write(api_storage, DAY, edited, snapshot=False)
@@ -79,9 +79,8 @@ def test_regenerate_leaves_a_day_the_owner_edited(
 
     assert [o.status for o in outcomes] == ["update"]
     day = parse(api_storage.read_text(path))
-    assert day.facts.mood == "great"
-    assert "My own words." in day.journal
-    assert "You added another detail to the day." in day.journal
+    assert any("My own words." in item for item in day.content.timeline.time_not_stated)
+    assert "You added another detail to the day." in day.content.timeline.evening
     assert day.is_user_edited()
     assert fake_llm.tasks() == ["update_day"]
 
@@ -102,10 +101,12 @@ def test_replace_generated_rewrites_a_clean_journal_and_keeps_an_edit(
     forced = regenerate_days(api_settings, api_storage, generator, replace_generated=True)
     assert [o.status for o in forced] == ["update"]
     assert fake_llm.tasks() == ["fill_day", "fill_day"]
-    assert parse(api_storage.read_text(path)).journal == "## Summary\n\nA day with 3 entries."
+    assert parse(api_storage.read_text(path)).content.timeline.time_not_stated == [
+        "A day with 3 entries."
+    ]
 
     def edit(day) -> None:
-        day.journal = "## Summary\n\nMy own words stay."
+        day.content.timeline.time_not_stated = ["My own words stay."]
 
     edited = parse(api_storage.read_text(path))
     edit(edited)
@@ -113,7 +114,7 @@ def test_replace_generated_rewrites_a_clean_journal_and_keeps_an_edit(
     kept = regenerate_days(api_settings, api_storage, generator, replace_generated=True)
     assert [o.status for o in kept] == ["update"]
     day = parse(api_storage.read_text(path))
-    assert "My own words stay." in day.journal
+    assert "My own words stay." in day.content.timeline.time_not_stated
     assert fake_llm.tasks()[-1] == "update_day"
 
 

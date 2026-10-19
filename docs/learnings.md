@@ -7,6 +7,10 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 ## Foundation
 
+- 2026-10-18 — Replacing separate facts and journal regions with a richer typed family page
+  changes storage, search, exact queries and edit signals together → keep the Format 5 projection
+  for old callers, and add canonical passages, `content_facts`, Lens content output and
+  top-level content edit signals in the same Format 6 change (ADR 0061).
 - 2026-10-18 — Removing the visible facts region also removed the only structured source for
   precise meal, place, people and family queries → keep the narrative journal and structured
   facts together, and test both search and `query_facts` end to end (ADR 0059).
@@ -57,6 +61,10 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 ## Prism (recording API)
 
+- 2026-10-19 — A model-owned Format 6 rewrite still has to three-way merge if the owner typed
+  while generation ran; replacing the page would drop that sentence → apply complete content
+  through `merge_content_generation_three_way` whenever the live page is already edited
+  (ADR 0061).
 - 2026-10-18 — Asking a model to rewrite a journal cannot guarantee that manual corrections stay;
   even a preservation prompt can paraphrase them → track processed source separately and let the
   model classify only new bullets while code inserts them into existing sections (ADR 0058).
@@ -116,6 +124,10 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 ## Models and prompts
 
+- 2026-10-18 — A large family template invites a model to fill empty tables from routine or
+  implication → make evidence boundaries, allowed small inferences, canonical field placement,
+  exact update patches and a final validation checklist part of both prompts, then validate the
+  reply into typed Format 6 content before rendering (ADR 0061).
 - 2026-10-18 — Appending a complete new fact list onto an edited day, and refusing to change any
   journal sentence, left duplicate facts and a journal that contradicted the facts. The same
   fact has to collapse to one line, and a generated sentence a newer recording contradicts has

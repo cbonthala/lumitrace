@@ -8,9 +8,9 @@ folder. Edit the file. Git keeps the history. Code: `lumitrace/prism/pipeline/pr
 
 ```
 prompts/
-  fill_day.md        first write: title, journal and complete facts
-  update_day.md      missing journal bullets plus complete facts
-  day-template.md    the day-file shape, pasted into the fill_day user message
+  fill_day.md        first write: headline, timeline and complete trackers
+  update_day.md      exact timeline patches plus complete structured state
+  day-template.md    the Format 6 Markdown shape, pasted into both tasks
 ```
 
 * Both tasks use `LUMITRACE_LLM_WRITE_JOURNAL_MODEL`, then `LUMITRACE_LLM_FALLBACK_MODEL`.
@@ -32,16 +32,17 @@ Date: {{date}}
 {{captures}}
 ```
 
-`day-template.md` is plain Markdown. It has no system or user part. The fill-day prompt pastes
-it in whole as `{{template}}`.
+`day-template.md` is plain Markdown. It has no system or user part. Both tasks paste it in
+whole as `{{template}}`; its comments describe the intended output, but its examples and
+placeholders are not evidence for the day.
 
 `{{name}}` placeholders are filled by the code; a placeholder without a value is an error, so the
 prompt and the code cannot silently drift apart. Available values:
 
 | Task | Placeholders |
 |---|---|
-| `fill_day` | `date` (`2026-10-10 (Saturday)`), `author`, `family`, `glossary`, `keyterms`, `template`, `notes`, `captures` |
-| `update_day` | `date`, `author`, `family`, `glossary`, `keyterms`, authoritative `journal`, `notes`, all `captures` |
+| `fill_day` | `date` (`2026-10-10 (Saturday)`), `author`, `family`, `glossary`, `keyterms`, `template`, `weather`, `notes`, `captures` |
+| `update_day` | `date`, `author`, `family`, `glossary`, `keyterms`, `template`, authoritative rendered `journal`, `weather`, `notes`, all `captures` |
 
 `author` is the `secrets/family.md` member whose relation is `me`, or `(not given)`. `family`
 lists every member with their relation to the author, and a birth date when the file has one:
@@ -59,8 +60,16 @@ transcript or note text. There is no English translation. `keyterms` is the spee
   (`tests/prism/test_prompts_llm.py` checks for "never invent/guess").
 * `{{captures}}` is the full transcript of every recording. Nothing is cut before it is sent.
   The fill-day call logs that length and the model's maximum output tokens (ADR 0056).
-* Day-level meals are not in the JSON. Code fills them from each person's meals.
-* Complete facts in both replies must validate against `lumitrace.frames.dayfile.DayFacts`.
-  Update facts are merged against the previous model reply so owner edits win (ADR 0059).
+* `fill_day` returns `headline`, `timeline`, and a `trackers` envelope. `update_day` returns
+  exact `replacements`, `deletions` and `additions`, plus `structured` context and trackers.
+  Neither task returns Markdown.
+* Replies validate against `lumitrace.frames.daycontent.DayContent`. Code keeps exactly one
+  tracker per configured family member, in configured order and spelling.
+* `update_day` names timeline bullets exactly and may use only Morning, Afternoon, Evening,
+  Night or Time not stated. Code applies replacements, then deletions, then additions.
+* Both replies describe complete model state. It is merged against the previous model content
+  from `_system/generated-facts/` so owner field, list, row and cell edits win (ADR 0061).
+* `{{weather}}` is currently `(none)` in the Prism; prompts must return null or preserve existing
+  weather rather than infer it.
 * Record why a prompt changed in `CHANGELOG.md` and, if it came from a learning, in
   `docs/learnings.md`.

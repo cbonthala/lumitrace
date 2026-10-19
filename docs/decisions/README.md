@@ -76,3 +76,5 @@ Template:
 | [0057](0057-day-file-drops-glance-and-translation.md) | Day file format 4: no At a glance section and no English translation |
 | [0058](0058-notes-and-safe-section-updates.md) | My notes feed generation; later source is inserted into existing journal sections without rewriting edits |
 | [0059](0059-restore-structured-facts-with-three-way-merge.md) | Format 5 restores structured facts and merges later model facts without losing owner edits |
+| [0060](0060-replace-model-facts-and-correct-the-journal.md) | Later source replaces model facts and may correct an untouched generated journal sentence |
+| [0061](0061-format-6-family-day-files.md) | Format 6 uses one structured timeline and family-tracker content region |

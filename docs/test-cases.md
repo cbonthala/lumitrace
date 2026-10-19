@@ -47,10 +47,10 @@ add or update its line in the right section.
 
 * **Capture**: one thing sent from the phone: a *Log My Day* recording or a *Quick Note*.
 * **Day file**: the Markdown journal file for one day, e.g. `2026/10/2026-10-10/2026-10-10.md`.
-  It has **front matter** (the date, audio, photos and which AI made it), a title, an **At a
-  glance** section with the facts (mood, food, places, people, activities, one block per family
-  member, highlights), the journal, your own **My notes** section, and the raw **transcript**
-  of each capture.
+  It has **front matter** (the date, audio, photos and which AI made it), a title, Format 6
+  structured content (timeline and family tracker tables), your own **My notes** section, and
+  the raw **transcript** of each capture. Older fixtures use an **At a glance** facts section and
+  a separate journal.
 * **Entry date**: the day a capture belongs to. Anything before 4 a.m. counts as the day before.
 * **Snapshot**: an exact copy of the day file as Lumitrace last wrote it, kept in
   `_system/generated/`. Comparing it with the live file shows what you edited.
@@ -106,8 +106,8 @@ file. The story:
    "audio kept uncompressed" warning, the photo is saved as `photo-01.jpg`, and every nudge to
    the indexer is accepted.
 2. **The day file.** The snapshot is identical to the day file. The entries are in time order,
-   format 5 has structured At a glance facts and no English-translation block, the journal
-   mentions the tacos,
+   Format 6 has a Day timeline and family tracker tables and no English-translation block, the
+   timeline mentions the tacos,
    the audio is stored in the day's folder, and the upload inbox is empty again. The activity
    record names the capture but contains none of the journal's words.
 3. **Index.** Without any polling, the nudges alone bring both days into the index, and the day
@@ -121,12 +121,12 @@ file. The story:
    * `on_this_day` finds last year's pumpkin-patch day, "1 year ago", with its highlight;
    * `feedback` is saved in the index and in storage, with the date picked out of the answer.
 5. **You edit the day in Obsidian.** A sentence ("Best tacos in town, honestly.") is added to
-   the summary. After a nudge, the indexer records the journal edit and marks the day as edited.
+   the timeline. After a nudge, the indexer records the content edit and marks the day as edited.
 6. **A late capture.** A note at 10:15 p.m. about a walk with Leo is added *on top of* the
-   edited day: your sentence is still there, the new bullet appears under Evening, no Later
-   section is created, the day has three entries, and the snapshot is updated.
+   edited day: your sentence is still there, the new bullet appears under Evening, the day has
+   three entries, and the snapshot is updated.
 7. **Ask again.** Searching "stars" finds the new transcript; fact queries return Leo, his
-   moment and the activities; and the earlier journal edit signal is still there.
+   moment and the activities; and the earlier timeline edit signal is still there.
 
 - Checks that the story above works from start to finish across all three programs. <sub>`test_full_flow`</sub>
 
@@ -169,7 +169,7 @@ File: `tests/prism/test_flash.py`
 - Checks that the header has a Home button that opens Capture, and that History groups captures by day with a Generate button on each day. <sub>`test_home_button_and_history_grouped_by_day`</sub>
 - Checks that a capture's status chip follows the journal: a recording in progress says Transcribing…, a saved capture whose journal is still waiting says Not in journal, and In journal is used only once the words are in the journal. <sub>`test_capture_status_chip_matches_the_journal`</sub>
 - Checks that the history list says a saved capture is not in the journal yet, says it is once Generate has written the day, and says a later capture is still waiting. <sub>`test_capture_list_follows_the_journal`</sub>
-- Checks that Generate needs a login, writes one journal and structured facts from every saved recording, returns unchanged without another model call when clicked again, refuses a future date, skips a day with no source, and never returns journal text. <sub>`test_generate_journal_writes_the_day_from_saved_recordings`</sub>
+- Checks that Generate needs a login, writes one Format 6 timeline and family trackers from every saved recording, returns unchanged without another model call when clicked again, refuses a future date, skips a day with no source, and never returns journal text. <sub>`test_generate_journal_writes_the_day_from_saved_recordings`</sub>
 - Checks that stopping a recording opens a review with pause, play, and discard icons, crop handles, and Send, that Send in the corner of the card can send photos with no recording, and that the page script no longer sends the moment you stop. <sub>`test_recording_is_reviewed_before_it_is_sent`</sub>
 - Checks that the recent-captures list needs a login, shows the newest capture first with its status and no journal text, and respects the limit and the allowed number of days. <sub>`test_recent_captures_newest_first`</sub>
 - Checks that the weekly summary counts the days with a day file in the last seven days, the entries in them, and the streak of days in a row up to today. <sub>`test_week_summary_counts_days_captures_and_streak`</sub>
@@ -188,7 +188,7 @@ File: `tests/prism/test_lens_apps.py`
 
 File: `tests/prism/test_capture_api.py`
 
-- Checks the whole path of one *Log My Day* recording with two photos and a location: the API answers at once with "queued", the capture id, the entry date and a friendly message ("Saturday, October 10"); once processed the status says "done"; the day file has the AI's title and journal, the people, meals, audio and photo names, prompt and model versions, and the transcript with its time and formatted location; the audio and photos are in the day's folder; the snapshot matches; the inbox is empty; and the indexer is nudged once with the day file, audio and photos. <sub>`test_recording_end_to_end`</sub>
+- Checks the whole path of one *Log My Day* recording with two photos and a location: the API answers at once with "queued", the capture id, the entry date and a friendly message ("Saturday, October 10"); once processed the status says "done"; the day file has the AI's title, Format 6 timeline, people met, audio and photo names, prompt and model versions, and the transcript with its time and formatted location; the audio and photos are in the day's folder; the snapshot matches; the inbox is empty; and the indexer is nudged once with the day file, audio and photos. <sub>`test_recording_end_to_end`</sub>
 
 ### Sending the same thing twice
 
@@ -210,7 +210,7 @@ File: `tests/prism/test_capture_api.py`
 
 File: `tests/prism/test_capture_api.py`
 
-- Checks that a typed note sent after the journal exists joins the same day file, entries stay in time order, and the journal is rewritten from every recording because it was still the model's, with the facts refreshed and no Later section. <sub>`test_note_merges_into_the_same_day`</sub>
+- Checks that a typed note sent after the journal exists joins the same day file, entries stay in time order, and the Format 6 timeline is rewritten from every recording because it was still the model's, with people met refreshed. <sub>`test_note_merges_into_the_same_day`</sub>
 - Checks that a note can be sent as a web form with text, or as a short audio clip that is transcribed and keeps its audio file. <sub>`test_note_as_form_and_as_audio_clip`</sub>
 - Checks that a note with only a photo is accepted: the photo is saved and listed on the day, and the AI writing step is skipped because there are no words. <sub>`test_photo_only_note`</sub>
 
@@ -241,12 +241,12 @@ File: `tests/prism/test_journal_schedule.py`
 
 - Checks that the journal time is five minutes after the day rollover: later the same morning when it is still before that time, the next day once that time has passed. <sub>`test_next_journal_at_is_five_minutes_after_the_rollover`</sub>
 - Checks that recordings sent while the day is still open are saved without calling the AI, that a run at 3:30 a.m. still waits, and that the 4:05 a.m. run writes one journal, structured facts and generated-facts base from every recording and does not write it again. <sub>`test_open_day_keeps_every_recording_and_writes_the_journal_once`</sub>
-- Checks that a journal typed before its first generation is replaced by the morning write, while My notes are both preserved and sent to the fill-day model. <sub>`test_morning_run_writes_the_journal_even_if_one_was_typed_early`</sub>
+- Checks that timeline text typed before its first generation is kept alongside the morning write, while My notes are both preserved and sent to the fill-day model. <sub>`test_morning_run_preserves_content_typed_early`</sub>
 - Checks that a morning run where every model fails leaves the transcripts and tries again later, and the second try writes the journal. <sub>`test_a_failed_morning_run_is_tried_again`</sub>
 - Checks that Generate writes the open day's journal now from every recording, clears the waiting marker, and does nothing for a day with no words. <sub>`test_generate_now_writes_the_open_day_from_every_recording`</sub>
 - Checks that Generate again after the owner edits the title, journal and facts and changes My notes sends all source plus the authoritative journal to update-day, preserves every edit through the facts merge, inserts the returned bullet into Evening without a Later section, and then returns unchanged without another model call. <sub>`test_generate_now_preserves_edits_and_uses_changed_notes`</sub>
 - Checks that deleting the generated-facts base (as on a format-4 day) makes Generate run one safe update to restore facts and the base, after which another click returns unchanged. <sub>`test_generate_repairs_facts_when_the_generated_facts_base_is_missing`</sub>
-- Checks that repairing an edited format-4-style day restores empty facts while preserving the owner's title and journal corrections and leaving the day marked edited. <sub>`test_format_4_facts_repair_keeps_owner_title_and_journal_edits`</sub>
+- Checks that generating again after the generated-facts base is missing keeps the owner's title and timeline wording, restores people met from the recordings, and leaves the day marked edited. <sub>`test_missing_state_repair_keeps_owner_title_and_content_edits`</sub>
 - Checks that a recording saved after Generate stays waiting, and that the 4:05 run rewrites the journal from every recording when nobody has edited it. <sub>`test_morning_run_merges_new_audio_after_generate_now`</sub>
 - Checks that the morning thread stops when the Prism stops, instead of waiting until 4:05. <sub>`test_scheduler_stops_while_it_is_waiting`</sub>
 
@@ -334,14 +334,15 @@ File: `tests/prism/test_prompts_llm.py`
 - Checks that the prompts folder is found in the project even when the program is started from another folder. <sub>`test_relative_prompts_dir_falls_back_to_repository`</sub>
 - Checks that the names of the prompts used on a day are joined into one label (such as `fill_day+update_day`) for the day file, and that a repeated name is kept once. <sub>`test_join_prompt_labels`</sub>
 - Checks that only the family members listed in the settings keep a family block: anyone else is dropped, names are spelled as in the settings ("leo" becomes "Leo"), they come in the settings' order, a name given twice keeps its first block, an empty list drops everyone, and every listed member the AI said nothing about gets an empty block. <sub>`test_keep_family_drops_unknown_names_and_uses_configured_spelling`</sub>
+- Checks that Format 6 family trackers are kept the same way: configured names and order, unknown people dropped, and an empty member list dropping every row. <sub>`test_keep_content_family_is_dynamic_and_uses_configured_spelling`</sub>
 - Checks that the fill-day prompt tells the AI who is speaking and how each family member is related to them, including a birth date ("Sam (the author), Maya (the author's wife, born 1990-04-12), Leo"), and says "(not given)" when nobody has relation "me". <sub>`test_fill_day_sends_the_family_list`</sub>
 - Checks that fill-day and update-day receive the Telugu transcript, My notes, family names and keyterms, and do not receive an English translation. <sub>`test_journal_gets_the_transcript_and_keyterms_not_a_translation`</sub>
-- Checks that an update reply accepts additions classified into Afternoon or Thoughts, strips a leading bullet marker, validates its complete facts, and refuses both the removed Later section and a missing facts object. <sub>`test_update_reply_classifies_additions_by_journal_section`</sub>
+- Checks that an update reply accepts additions classified into Afternoon or Time not stated, validates its complete structured trackers, and refuses both the removed Later section and a missing structured object. <sub>`test_update_reply_classifies_additions_by_journal_section`</sub>
 - Checks that the AI's structured (JSON) reply is understood even when wrapped in code fences or surrounded by chatty text, and refused when there is no data at all. <sub>`test_extract_json_tolerates_fences_and_chatter`</sub>
 - Checks that extracted facts are held to the day-file format: a reply wrapped in a "facts" object is unwrapped, an out-of-range mood score and empty values are dropped, and badly shaped replies (not an object, a meal without a type) are refused. <sub>`test_parse_facts_validates_against_dayfacts`</sub>
 - Checks that the AI client passes the timeout, retry and "reply in JSON" settings to the provider, switches to the backup model when the main one fails, records each attempt, tries a model only once when it is also the backup, and gives a clear error naming both models when all fail. <sub>`test_llm_client_passes_config_and_falls_back`</sub>
-- Checks that the fill-day and update-day prompts, and the day template, tell the model to cover each recording through its last sentence (including the final third), to keep "I drank coffee" with the author, to record a stated absence, and not to turn "two or three episodes, half an hour each" into 90 minutes. <sub>`test_fill_day_prompt_covers_the_ending_and_keeps_an_i_item_with_the_author`</sub>
-- Checks that after a fill-day reply, the day's own meals are the union of each family member's meals, each item tagged with who had it ("coffee (Sam)", "Oatmeal (Maya, Leo)"), a meal the model put on the day itself is replaced, an unknown person is dropped, and a reply with no per-person meals keeps the day-level list it did return. <sub>`test_day_level_meals_are_the_union_of_each_persons_meals`</sub>
+- Checks that the fill-day and update-day prompts, and the day template, tell the model to cover each recording through its last sentence (including the final third), to keep first-person facts with the author, to record a stated absence, and not to invent durations. <sub>`test_fill_day_prompt_covers_the_ending_and_keeps_an_i_item_with_the_author`</sub>
+- Checks that a legacy fill-day reply with per-person meals becomes Format 6 trackers in configured order and spelling, that unknown people are dropped, and that a reply with no configured family members keeps no invented family rows. <sub>`test_legacy_draft_becomes_canonical_per_person_meals`</sub>
 - Checks that a long transcript is sent to the model in full, through its last sentence, and that the log records the captures length, the transcript length, that nothing was cut, and the model's maximum output tokens. <sub>`test_fill_day_sends_the_whole_transcript`</sub>
 - Checks that a journal call asks for the model's maximum output tokens. <sub>`test_journal_call_asks_for_the_model_max_output_tokens`</sub>
 - Checks that a reply cut off by a lower output ceiling is requested again at the model's maximum, and that the first attempt is recorded as truncated. <sub>`test_output_token_limit_is_raised_when_the_reply_is_cut_off`</sub>
@@ -371,6 +372,7 @@ File: `tests/spectrum/test_sync.py`
 - Checks that a file that failed because the embedding service was briefly down is remembered and retried on the next sync, even though storage reports nothing new. <sub>`test_transient_failure_is_retried`</sub>
 - Checks that paths sent in a nudge are indexed straight away, unsafe or non-day paths are ignored, unchanged ones are skipped, and deleted ones are removed. <sub>`test_index_paths_handles_nudged_paths`</sub>
 - Checks that if the saved "where we left off" marker is unusable (for example from another storage type), the indexer falls back to a full scan. <sub>`test_bad_sync_token_falls_back_to_full_scan`</sub>
+- Checks that Format 6 days write canonical `content_facts` rows for timeline, family trackers, pregnancy and tags so those scopes can be queried without rewriting older files. <sub>`test_sync_indexes_all_format6_content_scopes`</sub>
 
 ### Splitting days into searchable passages
 
@@ -383,6 +385,7 @@ File: `tests/spectrum/test_passages.py`
 - Checks that journal sections are found correctly: text before the first heading is kept, a heading with nothing under it (like "Sleep: 8 hours") is kept, and a `#` line inside a code block is not mistaken for a heading. <sub>`test_split_by_headings_ignores_code_fences_and_keeps_heading_only_sections`</sub>
 - Checks that an empty day produces only a title passage and no facts. <sub>`test_empty_day_has_title_only`</sub>
 - Checks that a recording's English translation becomes its own searchable transcript passage, headed "21:30 · Log My Day · English", right after the original. <sub>`test_translation_gets_its_own_transcript_passages`</sub>
+- Checks that Format 6 days are split into searchable content passages for the timeline, family tables, pregnancy tracker and tags rather than the old At a glance and journal sections. <sub>`test_format6_passages_use_canonical_content`</sub>
 
 ### Learning from your edits (edit signals)
 
@@ -391,6 +394,7 @@ File: `tests/spectrum/test_edit_signals.py`
 - Checks that nothing is recorded when the day file matches what Lumitrace last wrote. <sub>`test_no_signals_when_file_matches_snapshot`</sub>
 - Checks that your changes to the journal, notes, title and a transcript are each recorded separately with the before and after values (plus a line-by-line comparison for longer text) and the prompt and model versions that wrote the original, and that the day is marked as edited. <sub>`test_owner_edits_become_signals`</sub>
 - Checks that changing only structured facts records one field-level signal per changed fact (mood and places here), with JSON before and after values and no text diff. <sub>`test_owner_fact_edits_become_field_signals`</sub>
+- Checks that Format 6 owner edits to the timeline or pregnancy tracker become `content` field signals with JSON before and after values and no text diff. <sub>`test_format6_owner_edits_become_content_signals`</sub>
 - Checks that saving the same edit again doesn't record it twice, a further edit to the same part replaces the earlier record, and undoing the edit removes it. <sub>`test_signals_are_deduplicated_and_superseded`</sub>
 - Checks that a new entry added by Lumitrace (before its snapshot is updated) is not mistaken for your edit. <sub>`test_new_capture_is_not_an_edit`</sub>
 - Checks that edits are not worked out against an out-of-date snapshot from an earlier generation. <sub>`test_stale_snapshot_is_not_compared`</sub>
@@ -503,6 +507,7 @@ File: `tests/lens/test_tools.py`
 File: `tests/lens/test_tools.py`
 
 - Checks that `get_day` returns the full day: path, title, facts, journal, notes, transcript entries in time order with times, text and translation (none here), a link to the audio, and photo links (with a "file not found" note for a photo missing from storage). <sub>`test_get_day_returns_everything`</sub>
+- Checks that `get_day` returns canonical Format 6 content (family energy, pregnancy movement, tags) plus the legacy facts projection for older callers. <sub>`test_get_day_returns_canonical_format6_content`</sub>
 - Checks that asking for a day without an entry returns "not found" with a note. <sub>`test_get_day_missing_day`</sub>
 - Checks that `get_day` reads straight from storage, so it works even without an index. <sub>`test_get_day_works_without_index`</sub>
 - Checks that a date like "October 10" is refused. <sub>`test_get_day_bad_date`</sub>
@@ -525,6 +530,7 @@ File: `tests/lens/test_tools.py`
 - Checks that "%" and "_" are searched as plain characters (not wildcards that match everything), and that no matches gives "No matching facts found." <sub>`test_query_facts_like_wildcards_are_literal`</sub>
 - Checks that an unknown fact kind ("drinks") is refused. <sub>`test_query_facts_bad_kind`</sub>
 - Checks that without an index, `query_facts` returns nothing plus the missing-index note. <sub>`test_query_facts_missing_index`</sub>
+- Checks that Format 6 `query_facts` kinds return timeline people, family tracker fields, skipped meals, pregnancy movement and tags from `content_facts`. <sub>`test_query_format6_content_scopes`</sub>
 
 ### Memories from past years (`on_this_day`)
 
@@ -594,6 +600,24 @@ File: `tests/lens/test_admin.py`
 spotting your edits, and the rules for adding entries and AI output. **Not covered:** how
 Obsidian displays the files.
 
+### Format 6 timeline and family trackers
+
+File: `tests/frames/test_daycontent.py`
+
+- Checks that the Format 6 model accepts the fill-day prompt's `trackers` envelope, ignores the headline, turns missing nested groups into empty values, collapses whitespace, drops empty list items and removes leading `#` from tags. <sub>`test_models_accept_fill_day_shape_and_normalise_values`</sub>
+- Checks that rendering and parsing a complete Format 6 day preserves dynamic family names, pipes and backslashes in table cells, `<br>` lists, exercise minutes, ratings, pregnancy details, tags and the optional Time not stated section exactly. <sub>`test_markdown_round_trip_preserves_tricky_cells_and_dynamic_names`</sub>
+- Checks that reserved Markdown values such as an em dash, literal `<br>` and ampersands round-trip, and that a hand-written single backslash before ordinary text is not treated as an escape. <sub>`test_reserved_markdown_values_and_literal_html_round_trip`</sub>
+- Checks that family table rows are matched by person name, not row position, so a reordered or extra owner row still lands on the right person. <sub>`test_dynamic_family_tables_are_matched_by_name_not_row_position`</sub>
+- Checks that an empty Time not stated section is omitted, empty table cells use an em dash, and the rendered day parses back unchanged. <sub>`test_empty_time_not_stated_is_omitted_and_empty_cells_are_em_dashes`</sub>
+- Checks that consumed, skipped and not-recorded meals remain distinct through Markdown, including a consumed meal with no named item and a skipped meal with an explanation. <sub>`test_meal_statuses_survive_markdown_round_trip`</sub>
+- Checks that a not-recorded meal cannot keep leftover items; those items are dropped so the meal stays empty. <sub>`test_not_recorded_meal_cannot_hide_items`</sub>
+- Checks that a three-way Format 6 merge keeps owner edits to a highlight, timeline list, meal status and items, mood description and tags while accepting untouched incoming weather, score, people and facts. <sub>`test_three_way_merge_preserves_owner_scalar_list_and_table_edits`</sub>
+- Checks that three-way merging keeps an owner-added family row, keeps a removed model row removed, adds a new model row and combines owner and model changes inside a retained row. <sub>`test_three_way_merge_keeps_owner_row_additions_and_removals`</sub>
+- Checks that when the owner rewords a list fact, the owner's wording is kept even if the model restates the same fact with a gloss. <sub>`test_three_way_merge_keeps_owner_wording_for_the_same_list_fact`</sub>
+- Checks that timeline patches use exact case-sensitive bullet matches, apply replacements, deletions and additions, avoid an exact duplicate, and can move a bullet between named sections without changing the original object. <sub>`test_timeline_patch_helpers_use_exact_matching_and_can_move`</sub>
+- Checks that legacy facts supplied as a mapping are conservatively converted into a Format 6 highlight, Time not stated details, places, family meals, health, feelings and growth fields. <sub>`test_legacy_conversion_uses_only_mapping_data`</sub>
+- Checks that Format 6 content projects back into the older facts shape: tagged places and people, skipped meals, exercise minutes, feelings, memories and activities. <sub>`test_legacy_projection_keeps_compatible_tracker_facts`</sub>
+
 ### Where files go
 
 File: `tests/frames/test_dayfile.py`
@@ -626,11 +650,13 @@ File: `tests/frames/test_dayfile.py`
 - Checks that a new write leaves out the English translation, and that an older file's translation block is still read, including when the heading is deleted or an older marker name is used. <sub>`test_capture_translation_roundtrip_and_hand_edits`</sub>
 - Checks that the example in `docs/frames-format.md` is identical to the sample file the tests use. <sub>`test_docs_example_matches_fixture`</sub>
 - Checks that a day file's parts are written in the documented order: front matter, title, "At a glance" facts (Highlight, Food, Places visited, People we met or visited, Health and fitness, Feelings, Memories, Weather, Things we did), journal, My notes, Transcript. <sub>`test_render_layout_markers_in_order`</sub>
-- Checks that a day file in the first layout (facts in the front matter) is read with its facts, still counts as unedited, and is written back as format 5 with At a glance. <sub>`test_reads_format_1_files_and_writes_the_current_format`</sub>
-- Checks that a format 2 day file (one Family block per person) is read, counts as edited, and is written back as format 5 with converted At a glance facts while staying marked edited. <sub>`test_reads_format_2_files_and_moves_their_facts_into_the_current_sections`</sub>
+- Checks that a day file in the first layout (facts in the front matter) is read with its facts, still counts as unedited, and is written back in the Format 5 At a glance layout until regeneration. <sub>`test_reads_format_1_files_and_preserves_the_legacy_layout`</sub>
+- Checks that a format 2 day file (one Family block per person) is read, counts as edited, and is written back in the Format 5 At a glance layout while staying marked edited. <sub>`test_reads_format_2_files_and_preserves_the_legacy_layout`</sub>
 - Checks that the lines of an old Family block are converted: "Went to" becomes a place, "Did" and "School/work" become things we did, each with the person's name in brackets, and "Ate" becomes snacks. <sub>`test_format_2_family_lines_become_places_and_things_we_did`</sub>
 - Checks that an old day's meals go to the person whose food holds them all, the rest of that person's food goes under snacks, and meals nobody could be given stay as the day's "Everyone" meals. <sub>`test_format_2_day_meals_go_to_the_person_who_ate_them`</sub>
 - Checks that an old-layout file you had edited still counts as edited after the upgrade. <sub>`test_edited_format_1_file_stays_edited`</sub>
+- Checks that a Format 5 day stays in the At a glance layout until content generation, then is rewritten with Format 6 content markers and no journal region. <sub>`test_format5_is_preserved_until_content_regeneration`</sub>
+- Checks that a Format 6 day writes content markers in documented order, round-trips the hash, projects legacy facts, ignores My notes edits, and treats a table-cell edit as an owner edit. <sub>`test_format6_marker_order_hash_roundtrip_and_legacy_projection`</sub>
 - Checks that a fact you type into the front matter of a current-layout file is kept there as your own field and doesn't replace the "At a glance" fact. <sub>`test_fact_keys_in_the_front_matter_of_a_format_3_file_are_kept`</sub>
 - Checks that hand-typed facts are understood: labels without bold or bullets, other heading levels, "Meals" and "places visited" as section names, a food line without a meal type (counted as Snacks), minutes on an activity; lines that fit nowhere (like "Sleep: 8 hours" or an unknown "Dreams" section) move into your notes. <sub>`test_facts_section_tolerates_hand_edits`</sub>
 - Checks that hand-typed facts are understood: a name heading under Food, Feelings or Memories starts a person, "Morning" and "Snacks / drinks / other" work as meal labels, a line before any name goes to Everyone (Food) or Together (Memories), "Remember:" under Highlight is read, "not looked up" reads as no weather, a person with nothing under them is kept, and a line under Health with no name or an unknown heading moves into your notes. <sub>`test_person_sections_tolerate_hand_edits`</sub>
@@ -672,6 +698,8 @@ File: `tests/frames/test_dayfile.py`
 - Checks that adding AI output to an edited day keeps the existing facts and notes, merges new fact values without duplicates, inserts repeated journal additions into Evening without creating Later, and leaves the day marked as edited. <sub>`test_section_merge_on_edited_day_keeps_edits`</sub>
 - Checks that adding AI output to an unedited day keeps it counted as unedited. <sub>`test_additive_merge_on_clean_day_refreshes_hash`</sub>
 - Checks that a complete incoming facts reply follows model changes for untouched values while preserving owner scalar changes, list additions and removals, meal edits, activity minutes and per-person food and feelings. <sub>`test_three_way_facts_merge_keeps_owner_additions_changes_and_removals`</sub>
+- Checks that a Format 6 three-way merge keeps owner weather, rewritten timeline bullets, table cells, chores and tags while accepting new model people, meals and family rows, and does not refresh the generated hash. <sub>`test_format6_three_way_merge_keeps_owner_cell_list_and_timeline_edits`</sub>
+- Checks that a clean Format 6 three-way merge refreshes the generated hash so a later owner edit can still be spotted. <sub>`test_clean_format6_three_way_merge_refreshes_generated_hash`</sub>
 - Checks that a restated fact is kept once ("Sulemani chai" and "Sulemani chai (spiced black tea)" collapse, a computed 90-minute activity is replaced by the new wording, and a line you added stays). <sub>`test_three_way_keeps_one_wording_of_the_same_fact`</sub>
 - Checks that a journal replacement corrects a generated sentence and leaves a sentence you rewrote unchanged. <sub>`test_journal_replacement_corrects_a_model_sentence_and_keeps_an_edit`</sub>
 - Checks that a journal which still matches the model text is replaced, and an edited journal keeps your sentence, gains a new bullet, and does not gain a duplicate of your sentence. <sub>`test_clean_journal_is_replaced_and_an_edited_one_keeps_its_words`</sub>
@@ -826,5 +854,5 @@ File: `tests/prism/test_regenerate.py`
 
 - Checks that bulk regenerate rewrites an older day's model-owned journal and facts, keeps the title, notes and transcripts, and a second run does nothing. <sub>`test_regenerate_updates_an_existing_format_2_day_like_generate`</sub>
 - Checks that `--replace-generated` rewrites a clean journal even when the recordings are unchanged, and still keeps a journal you edited. <sub>`test_replace_generated_rewrites_a_clean_journal_and_keeps_an_edit`</sub>
-- Checks that bulk regenerate updates a day you edited instead of skipping it: your mood and journal words stay, and a new bullet can be added. <sub>`test_regenerate_leaves_a_day_the_owner_edited`</sub>
+- Checks that bulk regenerate updates a day you edited instead of skipping it: your timeline words stay, and a new Evening bullet can be added. <sub>`test_regenerate_preserves_legacy_owner_timeline_edits`</sub>
 - Checks that a dry run lists `would update` without writing anything or calling the AI, that a day without any transcript text is skipped, and that a date range limits which days are processed. <sub>`test_regenerate_dry_run_range_and_days_without_text`</sub>

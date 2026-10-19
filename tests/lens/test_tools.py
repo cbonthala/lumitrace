@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 
 from lumitrace.config import Settings
+from lumitrace.frames import daycontent as C
+from lumitrace.frames.dayfile import DayFile, apply_content_generation, day_file_path, render
 from lumitrace.frames.storage.local import LocalStorage
 from lumitrace.index.schema import connect, reset_derived
 from lumitrace.lens import dates as D
@@ -15,6 +17,59 @@ from lumitrace.lens import tools as T
 from lumitrace.lens.dates import DateArgumentError
 from lumitrace.lens.index import INDEX_MISSING_NOTE
 from lumitrace.lens.tools import LensTools, ToolInputError
+from lumitrace.spectrum.core import _insert_day
+
+
+def _format6_day() -> DayFile:
+    content = C.DayContent(
+        timeline=C.Timeline(
+            highlight="A full day",
+            context=C.DayContext(
+                weather="warm",
+                places_visited=[C.PlaceContext(name="River Park", family_members=["Maya"])],
+                people_met=[
+                    C.PersonContext(
+                        name="Dr. Rao",
+                        relationship="pediatrician",
+                        context="annual visit",
+                        family_members=["Maya"],
+                    )
+                ],
+            ),
+            morning=["Packed lunch"],
+            night=["Watched fireflies"],
+            remember="Maya rode by herself",
+        ),
+        family=[
+            C.FamilyTracker(
+                name="Maya",
+                food=C.FoodTracker(
+                    breakfast=C.Meal(status="consumed", items=["cardamom pancakes"]),
+                    lunch=C.Meal(status="skipped"),
+                ),
+                health_fitness=C.HealthFitness(
+                    exercise_movement=[C.ExerciseMovement(activity="bicycle ride", minutes=25)],
+                    energy=C.Rating(score=4, description="steady"),
+                ),
+                growth_learning=C.GrowthLearning(
+                    new_skill_behavior=["rode without training wheels"]
+                ),
+            )
+        ],
+        pregnancy_baby=C.PregnancyBaby(
+            pregnant_person="Sam",
+            gestational_age="18 weeks",
+            baby_movement=["two strong kicks"],
+        ),
+        tags=["family-adventure"],
+    )
+    return apply_content_generation(
+        DayFile.new(dt.date(2026, 10, 12)),
+        content=content,
+        title="Monday, October 12, 2026 · Bicycle day",
+        force=True,
+    )
+
 
 # --- dates ---------------------------------------------------------------------------------
 
@@ -81,6 +136,24 @@ def test_get_day_works_without_index(tools: LensTools, storage: LocalStorage, da
 def test_get_day_bad_date(tools: LensTools) -> None:
     with pytest.raises(DateArgumentError):
         tools.get_day("October 10")
+
+
+def test_get_day_returns_canonical_format6_content(tools: LensTools, storage: LocalStorage) -> None:
+    day = _format6_day()
+    storage.write_text(day_file_path(day.date), render(day))
+
+    out = tools.get_day(day.date.isoformat())
+
+    assert out["format_version"] == 6
+    assert out["content"] == day.content.model_dump(mode="json")
+    assert out["content"]["family"][0]["health_fitness"]["energy"]["score"] == 4
+    assert out["content"]["pregnancy_baby"]["baby_movement"] == ["two strong kicks"]
+    assert out["content"]["tags"] == ["family-adventure"]
+    assert out["facts"]["highlights"] == ["A full day"]
+    assert out["facts"]["family"][0]["meals"][0] == {
+        "type": "breakfast",
+        "items": ["cardamom pancakes"],
+    }
 
 
 # --- query_facts ---------------------------------------------------------------------------
@@ -242,6 +315,44 @@ def test_query_facts_bad_kind(tools: LensTools, populated: Path) -> None:
 def test_query_facts_missing_index(tools: LensTools) -> None:
     out = tools.query_facts("meals")
     assert out["rows"] == [] and out["note"] == INDEX_MISSING_NOTE
+
+
+def test_query_format6_content_scopes(
+    tools: LensTools, settings: Settings, populated: Path
+) -> None:
+    day = _format6_day()
+    conn = connect(populated, settings.embedding_dimension)
+    with conn:
+        _insert_day(conn, day_file_path(day.date), day)
+    conn.close()
+
+    met = tools.query_facts("timeline", contains="annual visit")
+    assert met["rows"][0]["field"] == "people_met"
+    assert met["rows"][0]["text"] == "Dr. Rao"
+    assert met["rows"][0]["details"]["relationship"] == "pediatrician"
+
+    growth = tools.query_facts("trackers", person="maya", contains="training wheels")
+    assert growth["rows"][0] == {
+        "date": "2026-10-12",
+        "scope": "family",
+        "person": "Maya",
+        "category": "growth_learning",
+        "field": "new_skill_behavior",
+        "text": "rode without training wheels",
+        "number": None,
+        "status": None,
+    }
+    skipped = tools.query_facts("trackers", person="Maya", contains="skipped")
+    assert skipped["rows"][0]["field"] == "lunch"
+    assert skipped["rows"][0]["status"] == "skipped"
+    assert skipped["rows"][0]["details"] == {"items": [], "status": "skipped"}
+
+    pregnancy = tools.query_facts("pregnancy", contains="strong kicks")
+    assert pregnancy["rows"][0]["field"] == "baby_movement"
+    assert pregnancy["rows"][0]["text"] == "two strong kicks"
+    tags = tools.query_facts("tags", contains="family-adventure")
+    assert tags["rows"][0]["text"] == "family-adventure"
+    assert tools.query_facts("content", person="Maya")["counts"]["rows"] > 0
 
 
 # --- on_this_day ---------------------------------------------------------------------------

@@ -27,10 +27,9 @@ from lumitrace.lens.tools import FactKind, LensTools, Rating, ToolInputError
 logger = logging.getLogger(__name__)
 
 INSTRUCTIONS = """\
-Lumitrace is the owner's personal voice journal: one entry per day with a written journal, \
-structured facts (highlights and the one moment to remember, places visited, people met, things \
-done, mood, weather, and per family member what they ate at each meal, health, feelings and \
-memories), the owner's own notes and the raw transcripts of their recordings.
+Lumitrace is the owner's personal voice journal: one entry per day with a timeline, day context, \
+family trackers, optional pregnancy tracker and tags (older entries expose equivalent legacy \
+facts and journal text), plus the owner's own notes and raw recording transcripts.
 
 How to answer:
 - Answer ONLY from what these tools return. Never fill gaps with guesses or general knowledge \
@@ -75,7 +74,7 @@ def register_tools(server: MCPServer, tools: LensTools) -> None:
         description=(
             "Search the owner's journal (journal text, notes, transcripts and facts) by keywords "
             "and meaning. Returns the best-matching passages, each with its date (YYYY-MM-DD), "
-            "section (title|journal|notes|transcript|facts), a snippet and the file path. "
+            "section (title|content|journal|notes|transcript|facts), a snippet and the file path. "
             f"Optional date filters are inclusive and take {DATE_HELP}. Use query_facts instead "
             "for counting or listing meals, places, activities, people, family facts, mood or "
             "highlights."
@@ -97,8 +96,10 @@ def register_tools(server: MCPServer, tools: LensTools) -> None:
         title="Get one day",
         annotations=_READ_ONLY,
         description=(
-            "Return the full journal entry for one day: title, journal, facts, the owner's notes, "
-            "the raw transcripts of every recording and quick note (with times and locations), "
+            "Return the full journal entry for one day: title, canonical content (timeline, "
+            "family trackers, pregnancy and tags), legacy facts/journal projections, the owner's "
+            "notes, raw transcripts of every recording and quick note (with times and "
+            "locations), "
             "and private links to the day's audio recordings and photos (they open only for the "
             "owner; share them as links so the owner can tap to listen or view). "
             f"date: {DATE_HELP}."
@@ -121,12 +122,15 @@ def register_tools(server: MCPServer, tools: LensTools) -> None:
             "visited), places (places visited, with who went in brackets), family (per family "
             "member: person + category + text, where category is feelings, health or moments; "
             "memories shared by everyone have person Together), mood (mood word + 1-5 score per "
-            "day), highlights. A fact ending in [uncertain: ...] was not certain in the source. "
+            "day), highlights, timeline, trackers (all family tracker fields), pregnancy, tags, "
+            "or content (all canonical rows). A fact ending in [uncertain: ...] was not certain "
+            "in the source. "
             "Returns matching rows (newest first, each with its date) plus counts (rows, days, "
             "first and last date) and aggregates over ALL matches (top items, minutes per "
             "activity, days per person or place, counts per family member and category, average "
             "mood). contains is a case-insensitive substring filter (for family it matches the "
-            "text or the category); person limits family and meals facts to one family member. "
+            "text or the category); person limits family, meals, trackers or content rows to one "
+            "family member. "
             f"Date filters are inclusive and take {DATE_HELP}."
         ),
     )
@@ -145,7 +149,12 @@ def register_tools(server: MCPServer, tools: LensTools) -> None:
         limit: Annotated[int, Field(description="Maximum rows (1-500).", ge=1, le=500)] = 50,
         person: Annotated[
             str | None,
-            Field(description="Only with kind 'family' or 'meals': one family member, e.g. 'Leo'."),
+            Field(
+                description=(
+                    "Only with kind family, meals, trackers or content: one family member, "
+                    "e.g. 'Leo'."
+                )
+            ),
         ] = None,
     ) -> dict[str, Any]:
         return _run(tools.query_facts, kind, contains, from_date, to_date, limit, person)

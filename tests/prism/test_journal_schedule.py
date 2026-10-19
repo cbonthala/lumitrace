@@ -5,14 +5,7 @@ from __future__ import annotations
 import datetime as dt
 
 from lumitrace.config import Settings
-from lumitrace.frames.dayfile import (
-    DayFacts,
-    day_file_path,
-    generated_facts_path,
-    generated_snapshot_path,
-    parse,
-    render,
-)
+from lumitrace.frames.dayfile import day_file_path, generated_facts_path, parse
 from lumitrace.frames.storage.local import LocalStorage
 from lumitrace.prism.journal_schedule import JournalScheduler, next_journal_at
 from lumitrace.prism.pipeline.processor import CaptureProcessor
@@ -61,18 +54,18 @@ def test_open_day_keeps_every_recording_and_writes_the_journal_once(
     assert processor.generate_pending() == []
     assert fake_llm.tasks() == ["fill_day"]
     day = parse(api_storage.read_text(day_file_path(OCT10)))
-    assert day.journal == "## Summary\n\nA day with 2 entries."
-    assert day.facts.people == ["Maya", "Leo"]
+    assert day.content.timeline.time_not_stated == ["A day with 2 entries."]
+    assert [person.name for person in day.content.timeline.context.people_met] == ["Maya", "Leo"]
     assert not day.is_user_edited()
     assert api_storage.exists(generated_facts_path(OCT10))
     assert not api_storage.exists(processor._due_path(OCT10))
     filled = fake_llm.calls[0]
     assert "Run with Maya." in filled[2][1]["content"]
     assert "Tacos with Leo." in filled[2][1]["content"]
-    assert "Day file template" in filled[2][1]["content"]
+    assert "Day-file Markdown template" in filled[2][1]["content"]
 
 
-def test_morning_run_writes_the_journal_even_if_one_was_typed_early(
+def test_morning_run_preserves_content_typed_early(
     processor: CaptureProcessor, api_settings: Settings, api_storage: LocalStorage, fake_llm
 ) -> None:
     clock = [dt.datetime(2026, 10, 10, 15, tzinfo=api_settings.tz)]
@@ -87,8 +80,8 @@ def test_morning_run_writes_the_journal_even_if_one_was_typed_early(
     clock[0] = dt.datetime(2026, 10, 11, 4, 6, tzinfo=api_settings.tz)
     assert processor.generate_pending() == [(OCT10, "full")]
     day = parse(api_storage.read_text(day_file_path(OCT10)))
-    assert day.journal == "## Summary\n\nA day with 1 entries."
-    assert "My own words about the run." not in day.journal
+    assert "A day with 1 entries." in day.content.timeline.time_not_stated
+    assert "My own words about the run." in day.content.timeline.time_not_stated
     assert day.notes == "Keep this note."
     assert fake_llm.tasks() == ["fill_day"]
     assert "Keep this note." in fake_llm.calls[0][2][1]["content"]
@@ -109,7 +102,9 @@ def test_a_failed_morning_run_is_tried_again(
 
     fake_llm.fail_models.clear()
     assert processor.generate_pending() == [(OCT10, "full")]
-    assert parse(api_storage.read_text(day_file_path(OCT10))).journal.startswith("## Summary")
+    assert parse(api_storage.read_text(day_file_path(OCT10))).content.timeline.time_not_stated == [
+        "A day with 1 entries."
+    ]
 
 
 def test_generate_now_writes_the_open_day_from_every_recording(
@@ -126,7 +121,7 @@ def test_generate_now_writes_the_open_day_from_every_recording(
     assert processor.generate_day(OCT10) == "full"
     assert fake_llm.tasks() == ["fill_day"]
     day = parse(api_storage.read_text(day_file_path(OCT10)))
-    assert day.journal == "## Summary\n\nA day with 2 entries."
+    assert day.content.timeline.time_not_stated == ["A day with 2 entries."]
     assert "Run with Maya." in fake_llm.calls[0][2][1]["content"]
     assert "Tacos with Leo." in fake_llm.calls[0][2][1]["content"]
     assert not api_storage.exists(processor._due_path(OCT10))
@@ -148,9 +143,10 @@ def test_generate_now_preserves_edits_and_uses_changed_notes(
 
     def edit(day) -> None:
         day.title = "My own title"
-        day.journal = "## Summary\n\nMy own words about the run.\n\n## Evening\n\n- A line I added."
-        day.facts.mood = "proud"
-        day.facts.people = ["Nobody"]
+        day.content.timeline.time_not_stated = ["My own words about the run."]
+        day.content.timeline.evening = ["A line I added."]
+        day.content.tags = ["proud"]
+        day.content.timeline.context.people_met = []
         day.notes = "Keep this note."
 
     owner_edits(api_storage, edit)
@@ -162,13 +158,14 @@ def test_generate_now_preserves_edits_and_uses_changed_notes(
     assert "Run with Maya." in sent and "Tacos with Leo." in sent
     assert "My own words" in sent and "Keep this note." in sent
     day = parse(api_storage.read_text(day_file_path(OCT10)))
-    assert day.journal.startswith("## Summary\n\nMy own words about the run.")
-    assert "- A line I added." in day.journal
-    assert day.journal.endswith("- You added another detail to the day.")
-    assert "## Later" not in day.journal
+    assert day.content.timeline.time_not_stated == ["My own words about the run."]
+    assert set(day.content.timeline.evening) == {
+        "A line I added.",
+        "You added another detail to the day.",
+    }
     assert day.title == "My own title"
-    assert day.facts.mood == "proud"
-    assert day.facts.people == ["Nobody"]
+    assert day.content.tags == ["proud"]
+    assert day.content.timeline.context.people_met == []
     assert day.notes == "Keep this note."
     assert [c.text for c in day.captures] == ["Run with Maya.", "Tacos with Leo."]
     assert day.is_user_edited()
@@ -190,12 +187,12 @@ def test_generate_repairs_facts_when_the_generated_facts_base_is_missing(
     assert processor.generate_day(OCT10) == "update"
     assert fake_llm.tasks() == ["fill_day", "update_day"]
     day = parse(api_storage.read_text(day_file_path(OCT10)))
-    assert day.facts.people == ["Maya"]
+    assert [person.name for person in day.content.timeline.context.people_met] == ["Maya"]
     assert api_storage.exists(generated_facts_path(OCT10))
     assert processor.generate_day(OCT10) == "unchanged"
 
 
-def test_format_4_facts_repair_keeps_owner_title_and_journal_edits(
+def test_missing_state_repair_keeps_owner_title_and_content_edits(
     processor: CaptureProcessor,
     api_settings: Settings,
     api_storage: LocalStorage,
@@ -203,24 +200,18 @@ def test_format_4_facts_repair_keeps_owner_title_and_journal_edits(
     processor._now_fn = lambda: dt.datetime(2026, 10, 10, 15, tzinfo=api_settings.tz)
     processor.process(make_request(api_settings, api_storage, "a", spoken="Run with Maya."))
     assert processor.generate_day(OCT10) == "full"
-    legacy = parse(api_storage.read_text(day_file_path(OCT10)))
-    legacy.facts = DayFacts()
-    legacy.meta.generated_hash = legacy.compute_generated_hash()
-    emptied = render(legacy)
-    api_storage.write_text(day_file_path(OCT10), emptied)
-    api_storage.write_text(generated_snapshot_path(OCT10), emptied)
     api_storage.delete(generated_facts_path(OCT10))
 
     def edit(day) -> None:
         day.title = "My title"
-        day.journal = "## Summary\n\nMy corrected journal."
+        day.content.timeline.time_not_stated = ["My corrected timeline."]
 
     owner_edits(api_storage, edit)
     assert processor.generate_day(OCT10) == "update"
     repaired = parse(api_storage.read_text(day_file_path(OCT10)))
     assert repaired.title == "My title"
-    assert repaired.journal.startswith("## Summary\n\nMy corrected journal.")
-    assert repaired.facts.people == ["Maya"]
+    assert repaired.content.timeline.time_not_stated == ["My corrected timeline."]
+    assert [person.name for person in repaired.content.timeline.context.people_met] == ["Maya"]
     assert repaired.is_user_edited()
 
 
@@ -243,9 +234,8 @@ def test_morning_run_merges_new_audio_after_generate_now(
     assert fake_llm.tasks() == ["fill_day", "fill_day"]
     second = fake_llm.calls[1][2][1]["content"]
     assert "Run with Maya." in second and "Tacos with Leo." in second
-    journal = parse(api_storage.read_text(day_file_path(OCT10))).journal
-    assert journal == "## Summary\n\nA day with 2 entries."
-    assert "## Later" not in journal
+    content = parse(api_storage.read_text(day_file_path(OCT10))).content
+    assert content.timeline.time_not_stated == ["A day with 2 entries."]
 
 
 def test_scheduler_stops_while_it_is_waiting(processor: CaptureProcessor) -> None:

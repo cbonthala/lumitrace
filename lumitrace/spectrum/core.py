@@ -37,6 +37,7 @@ from lumitrace.frames.dayfile import (
     DayFile,
     DayFileParseError,
     classify_path,
+    content_for_day,
     day_file_path,
     generated_snapshot_path,
     parse,
@@ -659,3 +660,178 @@ def _insert_day(conn: sqlite3.Connection, path: str, day: DayFile) -> None:
         " VALUES (?, ?, ?, ?, ?, ?)",
         [(date, *row, pos) for pos, row in enumerate(family_rows)],
     )
+    conn.executemany(
+        "INSERT INTO content_facts("
+        "date, scope, person, category, field, text, number, status, details_json, position"
+        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [(date, *row) for row in _content_fact_rows(day)],
+    )
+
+
+def _content_fact_rows(
+    day: DayFile,
+) -> list[tuple[str, str | None, str, str, str | None, int | None, str | None, str | None, int]]:
+    """Flatten canonical DayContent into stable, query-friendly logical rows.
+
+    ``details_json`` retains compound values such as place context and meal item lists while the
+    scalar columns keep substring filters and aggregations useful. Legacy days pass through
+    :func:`content_for_day`, so the same rows are available without rewriting their files.
+    """
+    content = content_for_day(day)
+    rows: list[
+        tuple[
+            str,
+            str | None,
+            str,
+            str,
+            str | None,
+            int | None,
+            str | None,
+            str | None,
+            int,
+        ]
+    ] = []
+
+    def add(
+        scope: str,
+        category: str,
+        field: str,
+        *,
+        person: str | None = None,
+        text: str | None = None,
+        number: int | None = None,
+        status: str | None = None,
+        details: Any = None,
+    ) -> None:
+        if text is None and number is None and status is None and details is None:
+            return
+        details_json = (
+            json.dumps(details, ensure_ascii=False, sort_keys=True) if details is not None else None
+        )
+        rows.append(
+            (
+                scope,
+                person,
+                category,
+                field,
+                text,
+                number,
+                status,
+                details_json,
+                len(rows),
+            )
+        )
+
+    timeline = content.timeline
+    add("timeline", "timeline", "highlight", text=timeline.highlight)
+    context = timeline.context
+    add("timeline", "context", "weather", text=context.weather)
+    for place in context.places_visited:
+        add(
+            "timeline",
+            "context",
+            "places_visited",
+            text=place.name,
+            details=place.model_dump(mode="json"),
+        )
+    for met in context.people_met:
+        add(
+            "timeline",
+            "context",
+            "people_met",
+            text=met.name,
+            details=met.model_dump(mode="json"),
+        )
+    for field_name in ("special_occasions", "media"):
+        for value in getattr(context, field_name):
+            add("timeline", "context", field_name, text=value)
+    for field_name in ("morning", "afternoon", "evening", "night", "time_not_stated"):
+        for value in getattr(timeline, field_name):
+            add("timeline", "timeline", field_name, text=value)
+    add("timeline", "timeline", "remember", text=timeline.remember)
+
+    for member in content.family:
+        person = member.name
+        for field_name in ("breakfast", "lunch", "dinner", "snacks_drinks"):
+            meal = getattr(member.food, field_name)
+            details = meal.model_dump(mode="json")
+            if meal.items:
+                for item in meal.items:
+                    add(
+                        "family",
+                        "food",
+                        field_name,
+                        person=person,
+                        text=item,
+                        status=meal.status,
+                        details=details,
+                    )
+            else:
+                add(
+                    "family",
+                    "food",
+                    field_name,
+                    person=person,
+                    status=meal.status,
+                    details=details,
+                )
+        for value in member.food.food_response:
+            add("family", "food", "food_response", person=person, text=value)
+
+        health = member.health_fitness
+        for value in health.sleep:
+            add("family", "health_fitness", "sleep", person=person, text=value)
+        for exercise in health.exercise_movement:
+            add(
+                "family",
+                "health_fitness",
+                "exercise_movement",
+                person=person,
+                text=exercise.activity,
+                number=exercise.minutes,
+                details=exercise.model_dump(mode="json"),
+            )
+        for field_name in ("energy", "mood"):
+            rating = getattr(health, field_name)
+            add(
+                "family",
+                "health_fitness",
+                field_name,
+                person=person,
+                text=rating.description,
+                number=rating.score,
+                details=rating.model_dump(mode="json")
+                if rating.score is not None or rating.description is not None
+                else None,
+            )
+        for field_name in ("body_digestion", "symptoms_medication"):
+            for value in getattr(health, field_name):
+                add("family", "health_fitness", field_name, person=person, text=value)
+
+        for category, tracker in (
+            ("daily_routine", member.daily_routine),
+            ("interests_preferences", member.interests_preferences),
+            ("growth_learning", member.growth_learning),
+        ):
+            for field_name in type(tracker).model_fields:
+                for value in getattr(tracker, field_name):
+                    add("family", category, field_name, person=person, text=value)
+
+    pregnancy = content.pregnancy_baby
+    add("pregnancy", "pregnancy_baby", "pregnant_person", text=pregnancy.pregnant_person)
+    add("pregnancy", "pregnancy_baby", "gestational_age", text=pregnancy.gestational_age)
+    for field_name in (
+        "maternal_symptoms",
+        "cravings_aversions",
+        "supplements_medication",
+        "rest_self_care",
+        "baby_movement",
+        "appointment_scan",
+        "heartbeat_growth",
+        "questions_concerns",
+    ):
+        for value in getattr(pregnancy, field_name):
+            add("pregnancy", "pregnancy_baby", field_name, text=value)
+    for tag in content.tags:
+        add("tags", "tags", "tag", text=tag)
+    return rows

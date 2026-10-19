@@ -71,7 +71,8 @@ Lens is public so AI apps can connect (decisions 0041 and 0044).
 ## Shared foundation
 
 * `lumitrace/config.py`: all settings, from `LUMITRACE_*` environment variables / `.env`.
-* **Frames** (`lumitrace/frames/`): `dayfile.py` is the day-file format, paths and merge rules;
+* **Frames** (`lumitrace/frames/`): `dayfile.py` is the file envelope, paths and compatibility
+  layer; `daycontent.py` owns the Format 6 timeline, family trackers, Markdown and merge rules;
   `storage/` is the `Storage` interface with `local` and `gdrive` backends.
 * `lumitrace/index/schema.py`: the SQLite schema. It stays outside `lumitrace/spectrum/` because
   Spectrum writes the index and the Lens reads it.
@@ -84,14 +85,14 @@ Precise signatures: `docs/contracts.md`.
 ```
 Lumitrace/
   2026/10/2026-10-10/
-    2026-10-10.md          front matter, structured facts, journal, notes, Telugu transcript
+    2026-10-10.md          front matter, Format 6 timeline/trackers, notes, Telugu transcript
     2026-10-10-2130.m4a    compressed voice note
     photo-01.jpg           resized copy without EXIF (originals stay in Google Photos)
   _system/
     inbox/<capture id>/    raw uploads waiting for the worker (deleted when done)
     captures/<id>.json     capture status, no journal content
     generated/YYYY/MM/     exact copy of each day file as the system last wrote it
-    generated-facts/YYYY/MM/ previous model facts and journal for owner-safe merges
+    generated-facts/YYYY/MM/ previous model content for owner-safe merges
     activity/YYYY/MM.jsonl activity records: models, timings, cost, errors
     feedback/YYYY/MM/      one JSON file per MCP feedback call
     index-backup/          daily copy of the SQLite index
@@ -110,15 +111,14 @@ Lumitrace/
    its `_system/generated/` snapshot. The transcript is now safe. During an open day the journal
    waits until 4:05 a.m.
 5. One LiteLLM call (`LUMITRACE_LLM_WRITE_JOURNAL_MODEL`, prompts in `prompts/`). At 4:05, or
-   the first write of a day that has already closed, `fill_day` then
-   `apply_generation(..., force=True)` uses every recording plus My notes and returns the journal
-   plus complete structured facts. Once a journal exists, a journal that still matches the saved
-   model text is rewritten from every recording when the source changes. An edited journal uses
-   `update_day`: a contradicted model sentence can be replaced, and missing bullets are inserted
-   without a second copy. Facts use a three-way merge whose base is `_system/generated-facts/`
-   (the snapshot until that file exists). The same fact is kept once. Owner additions, changes
-   and removals win. A missing base repairs a format-4 day.
-6. Write the day file, exact snapshot and generated-facts base, nudge Spectrum, append an
+   the first write of a day that has already closed, `fill_day` uses every recording plus My
+   notes and returns a headline and complete Format 6 content. It writes one chronological
+   timeline plus family, health, pregnancy, routine, interests, growth and tag trackers. Once
+   content exists, clean model-owned content can be refilled from all source; an edited day uses
+   `update_day`, which returns exact timeline patches and complete structured tracker state.
+   The final write uses a three-way merge whose base is `_system/generated-facts/`; owner
+   additions, changes and removals win. A legacy base is conservatively projected to Format 6.
+6. Write the day file, exact snapshot and generated-content base, nudge Spectrum, append an
    activity record and mark the capture `done`. `generated_source_hash` plus the facts base make
    unchanged Generate calls and capture replays no-ops.
 
@@ -130,7 +130,9 @@ Lumitrace/
 * For each changed day file: parse, upsert `days` and fact tables, split into `passages`, embed
   new or changed passages (`embed_texts`, unchanged ones reuse their vectors), and compare with
   the `_system/generated/` snapshot to store `edit_signals` (only when both have the same
-  `generated_at`). One transaction per day.
+  `generated_at`). Format 6 writes canonical content passages and flattened timeline, tracker,
+  pregnancy and tag rows to `content_facts`; the Format 5 projection also keeps legacy queries
+  working. One transaction per day.
 * `rebuild` = `reset_derived` + full sync (automatic when the embedding model changes).
 * Copies the index to `_system/index-backup/` every `LUMITRACE_INDEXER_BACKUP_INTERVAL_HOURS`.
 
@@ -139,7 +141,8 @@ Lumitrace/
 * Tools: `search` (FTS5 + vector, reciprocal rank fusion), `get_day` (day file from storage +
   private audio/photo links via `storage.get_share_link`), `query_facts` (fact tables with
   aggregates), `on_this_day`, `feedback` (writes the `feedback` table and a JSON copy under
-  `_system/feedback/`).
+  `_system/feedback/`). `get_day` returns the canonical Format 6 `content` plus legacy
+  projections; `query_facts` has timeline, trackers, pregnancy, tags and all-content views.
 * Each call opens its own read-only index connection, so Spectrum can sync at any time.
 * Transports: stdio for local apps, streamable HTTP for remote and phone apps with auth mode
   `token` (static bearer) or `oauth` (single-owner OAuth 2.1 with a password page). Server

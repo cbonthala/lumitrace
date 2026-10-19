@@ -7,6 +7,16 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- **Day file format 6 is one structured family day** (ADR 0061). New generations write a
+  chronological timeline, day context, per-person food, health, routine, interests and growth
+  tables, a pregnancy/baby tracker and tags inside one owner-editable content region. Empty
+  cells use `—`, lists use `<br>`, and complete content has an owner-safe three-way merge.
+  Formats 1–5 still parse; a legacy day stays Format 5 until generation migrates it. Index
+  schema 4 adds canonical content passages and `content_facts`, and the Lens returns complete
+  content with new timeline, trackers, pregnancy, tags and all-content fact views while keeping
+  legacy queries.
+- **GitHub Actions CI** runs `uv sync --frozen`, `uv run pytest` and `uv run ruff check .` on
+  push and pull request.
 - **Day file format 5 restores structured facts** (ADR 0059). At a glance again writes Highlight,
   Food, Places, People, Health, Feelings, Memories, Weather and Things we did. Format 4 still
   parses and its next Generate repairs the missing facts. English translations remain absent.
@@ -32,6 +42,12 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Prism
 
+- **Fill and update prompts write Format 6 content** (ADR 0061). `fill_day` returns one complete
+  timeline and tracker state. `update_day` returns exact timeline additions, replacements and
+  deletions plus complete structured trackers; code applies the patches and merges them against
+  the saved model content so owner field, list, row and cell edits win. Both prompts explicitly
+  constrain inference, chronology, person attribution, pregnancy details, ratings, durations
+  and duplication.
 - **A later recording replaces model facts and corrects the journal** (ADR 0060). The same fact
   is kept once, so a reworded gloss does not sit beside the old line. A journal that is still
   the model's is rewritten from every recording; a sentence you changed stays, and a generated

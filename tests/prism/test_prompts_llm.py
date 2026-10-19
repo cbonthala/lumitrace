@@ -10,10 +10,13 @@ from typing import Any
 import pytest
 
 from lumitrace.config import Settings
-from lumitrace.frames.dayfile import Capture, DayFacts, FamilyMember, Meal
+from lumitrace.frames.daycontent import DayContent, FamilyTracker
+from lumitrace.frames.daycontent import Meal as ContentMeal
+from lumitrace.frames.dayfile import Capture, DayFacts, FamilyMember
 from lumitrace.household import Household, Person
 from lumitrace.prism.pipeline.generate import (
     Generator,
+    keep_content_family,
     keep_family,
     parse_day_draft,
     parse_day_update,
@@ -46,8 +49,20 @@ def test_every_current_prompt_exists_and_renders(api_settings: Settings) -> None
     gen.update_day(day, [capture], "Owner note.", "## Summary\n\nEarlier.")
     assert sorted({c[0] for c in llm.calls}) == sorted(PROMPT_TASKS)
     for _, _, messages in llm.calls:
-        for message in messages:
-            assert "{{" not in message["content"]
+        rendered = "\n".join(message["content"] for message in messages)
+        for placeholder in (
+            "{{date}}",
+            "{{author}}",
+            "{{family}}",
+            "{{glossary}}",
+            "{{keyterms}}",
+            "{{template}}",
+            "{{weather}}",
+            "{{notes}}",
+            "{{captures}}",
+            "{{journal}}",
+        ):
+            assert placeholder not in rendered
     facts_user = llm.calls[0][2][1]["content"]
     assert "2026-10-10 (Saturday)" in facts_user
     assert "### 13:05 · Quick Note (location: Austin)\n\nTacos with Maya." in facts_user
@@ -126,6 +141,19 @@ def test_keep_family_drops_unknown_names_and_uses_configured_spelling() -> None:
     assert padded == [FamilyMember(name="Maya"), FamilyMember(name="Leo")]
 
 
+def test_keep_content_family_is_dynamic_and_uses_configured_spelling() -> None:
+    content = DayContent(
+        family=[
+            FamilyTracker(name="leo"),
+            FamilyTracker(name="Unknown"),
+            FamilyTracker(name="MAYA"),
+        ]
+    )
+    kept = keep_content_family(content, ["Maya", "Leo"])
+    assert [member.name for member in kept.family] == ["Maya", "Leo"]
+    assert keep_content_family(content, []).family == []
+
+
 def test_fill_day_sends_the_family_list(api_settings: Settings) -> None:
     at = dt.datetime(2026, 10, 10, 13, 5, tzinfo=api_settings.tz)
     capture = Capture(id="c", kind="note", captured_at=at, text="x")
@@ -147,13 +175,13 @@ def test_fill_day_sends_the_family_list(api_settings: Settings) -> None:
         gen.fill_day(dt.date(2026, 10, 10), [capture])
         users[key] = llm.calls[0][2][1]["content"]
     with_owner = users["owner"]
-    assert "The author (the person speaking): Sam\n" in with_owner
+    assert "Author—the person speaking:\nSam\n" in with_owner
     assert (
-        "relation to the author (may be empty): "
+        "Family members and their relationship to the author:\n"
         "Sam (the author), Maya (the author's wife, born 1990-04-12), Leo\n"
     ) in with_owner
-    assert "The author (the person speaking): (not given)\n" in users["none"]
-    assert "relation to the author (may be empty): Maya, Leo\n" in users["none"]
+    assert "Author—the person speaking:\n(not given)\n" in users["none"]
+    assert "Family members and their relationship to the author:\nMaya, Leo\n" in users["none"]
 
 
 def test_glossary_is_sent_to_every_prompt(api_settings: Settings) -> None:
@@ -167,10 +195,11 @@ def test_glossary_is_sent_to_every_prompt(api_settings: Settings) -> None:
         gen.fill_day(dt.date(2026, 10, 10), [capture])
         gen.update_day(dt.date(2026, 10, 10), [capture], "Owner note.", "## Summary\n\nEarlier.")
         for _, _, messages in llm.calls:
-            system = messages[0]["content"]
-            assert (notes in system) is expected
-            assert "Background from the owner's family file" in system
-            assert ("(none)" in system) is (not expected)
+            prompt = "\n".join(message["content"] for message in messages)
+            assert (notes in prompt) is expected
+            assert "Family background and glossary" in prompt
+            if not expected:
+                assert "(none)" in prompt
 
 
 def test_journal_gets_the_transcript_and_keyterms_not_a_translation(
@@ -198,7 +227,7 @@ def test_journal_gets_the_transcript_and_keyterms_not_a_translation(
         assert "Sam, Maya, Corner Bakery" in user
         assert "We went to the park." not in user
         assert "English translation" not in user
-        assert "Leon is a friend." in messages[0]["content"]
+        assert "Leon is a friend." in "\n".join(message["content"] for message in messages)
     assert "Facts already extracted" not in llm.calls[0][2][1]["content"]
 
 
@@ -206,21 +235,27 @@ def test_update_reply_classifies_additions_by_journal_section() -> None:
     update = parse_day_update(
         {
             "additions": [
-                {"section": "Afternoon", "text": "- Walked to the park."},
-                {"section": "Thoughts", "text": "Felt grateful."},
+                {"section": "Afternoon", "text": "Walked to the park."},
+                {"section": "Time not stated", "text": "Felt grateful."},
             ],
-            "facts": {"places": ["the park"]},
+            "structured": {
+                "context": {"places_visited": [{"name": "the park", "family_members": []}]},
+                "trackers": {},
+            },
         },
         [],
     )
     assert [(item.section, item.text) for item in update.additions] == [
         ("Afternoon", "Walked to the park."),
-        ("Thoughts", "Felt grateful."),
+        ("Time not stated", "Felt grateful."),
     ]
-    assert update.facts.places == ["the park"]
+    assert update.content.timeline.context.places_visited[0].name == "the park"
     with pytest.raises(ValueError):
         parse_day_update(
-            {"additions": [{"section": "Later", "text": "No."}], "facts": {}},
+            {
+                "additions": [{"section": "Later", "text": "No."}],
+                "structured": {"trackers": {}},
+            },
             [],
         )
     with pytest.raises(ValueError):
@@ -264,19 +299,17 @@ def test_llm_client_passes_config_and_falls_back(api_settings: Settings) -> None
 def test_fill_day_prompt_covers_the_ending_and_keeps_an_i_item_with_the_author() -> None:
     for task in ("fill_day", "update_day"):
         text = (ROOT / "prompts" / f"{task}.md").read_text(encoding="utf-8")
-        assert "Cover the transcript to its last sentence." in text
-        assert "check the final third of each" in text
-        assert "uses 'we' for it." in text
-        assert "'I drank coffee' is the author only." in text
-        assert "is not 90" in text
-        assert "ate no vegetables" in text
+        assert "final sentence" in text
+        assert "final third of every recording" in text
+        assert "“I”" in text
+        assert "minutes" in text
+        assert "stated absence" in text
     template = (ROOT / "prompts" / "day-template.md").read_text(encoding="utf-8")
-    assert "Cover the transcript to its last sentence." in template
-    assert "'I drank coffee' is the author only." in template
-    assert "is not 90" in template
+    assert "Record each fact only once." in template
+    assert "Do not guess." in template
 
 
-def test_day_level_meals_are_the_union_of_each_persons_meals() -> None:
+def test_legacy_draft_becomes_canonical_per_person_meals() -> None:
     raw = {
         "headline": "Breakfast at home",
         "journal": "## Summary\n\n- Home.",
@@ -297,12 +330,13 @@ def test_day_level_meals_are_the_union_of_each_persons_meals() -> None:
         },
     }
     draft = parse_day_draft(raw, ["Sam", "Maya", "Leo"])
-    assert draft.facts.meals == [
-        Meal(type="breakfast", items=["coffee (Sam)", "Oatmeal (Maya, Leo)"]),
-        Meal(type="dinner", items=["rice (Sam)"]),
-    ]
-    assert [member.name for member in draft.facts.family] == ["Sam", "Maya", "Leo"]
-    assert draft.facts.family[1].meals == [Meal(type="breakfast", items=["Oatmeal"])]
+    assert [member.name for member in draft.content.family] == ["Sam", "Maya", "Leo"]
+    assert draft.content.family[0].food.breakfast == ContentMeal(
+        status="consumed", items=["coffee"]
+    )
+    assert draft.content.family[1].food.breakfast == ContentMeal(
+        status="consumed", items=["Oatmeal"]
+    )
     kept = parse_day_draft(
         {
             "journal": "## Summary\n\n- Tacos.",
@@ -310,7 +344,7 @@ def test_day_level_meals_are_the_union_of_each_persons_meals() -> None:
         },
         [],
     )
-    assert kept.facts.meals == [Meal(type="lunch", items=["fish tacos"])]
+    assert kept.content.family == []
 
 
 def test_fill_day_sends_the_whole_transcript(

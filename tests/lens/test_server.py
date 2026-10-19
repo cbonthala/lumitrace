@@ -44,6 +44,11 @@ def test_tools_are_listed_with_documented_dates(settings: Settings) -> None:
                 "family",
                 "mood",
                 "highlights",
+                "timeline",
+                "trackers",
+                "pregnancy",
+                "tags",
+                "content",
             }
             assert "MM-DD" in listed["on_this_day"].description
             assert listed["search"].annotations.read_only_hint is True

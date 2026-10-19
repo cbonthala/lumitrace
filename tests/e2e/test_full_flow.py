@@ -52,56 +52,87 @@ DAY = dt.date(2026, 10, 10)
 LAST_YEAR = dt.date(2025, 10, 10)
 
 
-def _keyword_facts(entries: str) -> dict[str, Any]:
+def _keyword_content(entries: str) -> dict[str, Any]:
     lower = entries.lower()
+    leo: dict[str, Any] = {"name": "Leo"}
+    if "tacos" in lower:
+        leo["food"] = {"lunch": {"status": "consumed", "items": ["fish tacos"]}}
+    routine: list[str] = []
+    if " run " in lower or "morning run" in lower:
+        routine.append("run")
+    if "walk" in lower:
+        routine.append("walk")
+    if routine:
+        leo["daily_routine"] = {"responsibilities_activities": routine}
+    if "stars" in lower:
+        leo["growth_learning"] = {"new_skill_behavior": ["saw the stars"]}
     return {
-        "mood": "content",
-        "mood_score": 4,
-        "people": [n for n in ("Maya", "Leo") if n in entries],
-        "places": ["the lake"] if "lake" in lower else [],
-        "meals": [{"type": "Lunch", "items": ["fish tacos"]}] if "tacos" in lower else [],
-        "activities": [{"kind": "run", "minutes": 40}] if " run " in lower else [],
-        "highlights": ["Pumpkin patch"] if "pumpkin" in lower else [],
-        "family": (
-            [{"name": "leo", "activities": [{"kind": "walk"}], "moments": ["saw the stars"]}]
-            if "Leo" in entries
-            else []
-        ),
+        "highlight": "Pumpkin patch" if "pumpkin" in lower else None,
+        "context": {
+            "places_visited": [{"name": "the lake", "family_members": []}]
+            if "lake" in lower
+            else [],
+            "people_met": [
+                {"name": name, "family_members": []} for name in ("Maya", "Leo") if name in entries
+            ],
+        },
+        "remember": None,
+        "trackers": {"family": [leo], "pregnancy_baby": {}, "tags": ["content"]},
     }
 
 
 def fake_extract_facts(*, model: str, messages: list[dict[str, str]], **_: Any) -> Any:
     """Stand in for journal generation while preserving the real fill/update split."""
     system, user = messages[0]["content"], messages[1]["content"]
-    marker = (
-        "Every recording for this date, oldest first:"
-        if "update an existing day" in system
-        else "Journal entries for this day, oldest first."
-    )
-    captures = user.split(marker, 1)[-1]
-    capture_texts = [
-        line.strip()
-        for line in captures.splitlines()
-        if line.strip() and not line.startswith("#") and line.strip() != "(none)"
-    ]
-    if "update an existing day" in system:
-        journal = user.split(
-            "The existing journal page (authoritative; do not rewrite, contradict or repeat it):",
-            1,
-        )[-1].split("The owner's My notes for this date", 1)[0]
+    is_update = "update an existing" in system
+    if "Every recording for this date" in user:
+        captures = user.split("Every recording for this date", 1)[-1]
+    elif "Journal captures for this date" in user:
+        captures = user.split("Journal captures for this date", 1)[-1]
+    else:
+        captures = user
+    capture_texts: list[str] = []
+    current: list[str] = []
+    in_capture = False
+    for line in captures.splitlines():
+        if line.startswith("### "):
+            if current:
+                capture_texts.append("\n".join(current).strip())
+                current = []
+            in_capture = True
+            continue
+        if in_capture and line.strip() and line.strip() != "(no words)":
+            current.append(line.strip())
+    if current:
+        capture_texts.append("\n".join(current).strip())
+    structured = _keyword_content(captures)
+    if is_update:
+        existing = user.split("Existing day-file page:", 1)[-1].split("Weather lookup:", 1)[0]
+        timeline_text = existing
+        if "## Day timeline" in existing:
+            timeline_text = existing.split("## Day timeline", 1)[-1]
+            if "## Family trackers" in timeline_text:
+                timeline_text = timeline_text.split("## Family trackers", 1)[0]
         payload: Any = {
             "additions": [
                 {"section": "Evening", "text": text}
                 for text in capture_texts
-                if text not in journal
+                if text not in timeline_text
             ],
-            "facts": _keyword_facts(captures),
+            "replacements": [],
+            "deletions": [],
+            "structured": structured,
         }
     else:
         payload = {
             "headline": "",
-            "journal": "## Summary\n\n" + "\n\n".join(capture_texts),
-            "facts": _keyword_facts(captures),
+            "timeline": {
+                "highlight": structured["highlight"],
+                "context": structured["context"],
+                "time_not_stated": capture_texts,
+                "remember": structured["remember"],
+            },
+            "trackers": structured["trackers"],
         }
     content = json.dumps(payload)
     return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
@@ -288,12 +319,12 @@ def test_full_flow(stack: Stack) -> None:
     assert storage.read_text(generated_snapshot_path(DAY)) == storage.read_text(day_path)
     day = parse(storage.read_text(day_path))
     assert [c.id for c in day.captures] == ["e2e-note-1", "e2e-recording-1"]
-    assert day.facts.people == ["Maya"]
-    assert day.facts.places == ["the lake"]
+    assert [person.name for person in day.content.timeline.context.people_met] == ["Maya"]
+    assert [place.name for place in day.content.timeline.context.places_visited] == ["the lake"]
     text = storage.read_text(day_path)
-    assert "## At a glance" in text
+    assert "## Day timeline" in text
     assert "English translation" not in text
-    assert "Fish tacos for lunch" in day.journal
+    assert any("Fish tacos for lunch" in item for item in day.content.timeline.time_not_stated)
     assert storage.exists("2026/10/2026-10-10/2026-10-10-2130.wav")
     assert not storage.list("_system/inbox")
 
@@ -341,7 +372,7 @@ def test_full_flow(stack: Stack) -> None:
     assert get_day["photos"][0]["name"] == "photo-01.jpg"
 
     assert [row["item"] for row in meals["rows"]] == ["fish tacos"]
-    assert [row["kind"] for row in runs["rows"]] == ["run"]
+    assert [row["kind"] for row in runs["rows"]] == ["run (Leo)"]
     assert [row["name"] for row in places["rows"]] == ["the lake"]
     assert [d["date"] for d in on_this_day["days"]] == ["2025-10-10"]
     assert on_this_day["days"][0]["years_ago"] == 1
@@ -356,7 +387,9 @@ def test_full_flow(stack: Stack) -> None:
     # 4. The owner edits the day in Obsidian; a sync records edit signals.
     original = storage.read_text(day_path)
     edited = original.replace(
-        "## Summary\n\n", "## Summary\n\nBest tacos in town, honestly.\n\n", 1
+        "- Fish tacos for lunch with Maya.",
+        "- Fish tacos for lunch with Maya.\n- Best tacos in town, honestly.",
+        1,
     )
     assert edited != original
     storage.write_text(day_path, edited)
@@ -372,8 +405,8 @@ def test_full_flow(stack: Stack) -> None:
 
     found = wait_until(lambda: len(signals()) >= 1 and signals(), "edit signals")
     by_section = {(s["section"], s["field"]): s for s in found}
-    assert "Best tacos in town" in by_section[("journal", None)]["after"]
-    assert "Best tacos in town" not in by_section[("journal", None)]["before"]
+    assert "Best tacos in town" in by_section[("content", "timeline")]["after"]
+    assert "Best tacos in town" not in by_section[("content", "timeline")]["before"]
     edited_row = query_index(
         settings, "SELECT user_edited FROM days WHERE date = ?", ("2026-10-10",)
     )
@@ -385,13 +418,11 @@ def test_full_flow(stack: Stack) -> None:
     )
     assert late["generation"] == "update"
     day = parse(storage.read_text(day_path))
-    assert day.facts.mood == "content"
-    assert "Best tacos in town, honestly." in day.journal
-    assert "## Evening" in day.journal
-    assert "Late walk with Leo under the stars." in day.journal
-    assert "## Later" not in day.journal
-    assert day.facts.people == ["Maya", "Leo"]
-    assert [member.name for member in day.facts.family] == ["Leo"]
+    assert "content" in day.content.tags
+    assert "Best tacos in town, honestly." in day.content.timeline.time_not_stated
+    assert "Late walk with Leo under the stars." in day.content.timeline.evening
+    assert [person.name for person in day.content.timeline.context.people_met] == ["Maya", "Leo"]
+    assert [member.name for member in day.content.family] == ["Leo"]
     assert [c.id for c in day.captures] == ["e2e-note-1", "e2e-recording-1", "e2e-note-2"]
     assert day.is_user_edited()
     assert storage.read_text(generated_snapshot_path(DAY)) == storage.read_text(day_path)
@@ -406,6 +437,6 @@ def test_full_flow(stack: Stack) -> None:
     assert stars["results"][0]["date"] == "2026-10-10"
     assert [row["name"] for row in people["rows"]] == ["Leo"]
     assert [row["text"] for row in leo["rows"]] == ["saw the stars"]
-    assert [row["kind"] for row in activities["rows"]] == ["run", "walk (leo)"]
+    assert [row["kind"] for row in activities["rows"]] == ["run (Leo)", "walk (Leo)"]
     kept = {(s["section"], s["field"]) for s in signals()}
-    assert ("journal", None) in kept, "the journal edit signal was lost"
+    assert ("content", "timeline") in kept, "the timeline edit signal was lost"

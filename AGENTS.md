@@ -46,14 +46,14 @@ component docs).
 
 1. **The Markdown day files are the source of truth.** The index is disposable and can always be
    rebuilt (except the `feedback` and `edit_signals` tables, which `reset_derived` keeps).
-2. **Do not overwrite the owner's edits after the day is written.** Use
-   `lumitrace.frames.dayfile` helpers: `merge_capture`, `apply_generation` and
-   `merge_generation_three_way`. Never write a day file by string manipulation. The first
-   journal generation (Generate or 4:05) uses `apply_generation(..., force=True)` and may
-   replace a journal typed before that run. Once `generated_at` is set, a new recording
-   replaces model-owned facts (one line per fact) and rewrites the journal when it still
-   matches the saved model text. A sentence or fact you changed stays. The previous model
-   reply, including that journal, is under `_system/generated-facts/` (ADR 0058, 0059, 0060).
+2. **Do not overwrite the owner's edits after the day is written.** Format 6 day content is a
+   typed `DayContent`; use `lumitrace.frames.dayfile` helpers such as `merge_capture`,
+   `apply_content_generation` and `merge_content_generation_three_way`. Never change a day file
+   with ad hoc string manipulation. The first generation writes the timeline and family trackers;
+   a later generation three-way merges the previous model content, the live owner-edited content
+   and the new model content at field, table-cell and timeline-bullet level. The previous model
+   state is under `_system/generated-facts/` (ADR 0058, 0059, 0060 and 0061). Format 5 helpers
+   remain only for compatibility with legacy files.
 3. **Keep the raw transcript and the audio.**
 4. **Storage, speech-to-text and AI models are swappable through config** (`lumitrace/config.py`).
    Never import a backend directly; use `get_storage(settings)` and LiteLLM model strings.
@@ -78,7 +78,7 @@ their docs, and the tests. Full summary in `docs/contracts.md`.
 |---|---|
 | `lumitrace/config.py` | `Settings` (env prefix `LUMITRACE_`), `get_settings()`; document every field in `.env.example` |
 | `lumitrace/frames/storage/` | `Storage` ABC, `FileInfo`, `Change`, `get_storage()`; `local.py`, `gdrive.py` |
-| `lumitrace/frames/dayfile.py` | Paths, `entry_date`, `DayFile` model, `parse`/`render`, merge helpers (`docs/frames-format.md`) |
+| `lumitrace/frames/daycontent.py`, `lumitrace/frames/dayfile.py` | Format 6 content models, paths, `entry_date`, `DayFile`, `parse`/`render`, merge helpers (`docs/frames-format.md`) |
 | `lumitrace/index/schema.py` | SQLite schema and `connect()` (`docs/index-schema.md`). Kept outside `lumitrace/spectrum/` because Spectrum writes the index and the Lens reads it |
 | `lumitrace/embeddings.py` | `embed_texts()`; Spectrum and the Lens must embed the same way |
 | `lumitrace/nudge.py` | `nudge_indexer()`; Spectrum serves `POST /nudge` |

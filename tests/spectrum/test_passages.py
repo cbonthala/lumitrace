@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from lumitrace.frames.dayfile import parse
+import datetime as dt
+
+from lumitrace.frames import daycontent as C
+from lumitrace.frames.dayfile import DayFile, parse
 from lumitrace.spectrum.passages import (
     MAX_CHARS,
     build_passages,
@@ -116,10 +119,44 @@ def test_translation_gets_its_own_transcript_passages() -> None:
 
 
 def test_empty_day_has_title_only() -> None:
-    import datetime as dt
-
-    from lumitrace.frames.dayfile import DayFile
-
     day = DayFile.new(dt.date(2026, 1, 2))
     passages = build_passages(day)
     assert [p.section for p in passages] == ["title"]
+
+
+def test_format6_passages_use_canonical_content() -> None:
+    day = DayFile.new(dt.date(2026, 10, 12))
+    day.content = C.DayContent(
+        timeline=C.Timeline(
+            morning=["Packed cardamom pancakes"],
+            context=C.DayContext(
+                people_met=[
+                    C.PersonContext(
+                        name="Dr. Rao",
+                        relationship="pediatrician",
+                        context="annual visit",
+                    )
+                ]
+            ),
+        ),
+        family=[
+            C.FamilyTracker(
+                name="Maya",
+                growth_learning=C.GrowthLearning(new_skill_behavior=["rode a bicycle"]),
+            )
+        ],
+        pregnancy_baby=C.PregnancyBaby(baby_movement=["two strong kicks"]),
+        tags=["family-adventure"],
+    )
+
+    passages = build_passages(day)
+
+    assert "content" in {passage.section for passage in passages}
+    assert "facts" not in {passage.section for passage in passages}
+    assert "journal" not in {passage.section for passage in passages}
+    content = [passage for passage in passages if passage.section == "content"]
+    assert any(p.heading == "Morning" and "cardamom pancakes" in p.text for p in content)
+    assert any(p.heading == "Day context" and "annual visit" in p.text for p in content)
+    assert any(p.heading == "Growth and learning" and "rode a bicycle" in p.text for p in content)
+    assert any(p.heading == "Pregnancy and baby" and "two strong kicks" in p.text for p in content)
+    assert any(p.heading == "Tags" and "#family-adventure" in p.text for p in content)

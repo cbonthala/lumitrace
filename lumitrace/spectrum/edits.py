@@ -3,7 +3,10 @@
 The recording API writes the exact day file it produced to ``generated_snapshot_path(date)``.
 The indexer compares the live day file with that snapshot, field by field:
 
-* ``facts``: one comparison per fact field (``field`` = the fact name), JSON values, no diff.
+* Format 6 ``content``: one comparison per top-level content field (timeline, family,
+  pregnancy_baby and tags), JSON values, no diff.
+* Legacy ``facts``: one comparison per fact field (``field`` = the fact name), JSON values,
+  no diff.
 * ``title``, ``journal``, ``notes``: the whole text, with a unified diff.
 * ``transcript``: one comparison per capture in the snapshot (``field`` = the capture id).
   Captures that exist only in the live file are new system captures, not edits; a capture
@@ -29,7 +32,8 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Any
 
-from lumitrace.frames.dayfile import FACT_FIELDS, DayFile
+from lumitrace.frames.daycontent import DayContent
+from lumitrace.frames.dayfile import FACT_FIELDS, DayFile, content_for_day
 
 log = logging.getLogger(__name__)
 
@@ -57,12 +61,27 @@ def _json(value: Any) -> str:
 
 def compare_day(live: DayFile, snapshot: DayFile) -> list[FieldComparison]:
     out: list[FieldComparison] = []
-    live_facts = live.facts.model_dump(mode="json")
-    snap_facts = snapshot.facts.model_dump(mode="json")
-    for name in FACT_FIELDS:
-        out.append(FieldComparison("facts", name, _json(snap_facts[name]), _json(live_facts[name])))
+    if live.content is not None or snapshot.content is not None:
+        live_content = content_for_day(live).model_dump(mode="json")
+        snap_content = content_for_day(snapshot).model_dump(mode="json")
+        for name in DayContent.model_fields:
+            out.append(
+                FieldComparison(
+                    "content",
+                    name,
+                    _json(snap_content[name]),
+                    _json(live_content[name]),
+                )
+            )
+    else:
+        live_facts = live.facts.model_dump(mode="json")
+        snap_facts = snapshot.facts.model_dump(mode="json")
+        for name in FACT_FIELDS:
+            out.append(
+                FieldComparison("facts", name, _json(snap_facts[name]), _json(live_facts[name]))
+            )
+        out.append(FieldComparison("journal", None, snapshot.journal, live.journal))
     out.append(FieldComparison("title", None, snapshot.title, live.title))
-    out.append(FieldComparison("journal", None, snapshot.journal, live.journal))
     out.append(FieldComparison("notes", None, snapshot.notes, live.notes))
     live_text = {c.id: c.text for c in live.captures}
     for capture in snapshot.captures:
@@ -114,7 +133,7 @@ def store_edit_signals(
             )
             continue
         digest = signal_hash(date, cmp.section, cmp.field, cmp.before, cmp.after)
-        diff = None if cmp.section == "facts" else text_diff(cmp.before, cmp.after)
+        diff = None if cmp.section in ("content", "facts") else text_diff(cmp.before, cmp.after)
         cur = conn.execute(
             "INSERT OR IGNORE INTO edit_signals(date, path, detected_at, section, field, before,"
             " after, diff, prompt_version, models_used_json, signal_hash)"

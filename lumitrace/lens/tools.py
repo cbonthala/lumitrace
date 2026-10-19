@@ -19,6 +19,7 @@ from typing import Any, Literal
 from lumitrace.config import Settings
 from lumitrace.frames.dayfile import (
     DayFileParseError,
+    content_for_day,
     day_dir,
     day_file_path,
     parse,
@@ -43,7 +44,20 @@ from lumitrace.lens.search import hybrid_search, make_snippet, query_terms
 
 logger = logging.getLogger(__name__)
 
-FactKind = Literal["meals", "activities", "people", "places", "family", "mood", "highlights"]
+FactKind = Literal[
+    "meals",
+    "activities",
+    "people",
+    "places",
+    "family",
+    "mood",
+    "highlights",
+    "timeline",
+    "trackers",
+    "pregnancy",
+    "tags",
+    "content",
+]
 FACT_KINDS: tuple[str, ...] = (
     "meals",
     "activities",
@@ -52,6 +66,11 @@ FACT_KINDS: tuple[str, ...] = (
     "family",
     "mood",
     "highlights",
+    "timeline",
+    "trackers",
+    "pregnancy",
+    "tags",
+    "content",
 )
 Rating = Literal["wrong", "incomplete", "good", "other"]
 RATINGS: tuple[str, ...] = ("wrong", "incomplete", "good", "other")
@@ -103,6 +122,22 @@ _FACT_SPECS: dict[str, _FactSpec] = {
         "date DESC",
         base_where="(mood IS NOT NULL OR mood_score IS NOT NULL)",
     ),
+    **{
+        kind: _FactSpec(
+            "content_facts",
+            ("scope", "person", "category", "field", "text", "number", "status", "details_json"),
+            ("person", "category", "field", "text", "status", "details_json"),
+            "date DESC, position",
+            base_where=where,
+        )
+        for kind, where in (
+            ("timeline", "scope = 'timeline'"),
+            ("trackers", "scope = 'family'"),
+            ("pregnancy", "scope = 'pregnancy'"),
+            ("tags", "scope = 'tags'"),
+            ("content", ""),
+        )
+    },
 }
 
 
@@ -118,7 +153,15 @@ def _like_pattern(text: str) -> str:
 
 
 def _rows(conn: sqlite3.Connection, sql: str, params: list[Any]) -> list[dict[str, Any]]:
-    return [dict(row) for row in conn.execute(sql, params)]
+    result: list[dict[str, Any]] = []
+    for row in conn.execute(sql, params):
+        item = dict(row)
+        if "details_json" in item:
+            details = item.pop("details_json")
+            if details is not None:
+                item["details"] = json.loads(details)
+        result.append(item)
+    return result
 
 
 class LensTools:
@@ -210,6 +253,8 @@ class LensTools:
         result.update(
             found=True,
             title=day.title,
+            format_version=day.meta.lumitrace_format,
+            content=content_for_day(day).model_dump(mode="json"),
             facts=day.facts.model_dump(mode="json"),
             journal=day.journal,
             notes=day.notes,
@@ -259,8 +304,10 @@ class LensTools:
             raise ToolInputError(f"kind must be one of: {', '.join(FACT_KINDS)}; got {kind!r}")
         kind = kind.strip().lower()
         person = (person or "").strip() or None
-        if person and kind not in ("family", "meals"):
-            raise ToolInputError("person only applies to kind 'family' or 'meals'")
+        if person and kind not in ("family", "meals", "trackers", "content"):
+            raise ToolInputError(
+                "person only applies to kind 'family', 'meals', 'trackers' or 'content'"
+            )
         start, end = parse_range(from_date, to_date, self.settings)
         limit = _clamp(limit, 50, 1, MAX_FACT_LIMIT)
         contains = (contains or "").strip() or None
@@ -558,6 +605,27 @@ def _fact_aggregates(
                 f"SELECT lower(mood) AS mood, COUNT(*) AS days FROM {table}{where_sql} "
                 f"{'AND' if where_sql else 'WHERE'} mood IS NOT NULL "
                 f"GROUP BY lower(mood) ORDER BY days DESC, mood LIMIT ?",
+                [*params, TOP_GROUPS],
+            ),
+        }
+    if kind in ("timeline", "trackers", "pregnancy", "tags", "content"):
+        text_filter = f"{'AND' if where_sql else 'WHERE'} text IS NOT NULL"
+        return {
+            "by_field": _rows(
+                conn,
+                f"SELECT scope, person, category, field, status, COUNT(*) AS rows, "
+                f"COUNT(DISTINCT date) AS days, SUM(number) AS total, "
+                f"ROUND(AVG(number), 2) AS average FROM {table}{where_sql} "
+                "GROUP BY scope, person COLLATE NOCASE, category, field, status "
+                "ORDER BY rows DESC, scope, person, category, field",
+                params,
+            ),
+            "top_values": _rows(
+                conn,
+                f"SELECT scope, person, category, field, lower(text) AS value, "
+                f"COUNT(*) AS times, COUNT(DISTINCT date) AS days FROM {table}{where_sql} "
+                f"{text_filter} GROUP BY scope, person COLLATE NOCASE, category, field, "
+                "lower(text) ORDER BY times DESC, value LIMIT ?",
                 [*params, TOP_GROUPS],
             ),
         }

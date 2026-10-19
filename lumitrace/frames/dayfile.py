@@ -67,7 +67,17 @@ from pydantic import (
     model_validator,
 )
 
-FORMAT_VERSION = 5
+from lumitrace.frames.daycontent import (
+    DayContent,
+    from_legacy_day,
+    to_legacy_facts,
+)
+from lumitrace.frames.daycontent import merge_three_way as merge_content_three_way
+from lumitrace.frames.daycontent import parse as parse_content
+from lumitrace.frames.daycontent import render as render_content
+
+FORMAT_VERSION = 6
+LEGACY_FORMAT_VERSION = 5
 SYSTEM_DIR = "_system"
 AUDIO_EXT = ".m4a"
 PHOTO_EXT = ".jpg"
@@ -76,6 +86,11 @@ FACTS_START = (
     "<!-- lumitrace:facts:start (found by Lumitrace; if you edit them, your edits are kept) -->"
 )
 FACTS_END = "<!-- lumitrace:facts:end -->"
+CONTENT_START = (
+    "<!-- lumitrace:content:start "
+    "(structured by Lumitrace; if you edit it, your edits are kept) -->"
+)
+CONTENT_END = "<!-- lumitrace:content:end -->"
 JOURNAL_START = (
     "<!-- lumitrace:journal:start (written by Lumitrace; if you edit it, your edits are kept) -->"
 )
@@ -624,6 +639,8 @@ class GeneratedFactsState(BaseModel):
 
     Missing on files written before a correction could replace a generated sentence.
     """
+    content: DayContent | None = None
+    """Format 6 model-owned base. Missing on files generated with Format 5 or older."""
 
 
 FACT_FIELDS: tuple[str, ...] = tuple(DayFacts.model_fields)
@@ -746,6 +763,8 @@ class DayFile(BaseModel):
     """The "At a glance" region (mood, food, places, people, ...)."""
     journal: StrippedStr = ""
     """Generated journal Markdown (``##`` sections), between the journal markers."""
+    content: DayContent | None = None
+    """Format 6 timeline and family trackers. Facts and journal are legacy projections."""
     notes: StrippedStr = ""
     """The owner's notes. The system never modifies this."""
     captures: list[Capture] = Field(default_factory=list)
@@ -765,6 +784,13 @@ class DayFile(BaseModel):
         return cls(meta=FrontMatter(date=day))
 
     def compute_generated_hash(self) -> str:
+        if self.content is not None:
+            payload = {
+                "content": self.content.model_dump(mode="json"),
+                "title": self.title,
+            }
+            raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+            return hashlib.sha256(raw.encode()).hexdigest()[:16]
         return _hash_generated(self.facts.model_dump(mode="json"), self.title, self.journal)
 
     def compute_source_hash(self) -> str:
@@ -1173,13 +1199,13 @@ def next_model_journal(
 
 
 def render(day: DayFile) -> str:
-    """Render a day file: structured facts, journal, notes and transcripts.
-
-    Format 5 restores ``## At a glance`` while continuing to omit English translations.
-    """
+    """Render Format 6 content, or preserve the Format 5 layout until a legacy day migrates."""
     written = day.model_copy(deep=True)
     for capture in written.captures:
         capture.translation = ""
+    written.meta.lumitrace_format = (
+        FORMAT_VERSION if written.content is not None else LEGACY_FORMAT_VERSION
+    )
     front = yaml.safe_dump(
         _front_matter_dict(written.meta),
         sort_keys=False,
@@ -1188,17 +1214,26 @@ def render(day: DayFile) -> str:
         width=4096,
     )
     transcript = "\n".join(_render_capture(c) for c in written.captures)
-    return "".join(
+    parts = ["---\n", front, "---\n\n", f"# {written.title}\n\n"]
+    if written.content is not None:
+        parts.extend(
+            [
+                _region(CONTENT_START, render_content(written.content).strip(), CONTENT_END),
+                "\n",
+            ]
+        )
+    else:
+        parts.extend(
+            [
+                f"{FACTS_HEADING}\n\n",
+                _region(FACTS_START, render_facts_section(written.facts), FACTS_END),
+                "\n",
+                _region(JOURNAL_START, written.journal, JOURNAL_END),
+                "\n",
+            ]
+        )
+    parts.extend(
         [
-            "---\n",
-            front,
-            "---\n\n",
-            f"# {written.title}\n\n",
-            f"{FACTS_HEADING}\n\n",
-            _region(FACTS_START, render_facts_section(written.facts), FACTS_END),
-            "\n",
-            _region(JOURNAL_START, written.journal, JOURNAL_END),
-            "\n",
             f"{NOTES_HEADING}\n\n",
             _region(NOTES_START, written.notes, NOTES_END),
             "\n",
@@ -1208,6 +1243,7 @@ def render(day: DayFile) -> str:
             f"{TRANSCRIPT_END}\n",
         ]
     )
+    return "".join(parts)
 
 
 # --- Parsing --------------------------------------------------------------------------------
@@ -1544,6 +1580,7 @@ def parse(markdown: str, *, fallback_date: dt.date | None = None) -> DayFile:
             data.setdefault(FORMAT_KEY, data.pop(legacy_key))
 
     body = text[fm.end() :]
+    content_region, body = _take_region(body, "content")
     facts_region, body = _take_region(body, "facts")
     journal, body = _take_region(body, "journal")
     notes, body = _take_region(body, "notes")
@@ -1551,7 +1588,14 @@ def parse(markdown: str, *, fallback_date: dt.date | None = None) -> DayFile:
 
     stray_parts: list[str] = []
     legacy_facts: dict[str, Any] | None = None
-    if facts_region is None:
+    content: DayContent | None = None
+    if content_region is not None:
+        try:
+            content = parse_content(content_region)
+            facts = DayFacts.model_validate(to_legacy_facts(content))
+        except (ValueError, ValidationError) as exc:
+            raise DayFileParseError(f"invalid Format 6 content: {exc}") from exc
+    elif facts_region is None:
         # Format 1 kept the facts in the front matter. With a facts region, any fact-named keys
         # the owner adds to the front matter are left alone as ordinary extra keys.
         legacy_facts = {k: data.pop(k) for k in FORMAT_1_FACT_KEYS if k in data}
@@ -1569,7 +1613,7 @@ def parse(markdown: str, *, fallback_date: dt.date | None = None) -> DayFile:
         facts, facts_stray = parse_facts_section(facts_region, source_format=source_format)
         if facts_stray:
             stray_parts.append(facts_stray)
-    data[FORMAT_KEY] = FORMAT_VERSION
+    data[FORMAT_KEY] = FORMAT_VERSION if content is not None else LEGACY_FORMAT_VERSION
     try:
         meta = FrontMatter.model_validate(data)
     except ValidationError as exc:
@@ -1598,6 +1642,7 @@ def parse(markdown: str, *, fallback_date: dt.date | None = None) -> DayFile:
         title=title,
         facts=facts,
         journal=journal or "",
+        content=content,
         notes=notes_text,
         captures=captures,
     )
@@ -1678,6 +1723,74 @@ def apply_generation(
     if generated_source_hash is not None:
         result.meta.generated_source_hash = generated_source_hash
     result.meta.generated_hash = result.compute_generated_hash()
+    return result
+
+
+def content_for_day(day: DayFile) -> DayContent:
+    """Return canonical Format 6 content, conservatively projecting a legacy day when needed."""
+    if day.content is not None:
+        return day.content.model_copy(deep=True)
+    return from_legacy_day(day.facts.model_dump(mode="json"), day.journal)
+
+
+def apply_content_generation(
+    day: DayFile,
+    *,
+    content: DayContent,
+    title: str | None = None,
+    prompt_version: str | None = None,
+    models_used: dict[str, str] | None = None,
+    generated_at: dt.datetime | None = None,
+    generated_source_hash: str | None = None,
+    force: bool = False,
+) -> DayFile:
+    """Replace generated content with Format 6 while preserving notes and captures."""
+    if day.is_user_edited() and not force:
+        raise UserEditsDetected(day.date)
+    result = day.model_copy(deep=True)
+    result.content = content.model_copy(deep=True)
+    result.facts = DayFacts.model_validate(to_legacy_facts(result.content))
+    result.journal = ""
+    result.title = (title or "").strip() or result.title
+    result.meta.lumitrace_format = FORMAT_VERSION
+    _set_provenance(result, prompt_version, models_used, generated_at)
+    if generated_source_hash is not None:
+        result.meta.generated_source_hash = generated_source_hash
+    result.meta.generated_hash = result.compute_generated_hash()
+    return result
+
+
+def merge_content_generation_three_way(
+    day: DayFile,
+    *,
+    base_content: DayContent | None,
+    content: DayContent,
+    title: str | None = None,
+    prompt_version: str | None = None,
+    models_used: dict[str, str] | None = None,
+    generated_at: dt.datetime | None = None,
+    generated_source_hash: str | None = None,
+) -> DayFile:
+    """Merge complete Format 6 content while retaining owner changes at field and cell level."""
+    was_edited = day.is_user_edited()
+    result = day.model_copy(deep=True)
+    current = content_for_day(result)
+    if base_content is None and was_edited:
+        base_content = current
+    result.content = (
+        content.model_copy(deep=True)
+        if base_content is None
+        else merge_content_three_way(base_content, current, content)
+    )
+    result.facts = DayFacts.model_validate(to_legacy_facts(result.content))
+    result.journal = ""
+    result.title = (title or "").strip() or result.title
+    result.meta.lumitrace_format = FORMAT_VERSION
+    _set_provenance(result, prompt_version, models_used, generated_at)
+    if generated_source_hash is not None:
+        result.meta.generated_source_hash = generated_source_hash
+    if not was_edited:
+        result.meta.generated_hash = result.compute_generated_hash()
     return result
 
 

@@ -52,8 +52,8 @@ def test_edited_day_gets_section_update(
     assert first.generation == "full"
 
     def edit(day) -> None:
-        day.journal = "## Summary\n\nMy own words about the run."
-        day.facts.mood = "proud"
+        day.content.timeline.time_not_stated = ["My own words about the run."]
+        day.content.tags = ["proud"]
         day.notes = "Private thought."
 
     owner_edits(api_storage, edit)
@@ -62,11 +62,10 @@ def test_edited_day_gets_section_update(
     )
     assert second.generation == "update"
     day = parse(api_storage.read_text(day_file_path(OCT10)))
-    assert day.journal.startswith("## Summary\n\nMy own words about the run.")
-    assert day.journal.endswith("## Evening\n\n- You added another detail to the day.")
-    assert "## Later" not in day.journal
-    assert day.facts.mood == "proud"
-    assert day.facts.people == ["Maya", "Leo"]
+    assert day.content.timeline.time_not_stated == ["My own words about the run."]
+    assert day.content.timeline.evening == ["You added another detail to the day."]
+    assert day.content.tags == ["proud"]
+    assert [person.name for person in day.content.timeline.context.people_met] == ["Maya", "Leo"]
     assert day.notes == "Private thought."
     assert day.is_user_edited()
     assert day.meta.prompt_version == "update_day"
@@ -92,7 +91,7 @@ def test_edit_during_generation_is_not_overwritten(
         fake_llm.before_reply = None
 
         def change(day) -> None:
-            day.journal = "Typed while the AI was busy."
+            day.content.timeline.time_not_stated = ["Typed while the AI was busy."]
 
         owner_edits(api_storage, change)
 
@@ -102,8 +101,7 @@ def test_edit_during_generation_is_not_overwritten(
     )
     assert result.generation == "update"
     day = parse(api_storage.read_text(day_file_path(OCT10)))
-    assert day.journal == "Typed while the AI was busy."
-    assert "## Later" not in day.journal
+    assert "Typed while the AI was busy." in day.content.timeline.time_not_stated
     assert len(day.captures) == 2
 
 
@@ -115,7 +113,7 @@ def test_fallback_model_is_used_and_recorded(
     assert result.generation == "full"
     day = parse(api_storage.read_text(day_file_path(OCT10)))
     assert day.meta.models_used["fill_day"] == "test/fallback"
-    assert day.journal.startswith("## Summary")
+    assert day.content.timeline.time_not_stated == ["A day with 1 entries."]
     record = json.loads(api_storage.read_text("_system/activity/2026/10.jsonl").splitlines()[-1])
     steps = {s["name"]: s for s in record["steps"]}
     attempts = steps["fill_day"]["detail"]["attempts"]
@@ -199,7 +197,7 @@ def test_reprocessing_a_saved_capture_does_not_duplicate_it(
     processor.process(req)
 
     def edit(day) -> None:
-        day.journal = "## Summary\n\nMy corrected words."
+        day.content.timeline.time_not_stated = ["My corrected words."]
 
     owner_edits(api_storage, edit)
     again = processor.process(req)
@@ -208,7 +206,7 @@ def test_reprocessing_a_saved_capture_does_not_duplicate_it(
     assert "capture already in the day file; checking journal only" in again.warnings
     day = parse(api_storage.read_text(day_file_path(OCT10)))
     assert len(day.captures) == 1
-    assert day.journal == "## Summary\n\nMy corrected words."
+    assert day.content.timeline.time_not_stated == ["My corrected words."]
     assert [f.path for f in api_storage.list("2026") if f.path.endswith(".m4a")] == [
         "2026/10/2026-10-10/2026-10-10-2130.m4a"
     ]
@@ -244,5 +242,5 @@ def test_fake_llm_model_runs_offline(
     )
     assert result.generation == "full"
     day = parse(api_storage.read_text(day_file_path(OCT10)))
-    assert day.journal == "## Summary\n\nQuiet day."
+    assert day.content.timeline.time_not_stated == ["Quiet day."]
     assert day.meta.models_used == {"fill_day": "fake"}

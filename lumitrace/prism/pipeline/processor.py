@@ -28,24 +28,28 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
+from lumitrace.frames.daycontent import (
+    DayContent,
+    apply_timeline_patches,
+    to_legacy_facts,
+)
 from lumitrace.frames.dayfile import (
     Capture,
     CaptureKind,
     DayFacts,
     DayFile,
     GeneratedFactsState,
-    apply_generation,
+    apply_content_generation,
     audio_file_name,
+    content_for_day,
     day_dir,
     day_file_path,
     default_title,
     entry_date,
     generated_facts_path,
     generated_snapshot_path,
-    journals_match,
     merge_capture,
-    merge_generation_three_way,
-    next_model_journal,
+    merge_content_generation_three_way,
     next_photo_names,
     parse,
     render,
@@ -117,12 +121,9 @@ class _Generated(BaseModel):
     """Output of the AI steps, ready to apply to a fresh copy of the day."""
 
     mode: str
-    facts: DayFacts
-    journal: str | None = None
+    content: DayContent
     headline: str = ""
-    journal_sections: dict[str, list[str]] = Field(default_factory=dict)
-    replacements: list[tuple[str, str]] = Field(default_factory=list)
-    rewrite_journal: bool = False
+    rewrite_content: bool = False
     models: dict[str, str] = Field(default_factory=dict)
     prompt_labels: list[str] = Field(default_factory=list)
 
@@ -453,7 +454,7 @@ class CaptureProcessor:
 
     @staticmethod
     def _note_baseline(day: DayFile) -> None:
-        """Remember the generated-looking facts, title and journal before the owner can edit.
+        """Remember the generated-looking content and title before the owner can edit.
 
         A day we just created is empty, so its hash matches and the 4:05 write may replace the
         journal. The 4:05 write is the day's journal. A recording that arrives after that write
@@ -462,10 +463,11 @@ class CaptureProcessor:
         if day.meta.generated_hash is not None:
             return
         blank = DayFile(meta=day.meta.model_copy(update={"generated_hash": None}))
+        blank.content = DayContent() if day.content is not None else None
         blank.journal = ""
         blank.facts = DayFacts()
         blank.title = default_title(day.date)
-        if day.journal.strip() or not day.facts.is_empty() or day.title != blank.title:
+        if day.compute_generated_hash() != blank.compute_generated_hash():
             day.meta.generated_hash = blank.compute_generated_hash()
         else:
             day.meta.generated_hash = day.compute_generated_hash()
@@ -488,15 +490,18 @@ class CaptureProcessor:
         source_hash = day.compute_source_hash()
         facts_state = self._read_generated_facts(day_date)
         snapshot = baseline if baseline is not None else self._read_snapshot(day_date)
-        base_facts = self._base_facts(facts_state, snapshot)
-        model_journal = self._model_journal(facts_state, snapshot)
+        base_content = self._base_content(facts_state, snapshot)
         source_changed = day.meta.generated_source_hash != source_hash
-        journal_clean = self._journal_is_model_owned(day, model_journal)
-        rewrite_journal = mode == "full" or (
-            journal_clean and (source_changed or replace_generated)
+        content_clean = self._content_is_model_owned(day, base_content)
+        rewrite_content = mode == "full" or (
+            content_clean and (source_changed or replace_generated)
         )
         generated = self._run_ai(
-            mode, day, record, rewrite_journal=rewrite_journal and mode != "full"
+            mode,
+            day,
+            record,
+            base_content=base_content,
+            rewrite_content=rewrite_content and mode != "full",
         )
         if generated is None:
             return "failed"
@@ -507,68 +512,39 @@ class CaptureProcessor:
                 fresh,
                 generated,
                 record.models.get("stt"),
-                base_facts=base_facts,
-                model_journal=model_journal,
+                base_content=base_content,
                 generated_source_hash=source_hash,
             )
             self._write_day(updated)
             self._write_generated_facts(
                 day_date,
                 source_hash=source_hash,
-                facts=generated.facts,
-                journal=self._stored_journal(fresh, updated, generated, model_journal),
+                content=generated.content,
             )
-            step.detail = {"mode": mode, "rewrite_journal": generated.rewrite_journal}
+            step.detail = {"mode": mode, "rewrite_content": generated.rewrite_content}
         return mode
 
     @staticmethod
-    def _base_facts(
+    def _base_content(
         facts_state: GeneratedFactsState | None, snapshot: DayFile | None
-    ) -> DayFacts | None:
-        """Previous model facts. The snapshot stands in until a facts file exists."""
+    ) -> DayContent | None:
+        """Previous model content. Legacy facts and journals are converted on first use."""
         if facts_state is not None:
-            return facts_state.facts
+            if facts_state.content is not None:
+                return facts_state.content
+            legacy = DayFile()
+            legacy.facts = facts_state.facts
+            legacy.journal = facts_state.journal or ""
+            return content_for_day(legacy)
         if snapshot is not None:
-            return snapshot.facts
+            return content_for_day(snapshot)
         return None
 
     @staticmethod
-    def _model_journal(
-        facts_state: GeneratedFactsState | None, snapshot: DayFile | None
-    ) -> str | None:
-        if facts_state is not None and facts_state.journal:
-            return facts_state.journal
-        if snapshot is not None and snapshot.journal.strip():
-            return snapshot.journal
-        return None
-
-    @staticmethod
-    def _journal_is_model_owned(day: DayFile, model_journal: str | None) -> bool:
-        if model_journal is not None:
-            return journals_match(day.journal, model_journal)
+    def _content_is_model_owned(day: DayFile, model_content: DayContent | None) -> bool:
+        if model_content is not None:
+            return content_for_day(day) == model_content
         return not day.is_user_edited()
-
-    @staticmethod
-    def _stored_journal(
-        before: DayFile,
-        updated: DayFile,
-        generated: _Generated,
-        model_journal: str | None,
-    ) -> str | None:
-        """Model journal to save. Hand-edited sentences are not copied into it."""
-        if generated.mode == "full":
-            return updated.journal
-        if generated.rewrite_journal and (
-            model_journal is None or journals_match(before.journal, model_journal)
-        ):
-            return updated.journal
-        if not generated.rewrite_journal:
-            return next_model_journal(
-                model_journal,
-                replacements=generated.replacements,
-                sections=generated.journal_sections,
-            )
-        return model_journal or None
 
     def _run_ai(
         self,
@@ -576,10 +552,11 @@ class CaptureProcessor:
         day: DayFile,
         record: ActivityRecord,
         *,
-        rewrite_journal: bool,
+        base_content: DayContent | None,
+        rewrite_content: bool,
     ) -> _Generated | None:
         gen = self.generator
-        if mode == "full" or rewrite_journal:
+        if mode == "full" or rewrite_content:
             filled = self._llm_step(
                 record,
                 "fill_day",
@@ -590,10 +567,9 @@ class CaptureProcessor:
             draft = filled[0].value
             return _Generated(
                 mode=mode,
-                facts=draft.facts,
-                journal=draft.journal,
+                content=draft.content,
                 headline=draft.headline,
-                rewrite_journal=rewrite_journal,
+                rewrite_content=rewrite_content,
                 models={"fill_day": filled[0].model},
                 prompt_labels=[filled[1].label],
             )
@@ -601,19 +577,39 @@ class CaptureProcessor:
         updated = self._llm_step(
             record,
             "update_day",
-            lambda: gen.update_day(day.date, day.captures, day.notes, day.journal),
+            lambda: gen.update_day(day.date, day.captures, day.notes, render(day)),
         )
         if updated is None:
             return None
         addition = updated[0].value
-        sections: dict[str, list[str]] = {}
-        for item in addition.additions:
-            sections.setdefault(item.section, []).append(item.text)
+        model_base = (base_content or content_for_day(day)).model_copy(deep=True)
+        patched_timeline = apply_timeline_patches(
+            model_base.timeline,
+            additions=addition.additions,
+            replacements=addition.replacements,
+            deletions=addition.deletions,
+        )
+        structured = addition.content
+        patched_timeline = patched_timeline.model_copy(
+            update={
+                "highlight": structured.timeline.highlight,
+                "context": structured.timeline.context,
+                "remember": structured.timeline.remember,
+            },
+            deep=True,
+        )
+        model_content = model_base.model_copy(
+            update={
+                "timeline": patched_timeline,
+                "family": structured.family,
+                "pregnancy_baby": structured.pregnancy_baby,
+                "tags": structured.tags,
+            },
+            deep=True,
+        )
         return _Generated(
             mode=mode,
-            facts=addition.facts,
-            journal_sections=sections,
-            replacements=[(item.find, item.replace) for item in addition.replacements],
+            content=model_content,
             models={"update_day": updated[0].model},
             prompt_labels=[updated[1].label],
         )
@@ -648,8 +644,7 @@ class CaptureProcessor:
         generated: _Generated,
         stt_model: str | None,
         *,
-        base_facts: DayFacts | None,
-        model_journal: str | None,
+        base_content: DayContent | None,
         generated_source_hash: str,
     ) -> DayFile:
         models_used = {**day.meta.models_used, **generated.models}
@@ -660,27 +655,28 @@ class CaptureProcessor:
             title = default_title(day.date)
             if generated.headline:
                 title = f"{title} · {generated.headline}"
-            return apply_generation(
+            if day.is_user_edited():
+                return merge_content_generation_three_way(
+                    day,
+                    base_content=base_content or DayContent(),
+                    content=generated.content,
+                    prompt_version=prompt_version,
+                    models_used=models_used,
+                    generated_source_hash=generated_source_hash,
+                )
+            return apply_content_generation(
                 day,
-                facts=generated.facts,
-                journal=generated.journal or "",
+                content=generated.content,
                 title=title,
                 prompt_version=prompt_version,
                 models_used=models_used,
                 generated_source_hash=generated_source_hash,
                 force=True,
             )
-        still_model_journal = generated.rewrite_journal and (
-            model_journal is None or journals_match(day.journal, model_journal)
-        )
-        return merge_generation_three_way(
+        return merge_content_generation_three_way(
             day,
-            base_facts=base_facts,
-            facts=generated.facts,
-            journal_sections=None if still_model_journal else generated.journal_sections,
-            journal_replacements=None if still_model_journal else generated.replacements,
-            replacement_journal=generated.journal if still_model_journal else None,
-            model_journal=model_journal,
+            base_content=base_content,
+            content=generated.content,
             prompt_version=prompt_version,
             models_used=models_used,
             generated_source_hash=generated_source_hash,
@@ -729,11 +725,13 @@ class CaptureProcessor:
         day_date: dt.date,
         *,
         source_hash: str,
-        facts: DayFacts,
-        journal: str | None,
+        content: DayContent,
     ) -> None:
         state = GeneratedFactsState(
-            date=day_date, source_hash=source_hash, facts=facts, journal=journal
+            date=day_date,
+            source_hash=source_hash,
+            facts=DayFacts.model_validate(to_legacy_facts(content)),
+            content=content,
         )
         self.storage.write_text(
             generated_facts_path(day_date),

@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from lumitrace.frames import daycontent as C
 from lumitrace.frames import dayfile as D
 
 TZ = ZoneInfo("America/Chicago")
@@ -160,6 +161,222 @@ def test_sample_fixture_roundtrips(sample_day_markdown: str) -> None:
     assert not rewritten.is_user_edited()
 
 
+# --- Format 6 parse / render and owner safety ------------------------------------------------
+
+
+def _format6_content() -> C.DayContent:
+    return C.DayContent(
+        timeline=C.Timeline(
+            highlight="Park day",
+            context=C.DayContext(
+                weather="sunny",
+                places_visited=[C.PlaceContext(name="River Park", family_members=["Sam"])],
+            ),
+            morning=["Walked", "Kept this detail"],
+            remember="Sam found a smooth stone",
+        ),
+        family=[
+            C.FamilyTracker(
+                name="Sam",
+                food=C.FoodTracker(breakfast=C.Meal(status="consumed", items=["eggs", "toast"])),
+                health_fitness=C.HealthFitness(sleep=["7 hours"]),
+                daily_routine=C.DailyRoutine(responsibilities_activities=["chores"]),
+            )
+        ],
+        tags=["family", "park"],
+    )
+
+
+def test_format5_is_preserved_until_content_regeneration() -> None:
+    legacy = D.apply_generation(
+        D.DayFile.new(DAY),
+        facts=D.DayFacts(
+            highlights=["Legacy highlight"],
+            family=[
+                D.FamilyMember(
+                    name="Sam",
+                    meals=[D.Meal(type="breakfast", items=["eggs"])],
+                )
+            ],
+        ),
+        journal="## Summary\n\nA readable legacy journal.",
+        generated_at=at(20),
+    )
+
+    legacy_markdown = D.render(legacy)
+    assert f"{D.FORMAT_KEY}: {D.LEGACY_FORMAT_VERSION}" in legacy_markdown
+    assert D.FACTS_START in legacy_markdown
+    assert D.JOURNAL_START in legacy_markdown
+    assert D.CONTENT_START not in legacy_markdown
+
+    parsed = D.parse(legacy_markdown)
+    assert parsed.content is None
+    assert parsed.facts == legacy.facts
+    assert parsed.journal == legacy.journal
+    assert D.render(parsed) == legacy_markdown
+    assert not parsed.is_user_edited()
+
+    regenerated = D.apply_content_generation(
+        parsed,
+        content=_format6_content(),
+        generated_at=at(21),
+    )
+    regenerated_markdown = D.render(regenerated)
+    assert f"{D.FORMAT_KEY}: {D.FORMAT_VERSION}" in regenerated_markdown
+    assert D.CONTENT_START in regenerated_markdown
+    assert D.FACTS_START not in regenerated_markdown
+    assert D.JOURNAL_START not in regenerated_markdown
+
+
+def test_format6_marker_order_hash_roundtrip_and_legacy_projection() -> None:
+    content = _format6_content()
+    day = D.DayFile(
+        meta=D.FrontMatter(date=DAY),
+        notes="Owner note.",
+        captures=[capture("n1", at(9), text="Raw note")],
+    )
+    generated = D.apply_content_generation(
+        day,
+        content=content,
+        title="A generated title",
+        generated_at=at(20),
+    )
+
+    markdown = D.render(generated)
+    order = [
+        markdown.index("\n# A generated title"),
+        markdown.index(D.CONTENT_START),
+        markdown.index("## Day timeline"),
+        markdown.index("## Family trackers"),
+        markdown.index("## Tags"),
+        markdown.index(D.CONTENT_END),
+        markdown.index(D.NOTES_HEADING),
+        markdown.index(D.NOTES_START),
+        markdown.index(D.NOTES_END),
+        markdown.index(D.TRANSCRIPT_HEADING),
+        markdown.index(D.TRANSCRIPT_START),
+        markdown.index(D.TRANSCRIPT_END),
+    ]
+    assert order == sorted(order)
+    assert D.FACTS_START not in markdown
+    assert D.JOURNAL_START not in markdown
+    assert len(generated.meta.generated_hash or "") == 16
+
+    parsed = D.parse(markdown)
+    assert parsed.content == content
+    assert parsed.facts == D.DayFacts.model_validate(C.to_legacy_facts(content))
+    assert parsed.meta.generated_hash == parsed.compute_generated_hash()
+    assert not parsed.is_user_edited()
+    assert D.render(parsed) == markdown
+
+    notes_edit = D.parse(markdown.replace("Owner note.", "Owner note, edited."))
+    assert not notes_edit.is_user_edited()
+    cell_edit = D.parse(markdown.replace("eggs<br>toast", "oatmeal", 1))
+    assert cell_edit.is_user_edited()
+
+
+def test_format6_three_way_merge_keeps_owner_cell_list_and_timeline_edits() -> None:
+    base = _format6_content()
+    generated = D.apply_content_generation(
+        D.DayFile.new(DAY),
+        content=base,
+        generated_at=at(20),
+    )
+    original_hash = generated.meta.generated_hash
+    markdown = D.render(generated)
+    edited_markdown = (
+        markdown.replace("- **Weather:** sunny", "- **Weather:** owner weather")
+        .replace(
+            "### Morning\n\n- Walked\n- Kept this detail",
+            "### Morning\n\n- Owner rewrote this detail",
+        )
+        .replace("### Evening\n\n- —", "### Evening\n\n- Walked")
+        .replace("eggs<br>toast", "eggs<br>owner fruit", 1)
+        .replace(
+            "| Sam | — | chores | — | — |",
+            "| Sam | — | owner chores | — | — |",
+            1,
+        )
+        .replace("#family #park", "#family #owner-tag")
+    )
+    current = D.parse(edited_markdown)
+    assert current.is_user_edited()
+
+    incoming = C.DayContent(
+        timeline=C.Timeline(
+            highlight="River day",
+            context=C.DayContext(weather="rainy"),
+            morning=["Walked", "New model event"],
+            remember="A new model memory",
+        ),
+        family=[
+            C.FamilyTracker(
+                name="Sam",
+                food=C.FoodTracker(
+                    breakfast=C.Meal(
+                        status="consumed",
+                        items=["eggs", "toast", "berries"],
+                    )
+                ),
+                health_fitness=C.HealthFitness(sleep=["8 hours"]),
+                daily_routine=C.DailyRoutine(
+                    responsibilities_activities=["chores", "new model task"]
+                ),
+            ),
+            C.FamilyTracker(name="Bo"),
+        ],
+        tags=["family", "park", "river"],
+    )
+
+    merged = D.merge_content_generation_three_way(
+        current,
+        base_content=base,
+        content=incoming,
+        generated_at=at(22),
+    )
+
+    assert merged.content is not None
+    assert merged.content.timeline.highlight == "River day"
+    assert merged.content.timeline.context.weather == "owner weather"
+    assert merged.content.timeline.morning == [
+        "New model event",
+        "Owner rewrote this detail",
+    ]
+    assert merged.content.timeline.evening == ["Walked"]
+    assert merged.content.family[0].food.breakfast.items == [
+        "eggs",
+        "berries",
+        "owner fruit",
+    ]
+    assert merged.content.family[0].health_fitness.sleep == ["8 hours"]
+    assert merged.content.family[0].daily_routine.responsibilities_activities == [
+        "new model task",
+        "owner chores",
+    ]
+    assert [member.name for member in merged.content.family] == ["Sam", "Bo"]
+    assert merged.content.tags == ["family", "river", "owner-tag"]
+    assert merged.meta.generated_hash == original_hash
+    assert merged.is_user_edited()
+    assert D.parse(D.render(merged)).content == merged.content
+
+
+def test_clean_format6_three_way_merge_refreshes_generated_hash() -> None:
+    base = _format6_content()
+    generated = D.apply_content_generation(D.DayFile.new(DAY), content=base)
+    incoming = base.model_copy(deep=True)
+    incoming.timeline.highlight = "Updated highlight"
+
+    merged = D.merge_content_generation_three_way(
+        generated,
+        base_content=base,
+        content=incoming,
+    )
+
+    assert merged.meta.generated_hash == merged.compute_generated_hash()
+    assert merged.meta.generated_hash != generated.meta.generated_hash
+    assert not merged.is_user_edited()
+
+
 @pytest.mark.parametrize("old_name", ["lifelog", "bookshelf", "lumen"])
 def test_parses_files_written_before_the_rename(sample_day_markdown: str, old_name: str) -> None:
     legacy = sample_day_markdown.replace("<!-- lumitrace:", f"<!-- {old_name}:").replace(
@@ -174,7 +391,7 @@ def test_parses_files_written_before_the_rename(sample_day_markdown: str, old_na
     assert "## At a glance" in rendered
 
 
-def test_reads_format_1_files_and_writes_the_current_format(
+def test_reads_format_1_files_and_preserves_the_legacy_layout(
     sample_day_v1_markdown: str,
 ) -> None:
     old = D.parse(sample_day_v1_markdown)
@@ -182,12 +399,12 @@ def test_reads_format_1_files_and_writes_the_current_format(
     assert (old.facts.mood, old.facts.mood_score, old.facts.city) == ("happy", 4, "Austin")
     assert old.facts.meals[0] == D.Meal(type="breakfast", items=["oatmeal", "blueberries"])
     assert old.meta.model_extra == {}
-    assert old.meta.lumitrace_format == D.FORMAT_VERSION
+    assert old.meta.lumitrace_format == D.LEGACY_FORMAT_VERSION
     assert not old.is_user_edited()  # matched the format 1 hash, so it was re-stamped
     rendered = D.render(old)
     front = rendered.split("\n---\n", 1)[0]
     assert "mood" not in front and "meals" not in front
-    assert f"lumitrace_format: {D.FORMAT_VERSION}" in front
+    assert f"lumitrace_format: {D.LEGACY_FORMAT_VERSION}" in front
     assert "## At a glance" in rendered
     rewritten = D.parse(rendered)
     assert rewritten.facts == old.facts
@@ -195,7 +412,7 @@ def test_reads_format_1_files_and_writes_the_current_format(
     assert not rewritten.is_user_edited()
 
 
-def test_reads_format_2_files_and_moves_their_facts_into_the_current_sections(
+def test_reads_format_2_files_and_preserves_the_legacy_layout(
     sample_day_v2_markdown: str,
 ) -> None:
     day = D.parse(sample_day_v2_markdown)
@@ -207,7 +424,7 @@ def test_reads_format_2_files_and_moves_their_facts_into_the_current_sections(
     leo = next(m for m in facts.family if m.name == "Leo")
     assert (leo.feelings, leo.moments) == (["proud"], ["lost his first tooth"])
     assert leo.meals == [D.Meal(type="snacks", items=["pasta"])]
-    assert day.meta.lumitrace_format == D.FORMAT_VERSION
+    assert day.meta.lumitrace_format == D.LEGACY_FORMAT_VERSION
     assert day.is_user_edited()  # the format 2 hash does not match, so it is never overwritten
     rendered = D.render(day)
     assert "## At a glance" in rendered

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import sqlite_vec
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 META_SCHEMA_VERSION = "schema_version"
 META_EMBEDDING_MODEL = "embedding_model"
@@ -35,6 +35,7 @@ DERIVED_TABLES: tuple[str, ...] = (
     "places",
     "family_facts",
     "highlights",
+    "content_facts",
     "days",
     "files",
 )
@@ -47,6 +48,7 @@ FACT_TABLES: tuple[str, ...] = (
     "places",
     "family_facts",
     "highlights",
+    "content_facts",
     "days",
 )
 """Derived tables that :func:`reset_derived` drops and recreates (children before ``days``), so an
@@ -156,12 +158,31 @@ CREATE TABLE IF NOT EXISTS highlights (
 );
 CREATE INDEX IF NOT EXISTS highlights_date ON highlights(date);
 
+-- Canonical Format 6 values, flattened into logical rows. Legacy days are projected into
+-- DayContent before insertion, so these query surfaces work across both file formats.
+CREATE TABLE IF NOT EXISTS content_facts (
+    id           INTEGER PRIMARY KEY,
+    date         TEXT NOT NULL REFERENCES days(date) ON DELETE CASCADE,
+    scope        TEXT NOT NULL,             -- timeline|family|pregnancy|tags
+    person       TEXT,                      -- family tracker owner, otherwise NULL
+    category     TEXT NOT NULL,             -- context|food|health_fitness|...
+    field        TEXT NOT NULL,             -- exact field within the category
+    text         TEXT,                      -- item/description/name when textual
+    number       REAL,                      -- rating score or exercise minutes
+    status       TEXT,                      -- meal status when applicable
+    details_json TEXT,                      -- complete structured logical item, when useful
+    position     INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS content_facts_date ON content_facts(date);
+CREATE INDEX IF NOT EXISTS content_facts_scope
+    ON content_facts(scope, person COLLATE NOCASE, category, field);
+
 -- Searchable chunks of text. FTS and vector rows share passages.id as their rowid.
 CREATE TABLE IF NOT EXISTS passages (
     id          INTEGER PRIMARY KEY,
     path        TEXT NOT NULL REFERENCES files(path) ON DELETE CASCADE,
     date        TEXT,                      -- YYYY-MM-DD, NULL for non-day files
-    section     TEXT NOT NULL,             -- title|journal|notes|transcript|facts
+    section     TEXT NOT NULL,             -- title|content|journal|notes|transcript|facts
     heading     TEXT,                      -- nearest Markdown heading, if any
     capture_id  TEXT,                      -- Capture.id for transcript passages
     ordinal     INTEGER NOT NULL DEFAULT 0, -- order within (path, section)
@@ -202,8 +223,8 @@ CREATE TABLE IF NOT EXISTS edit_signals (
     date            TEXT NOT NULL,
     path            TEXT NOT NULL,
     detected_at     TEXT NOT NULL,         -- ISO-8601 UTC
-    section         TEXT NOT NULL,         -- facts|title|journal|notes|transcript
-    field           TEXT,                  -- e.g. "meals", "places" for facts; NULL otherwise
+    section         TEXT NOT NULL,         -- content|facts|title|journal|notes|transcript
+    field           TEXT,                  -- e.g. "timeline" for content, "places" for facts
     before          TEXT,                  -- system version (JSON for facts, text otherwise)
     after           TEXT,                  -- owner's version
     diff            TEXT,                  -- unified diff, for text sections

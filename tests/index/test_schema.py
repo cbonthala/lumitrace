@@ -104,10 +104,23 @@ def test_fact_tables_cascade_from_days() -> None:
         " VALUES ('2026-10-10', 'Leo', 'moments', 'tooth')"
     )
     conn.execute("INSERT INTO highlights(date, text) VALUES ('2026-10-10', 'book')")
+    conn.execute(
+        "INSERT INTO content_facts(date, scope, person, category, field, text)"
+        " VALUES ('2026-10-10', 'family', 'Leo', 'growth_learning',"
+        " 'new_skill_behavior', 'rode a bike')"
+    )
     with pytest.raises(sqlite3.IntegrityError):
         conn.execute("INSERT INTO meals(date, meal_type, item) VALUES ('1999-01-01', 'x', 'y')")
     conn.execute("DELETE FROM days")
-    for table in ["meals", "activities", "people", "places", "family_facts", "highlights"]:
+    for table in [
+        "meals",
+        "activities",
+        "people",
+        "places",
+        "family_facts",
+        "highlights",
+        "content_facts",
+    ]:
         assert conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] == 0
 
 

@@ -1,13 +1,11 @@
 """Split a parsed day file into searchable passages.
 
-One day becomes, in this order: a ``title`` passage, ``facts``, ``journal`` and ``notes``
-passages split at Markdown headings (the facts are the day file's "At a glance" text without
-its "not mentioned" lines, so a passage's heading is "Highlight", "Places visited", ... or, for
-the per-person sections, the section and the person: "Food · Leo", "Feelings · Maya"), and
-``transcript`` passages, one or more per capture (then its English translation, if any, under
-the heading ``HH:MM · Log My Day · English``). Every passage is at most :data:`MAX_CHARS`
-characters; longer text is cut at paragraph, then sentence, then word boundaries. ``ordinal`` counts
-passages within a section.
+Format 6 days use their canonical ``content`` region, split at its timeline and tracker headings.
+Legacy days retain their ``facts`` and ``journal`` passages. Both formats then add ``notes`` and
+``transcript`` passages, one or more per capture (then its English translation, if any, under the
+heading ``HH:MM · Log My Day · English``). Every passage is at most :data:`MAX_CHARS` characters;
+longer text is cut at paragraph, then sentence, then word boundaries. ``ordinal`` counts passages
+within a section.
 """
 
 from __future__ import annotations
@@ -17,6 +15,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from lumitrace.frames.daycontent import render as render_content
 from lumitrace.frames.dayfile import CAPTURE_LABELS, DayFile, render_facts_section
 
 MAX_CHARS = 1000
@@ -31,7 +30,7 @@ _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…])\s+")
 @dataclass(frozen=True)
 class Passage:
     section: str
-    """``title`` | ``facts`` | ``journal`` | ``notes`` | ``transcript``"""
+    """``title`` | ``content`` | ``facts`` | ``journal`` | ``notes`` | ``transcript``"""
     heading: str | None
     capture_id: str | None
     ordinal: int
@@ -52,9 +51,12 @@ def build_passages(day: DayFile, max_chars: int = MAX_CHARS) -> list[Passage]:
     out: list[Passage] = []
     if day.title.strip():
         out.append(Passage("title", None, None, 0, day.title.strip()))
-    facts_text = render_facts_section(day.facts, include_empty=False)
-    out.extend(_facts_passages(facts_text, max_chars))
-    out.extend(_markdown_passages("journal", day.journal, max_chars))
+    if day.content is not None:
+        out.extend(_markdown_passages("content", render_content(day.content), max_chars))
+    else:
+        facts_text = render_facts_section(day.facts, include_empty=False)
+        out.extend(_facts_passages(facts_text, max_chars))
+        out.extend(_markdown_passages("journal", day.journal, max_chars))
     out.extend(_markdown_passages("notes", day.notes, max_chars))
     ordinal = 0
     for capture in day.captures:

@@ -1,8 +1,8 @@
 # Prism (recording API)
 
 The Prism takes what a Flash (the web app or the iPhone Shortcuts) captures and splits that one beam of raw
-voice into its colors: facts, journal, mood and transcript, written into the day's Frame (the
-day file). Command: `lumitrace-prism`; Docker service: `prism`. Owned by the
+voice into its colors: a timeline, family trackers and transcript, written into the day's Frame
+(the day file). Command: `lumitrace-prism`; Docker service: `prism`. Owned by the
 prism work stream. Code: `lumitrace/prism/` (HTTP, inbox, worker) and
 `lumitrace/prism/pipeline/` (speech to text, AI steps, audio, photos, activity records).
 Tests: `tests/prism/`. iPhone side: `docs/flash.md`.
@@ -92,9 +92,9 @@ response.
 
 * `status`: `queued` → `processing` → `done`, or `failed` after the automatic retries. While an
   automatic retry is waiting, `status` is `queued` and `retry_at` is set.
-* `generation`: `deferred` (transcript saved; the journal waits until 4:05 a.m. or Generate),
-  `full` (first title and journal written from every transcript and My notes), `update`
-  (changed source inserted into the existing journal sections), `unchanged` (all source was
+* `generation`: `deferred` (transcript saved; structured content waits until 4:05 a.m. or
+  Generate), `full` (first title and Format 6 content written from every transcript and My
+  notes), `update` (changed source merged into existing content), `unchanged` (all source was
   already processed), `skipped` (no source text), or `failed` (the transcript is saved but the
   model failed).
 * `404` for an unknown id.
@@ -121,7 +121,7 @@ app itself in `lumitrace/prism/web/` (ADR 0019; user guide: `docs/flash.md` → 
 | `GET /session` | none | `{"signed_in", "username", "sign_in_available", "version"}` for the cookie sent (never an error) |
 | `GET /captures?days=7&limit=30` | token or cookie | the capture statuses changed in the last `days` (1–60), newest capture first, at most `limit` (1–200). No journal content. `generation` here is whether that capture is in the journal now (`deferred` until Generate or 4:05, then `unchanged`), which can differ from `GET /captures/{id}` |
 | `GET /summary` | token or cookie | `{"today", "days": 7, "days_logged", "logged_dates", "captures", "streak"}` |
-| `POST /journal` | token or cookie | JSON `{"date": "YYYY-MM-DD"}` or `{}` (the open day). The first call fills the journal and structured facts; later calls safely process changed source, or repair missing format-4 facts, without replacing owner edits (ADR 0058, 0059). `200` with `{"entry_date", "status", "message"}`: `status` is `full`, `update`, `unchanged`, `skipped` or `failed`. The message has no journal text. A date after today is `422`. If a recording is still being saved after two minutes, `409` |
+| `POST /journal` | token or cookie | JSON `{"date": "YYYY-MM-DD"}` or `{}` (the open day). The first call fills the Format 6 timeline and trackers; later calls safely process changed source or migrate a legacy day without replacing owner edits (ADR 0061). `200` with `{"entry_date", "status", "message"}`: `status` is `full`, `update`, `unchanged`, `skipped` or `failed`. The message has no journal text. A date after today is `422`. If a recording is still being saved after two minutes, `409` |
 | `GET /lens/apps` | token or cookie | the AI apps connected to the Lens, passed through from its admin API (`docs/lens.md` → Connected apps) |
 | `POST /lens/apps/{id}/sign-out` | token or cookie | disconnect one app now (it needs the Lens password again) |
 | `POST /lens/apps/sign-out-all` | token or cookie | disconnect every app; `{"signed_out": n}` |
@@ -249,8 +249,9 @@ activity record.
    is re-read and `merge_capture` adds the transcript block; the day file and its
    `_system/generated/` snapshot are written. From here on the capture is safe even if the AI
    steps fail (ADR 0011).
-6. **Journal timing** (`pipeline/processor.py`, `journal_schedule.py`, ADR 0046). The journal and
-   structured facts are first written after the day closes, not on every recording.
+6. **Day-content timing** (`pipeline/processor.py`, `journal_schedule.py`, ADR 0046). The
+   structured timeline and trackers are first written after the day closes, not on every
+   recording.
    * While the day is still open (before `LUMITRACE_DAY_ROLLOVER_HOUR`, 4 a.m. in the owner's
      timezone) the capture is saved and `generation` is `deferred`. A marker is left at
      `_system/journal-due/YYYY-MM-DD.txt`.
@@ -260,37 +261,42 @@ activity record.
      a later recording still overrides an earlier one.
    * **Generate** in Flash (ADR 0055) runs that write for one day now: `POST /journal`.
      It waits until the worker is idle. The first call uses `fill_day` with every transcript and
-     My notes. Once the journal exists, only changed source is processed and missing bullets are
-     inserted into normal sections without replacing existing words. Recordings that arrive
-     afterward while the day is still open stay deferred; 4:05 safely merges them. If no source
-     changed, Generate returns `unchanged` without a model call.
+     My notes. Once content exists, only changed source is processed. Model-owned content may be
+     refilled from all source; owner-edited content uses exact timeline patches and a three-way
+     tracker merge. Recordings that arrive afterward while the day is still open stay deferred;
+     4:05 safely merges them. If no source changed, Generate returns `unchanged` without a model
+     call.
    * A capture for a day that has **already** closed (uploaded after 4 a.m., or sent with an
      earlier `date`) is written immediately, because the morning run has passed.
    * If that run fails, the marker stays and the next start tries again.
-7. **AI steps** (`pipeline/generate.py`, `pipeline/llm.py`), when the journal is written and the
-   day has any words:
-   * The day's journal does not exist yet → **full**: one `fill_day` call (ADR 0049, 0058, 0059).
-     The model sees every Telugu transcript, My notes, the family-file glossary, the keyterms,
-     and `prompts/day-template.md`. It returns JSON `{headline, journal, facts}`. Facts are
-     validated against `DayFacts` (`keep_family` gives every member in `secrets/family.md` a
-     block). Day-level meals are then filled in code as the union of every member's meals,
-     each item tagged with who had it (`oatmeal (Maya, Leo)`). The model is not asked for
-     that list. The call logs the character length of `{{captures}}` and the model's maximum
-     output tokens, and the whole transcript is sent. `apply_generation` writes the day file, title
-     `"<Weekday, Month D, YYYY> · <headline>"`, and the fixed journal headings
-     (`normalize_journal`, `docs/frames-format.md` → The journal). This is the 4:05 a.m. write.
-     It replaces a journal typed earlier that same night. Notes and transcripts stay.
-   * The journal exists and its source changed, or the generated-facts base is missing →
-     **update**: one `update_day` call. The model sees the authoritative current journal, every
-     recording and My notes, then returns missing section-classified bullets and complete facts.
-     Journal bullets are inserted mechanically. Facts use the previous model reply from
-     `_system/generated-facts/` as the base of a three-way merge; owner additions, changes and
-     removals win. A format-4 day has no base, so Generate repairs it without rewriting the
-     journal. `generated_source_hash` plus the base prevent repeat calls.
+7. **AI steps** (`pipeline/generate.py`, `pipeline/llm.py`), when Format 6 content is written and
+   the day has any words:
+   * No generation exists yet → **full**: one `fill_day` call (ADR 0061). The model sees every
+     Telugu transcript, My notes, the family-file glossary, keyterms and
+     `prompts/day-template.md`. It returns JSON with `headline`, `timeline` and `trackers`.
+     `DayContent` validates and normalizes it; `keep_content_family` keeps exactly one tracker
+     for every configured family member, in configured order and spelling. The call logs the
+     character length of `{{captures}}` and the model's maximum output tokens, and sends the
+     whole transcript. `apply_content_generation(..., force=True)` writes the title
+     `"<Weekday, Month D, YYYY> · <headline>"` and the canonical Format 6 Markdown. It may replace
+     generated-looking content typed before the first run. My notes and transcripts stay.
+   * Existing model-owned content whose source changed, or `--replace-generated` was requested,
+     runs `fill_day` again from every source. Because the live content still equals the saved
+     model base, the complete incoming result can replace it through the normal three-way merge.
+   * An owner-edited day → **update**: one `update_day` call. The model sees the complete current
+     rendered day, every recording and My notes. It returns exact timeline additions,
+     replacements and deletions plus complete structured context and trackers. Code applies the
+     patches to the saved model timeline in replacement/deletion/addition order, then merges the
+     resulting complete model content against the live day. Owner additions, changes and
+     removals win.
+   * `_system/generated-facts/` stores the complete model `DayContent` and a Format 5 facts
+     projection. An older facts/journal state or generated snapshot is conservatively projected
+     to Format 6 for the first merge. `generated_source_hash` plus the saved base prevent repeat
+     calls.
    * If the call fails on every model, the day keeps the transcript and `generation` is `failed`.
    * Front matter: `prompt_version` (`fill_day` or `update_day`) and `models_used`
      (`stt`, `fill_day` or `update_day`: the model that answered), merged with what was there.
-8. **Write** the day file, exact snapshot and generated-facts base.
+8. **Write** the day file, exact snapshot and generated-content base.
 9. **Nudge** the indexer (`nudge_indexer` with the day file, audio and photo paths). A capture
    nudges as soon as its transcript is saved, and the morning journal nudges again. A failed or
    refused nudge is recorded but never fails the capture; the indexer also polls.
@@ -319,26 +325,25 @@ models set to `fake`, the whole API runs offline.
 
 `lumitrace-prism regenerate [--from D] [--to D] [--dry-run] [--nudge] [--replace-generated]`
 (code: `lumitrace/prism/regenerate.py`) runs the same action as the Flash **Generate** button
-for each stored day. The first generation fills the title, journal and facts. A later run
-rewrites the journal when it still matches the saved model text, and otherwise corrects a
-generated sentence a newer source contradicts and adds missing bullets. Facts are the new
-complete list, with your additions, changes and removals kept and each fact kept once. Notes,
-transcripts, audio and photos are never touched. It writes the day file, the identical snapshot
-and the generated-facts base, like the button does. `--nudge` asks Spectrum to index each
-written day. `--replace-generated` runs the update even when the recordings are unchanged, so a
-prompt fix can rewrite model-owned text; a journal you edited is still kept. It calls the AI
+for each stored day. The first generation fills the title and Format 6 content. A later run
+refills model-owned content or uses the update prompt and three-way merge for an owner-edited
+day. Timeline and tracker additions, changes and removals are kept at their typed fields and
+cells. Notes, transcripts, audio and photos are never touched. It writes the day file, the
+identical snapshot and generated-content base, like the button does. `--nudge` asks Spectrum to
+index each written day. `--replace-generated` runs the update even when the recordings are
+unchanged, so a prompt fix can rewrite model-owned content; owner edits still win. It calls the AI
 models (cost), so start with `--dry-run` and a short date range. A dry run reports `would full`
 or `would update`. Days without source text are `skipped`. A day already generated from the
-current source and facts base is `unchanged`, unless `--replace-generated` is set.
+current source and content base is `unchanged`, unless `--replace-generated` is set.
 
 ### Prompts
 
 One file per task in `prompts/` (`prompts/README.md`, ADR 0051): `fill_day.md` and
-`update_day.md`. `day-template.md` in the same folder is pasted into the fill-day user message.
+`update_day.md`. `day-template.md` in the same folder is pasted into both user messages.
 Each instruction file has a system part and a user part separated by
 `<!-- lumitrace-prompt: system -->` / `<!-- lumitrace-prompt: user -->`, with `{{name}}`
-placeholders (`date`, `captures`, `facts`, `journal`, `capture`, `author`, `family`,
-`glossary`, `keyterms`, `template`). A missing value raises an error. Prompts tell
+  placeholders (`date`, `captures`, `journal`, `author`, `family`, `glossary`, `keyterms`,
+`template`, `weather`, `notes`). A missing value raises an error. Prompts tell
 the model to use only what the entries say and never invent. Edit the file in place. Git is
 the history. A new day stores the task name in `prompt_version`.
 
@@ -359,10 +364,10 @@ The instructions (ADR 0016) also tell the model:
   glossary and the keyterms. They do not receive an English translation (ADR 0048). Parents
   talking about themselves in their child's words ("Dad went to bed early") mean the author.
   The model never turns a misheard phrase into a food, place or name, and writes in English.
-* **The author's own block** always repeats the author's mood, meals, places, activities and
-  moments; a meal eaten without a named food is described from the entry ("food from the deli")
-  instead of borrowing another meal's food, and a meal's type may come from the order of events.
-  Feelings and worries anyone expressed are kept as moments and in the journal.
+* **One tracker per configured member:** unmentioned values are empty, meal status distinguishes
+  consumed, skipped and not recorded, and mood/energy scores are used only when a number was
+  stated. Tracker facts use their most specific table instead of being copied across tables and
+  timeline.
 * **The Telugu day rules** (`fill_day.md` and `update_day.md`; ADR 0045, 0047, 0048 and 0050,
   mirrored by the skill `.cursor/skills/lumitrace-telugu-day-journal/`): the audio is mostly
   Telugu, the journal is English; at 4:05 a.m. every transcript is in one write, and a later
@@ -375,9 +380,13 @@ The instructions (ADR 0016) also tell the model:
   of `secrets/family.md` (who people are, usual routines, spellings), or `(none)`.
   `{{keyterms}}` is the speech-to-text keyterm list (family names, then
   `LUMITRACE_STT_KEYTERMS`), or `(none)`. Those notes resolve words that were said. They are
-  not facts for today.
-* **Time of day:** the journal uses Morning/Afternoon/Evening only for events the entries place
-  there.
+  not facts for today. The output is a complete Format 6 timeline and trackers, not Markdown.
+* **Time of day:** Morning/Afternoon/Evening/Night require explicit time, a temporal phrase,
+  waking, bedtime, a meal name or nearby timed context. A valid event with no supported time
+  goes under Time not stated.
+* **Updates:** preserve the current page unless newer evidence contradicts it. Replacements and
+  deletions identify an exact existing timeline bullet; additions contain only a missing event.
+  The structured object is the complete updated state.
 
 ## Activity records (`_system/activity/YYYY/MM.jsonl`)
 
@@ -423,7 +432,7 @@ One JSON line per processing attempt, appended to the file for the month the att
 | `YYYY/MM/YYYY-MM-DD/YYYY-MM-DD-HHMM.m4a` | compressed audio |
 | `YYYY/MM/YYYY-MM-DD/photo-NN.jpg` | resized photos |
 | `_system/generated/YYYY/MM/YYYY-MM-DD.md` | snapshot of each day file write |
-| `_system/generated-facts/YYYY/MM/YYYY-MM-DD.json` | previous complete model facts used as the three-way merge base |
+| `_system/generated-facts/YYYY/MM/YYYY-MM-DD.json` | previous complete model content used as the three-way merge base, plus a legacy facts projection |
 | `_system/inbox/<id>/` | raw uploads waiting to be processed (deleted when done) |
 | `_system/captures/<id>.json` | capture status (no journal content) |
 | `_system/activity/YYYY/MM.jsonl` | activity records |
