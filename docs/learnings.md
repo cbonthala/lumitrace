@@ -61,6 +61,8 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 ## Prism (recording API)
 
+- 2026-10-19 — Sarvam returns HTTP 400 if any keyterm contains a comma or semicolon, including
+  a long family-file name → split those separators into separate array items for STT only.
 - 2026-10-19 — LiteLLM `num_retries` imports tenacity at call time; the image did not install it,
   so Gemini 3.8 Flash failed and a blank 3.6 Flash fill wrote an empty Format 6 day → add
   `tenacity` as a direct dependency and reject blank fill-day replies.

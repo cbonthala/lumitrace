@@ -318,6 +318,7 @@ File: `tests/prism/test_stt.py`
 - Checks that a failed AWS job still cleans up its files and reports the failure, and that an audio format AWS can't read is refused up front. <sub>`test_aws_transcribe_failure_still_cleans_up`</sub>
 - Checks how the language setting is passed to AWS: a full code like "en-GB" as is, "es" as US Spanish, and an empty setting as "detect the language". <sub>`test_aws_language_options`</sub>
 - Checks, against an imitation of Sarvam's batch service, that the Sarvam option runs one transcript job, sends the model, codemix mode, Telugu language code and the family names plus extra keyterms, returns no translation, keeps the API key away from the file-storage links, and uploads `.m4a` as `audio/x-m4a` (Sarvam returns an empty transcript for a generic type). <sub>`test_sarvam_transcript_only`</sub>
+- Checks that a family name or extra keyterm containing a comma or semicolon is sent to Sarvam as separate keyterm array items. <sub>`test_sarvam_splits_comma_and_semicolon_keyterms`</sub>
 - Checks that an empty Sarvam transcript is reported as a warning (so it shows in the capture status) and that `.mp3` is uploaded as `audio/mpeg`. <sub>`test_sarvam_empty_transcript_is_a_warning`</sub>
 - Checks the Sarvam options: keyterms are only sent to the v4 model, an empty language means "detect it", unsupported audio formats are refused, and a missing API key gives a clear error. <sub>`test_sarvam_options`</sub>
 - Checks that a failed Sarvam transcript job raises an error with the reason, and that a refused upload reports only the HTTP status, never the secret upload link. <sub>`test_sarvam_failed_transcript_raises_without_leaking_urls`</sub>
@@ -793,7 +794,7 @@ File: `tests/test_config.py`
 - Checks that `LUMITRACE_*` environment variables override the defaults and that the API token is hidden when settings are printed. <sub>`test_env_overrides`</sub>
 - Checks that an unknown timezone, a switch-over hour of 24, or an unsupported storage type are refused. <sub>`test_validation`</sub>
 - Checks that `.env.example` lists every setting, and nothing that doesn't exist. <sub>`test_env_example_documents_every_setting`</sub>
-- Checks that a household passed to settings supplies the family names, relations, owner, notes and the start of the speech-to-text key terms, and that settings with no household have no family and send "(none)". <sub>`test_household_on_settings_drives_family_and_keyterms`</sub>
+- Checks that a household passed to settings supplies the family names, relations, owner, notes and the start of the speech-to-text key terms, that commas and semicolons split extra keyterms and long names into separate speech terms without changing the family member list, and that settings with no household have no family and send "(none)". <sub>`test_household_on_settings_drives_family_and_keyterms`</sub>
 - Checks that constructing settings does not read `secrets/family.md`, so a real family file cannot leak into tests. <sub>`test_settings_does_not_read_the_family_file`</sub>
 - Checks that the process-wide settings load the first family file that exists, including its notes. <sub>`test_get_settings_loads_the_first_family_file`</sub>
 

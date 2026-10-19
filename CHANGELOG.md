@@ -48,6 +48,9 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Prism
 
+- **Sarvam keyterms split on commas and semicolons.** A family name or extra keyterm that
+  contains either separator is sent as separate array items. Sarvam 400s a combined string, which
+  left a recording failed in Flash.
 - **Fill and update prompts write Format 6 content** (ADR 0061). `fill_day` returns one complete
   timeline and tracker state. `update_day` returns exact timeline additions, replacements and
   deletions plus complete structured trackers; code applies the patches and merges them against

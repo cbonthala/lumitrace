@@ -232,6 +232,23 @@ def test_sarvam_transcript_only(settings: Settings) -> None:
     }
 
 
+def test_sarvam_splits_comma_and_semicolon_keyterms(settings: Settings) -> None:
+    household = Household(
+        people=(Person("Sam", "me"), Person("Leo, the toddler who loves trains", "son"))
+    )
+    server = FakeSarvam()
+    s = sarvam_settings(settings, household=household, stt_keyterms="Corner Bakery; Whole Foods")
+    sarvam(s, server).transcribe(b"audio", "audio.m4a")
+    (job,) = server.jobs.values()
+    assert job["params"]["keyterms"] == [
+        "Sam",
+        "Leo",
+        "the toddler who loves trains",
+        "Corner Bakery",
+        "Whole Foods",
+    ]
+
+
 def test_sarvam_empty_transcript_is_a_warning(settings: Settings) -> None:
     server = FakeSarvam(transcripts={"codemix": "  "})
     result = sarvam(sarvam_settings(settings), server).transcribe(b"audio", "audio.mp3")

@@ -7,6 +7,7 @@ not modelled here. `.env.example` documents every variable; keep the two in sync
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
@@ -157,12 +158,17 @@ class Settings(BaseSettings):
 
     @property
     def stt_keyterm_list(self) -> list[str]:
-        """Family names, then :attr:`stt_keyterms`: trimmed, duplicates (any case) removed."""
+        """Family names, then :attr:`stt_keyterms`: trimmed, duplicates (any case) removed.
+
+        Commas and semicolons split a value into separate terms. Sarvam rejects a single
+        keyterm that contains either separator.
+        """
         terms: dict[str, str] = {}
-        for raw in [*self.family_members, *self.stt_keyterms.split(",")]:
-            term = " ".join(raw.split())
-            if term:
-                terms.setdefault(term.casefold(), term)
+        for raw in [*self.family_members, self.stt_keyterms]:
+            for part in re.split(r"[,;]", raw):
+                term = " ".join(part.split())
+                if term:
+                    terms.setdefault(term.casefold(), term)
         return list(terms.values())
 
 

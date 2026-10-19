@@ -47,6 +47,21 @@ def test_household_on_settings_drives_family_and_keyterms() -> None:
     assert s.owner_name == "Sam"
     assert s.glossary_text == "Leon is Leo's daycare friend."
     assert s.stt_keyterm_list == ["Sam", "Maya", "Leo", "Corner Bakery"]
+    split = Settings(
+        _env_file=None,
+        household=Household(
+            people=(Person("Sam", "me"), Person("Leo, the toddler who loves trains", "son"))
+        ),
+        stt_keyterms="Corner Bakery; Whole Foods",
+    )
+    assert split.family_members == ["Sam", "Leo, the toddler who loves trains"]
+    assert split.stt_keyterm_list == [
+        "Sam",
+        "Leo",
+        "the toddler who loves trains",
+        "Corner Bakery",
+        "Whole Foods",
+    ]
     assert Settings(_env_file=None).family_members == []
     assert Settings(_env_file=None).glossary_text == "(none)"
     assert Settings(_env_file=None).stt_keyterm_list == []
