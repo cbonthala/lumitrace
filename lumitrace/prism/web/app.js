@@ -15,7 +15,7 @@ const SENT_KEEP_DAYS = 8;
 const MIN_RECORDING_MS = 1000;  // a double tap must not start and stop at once
 
 const state = {
-  date: "",              // "" = today; otherwise YYYY-MM-DD
+  date: "",              // "" = not chosen yet; otherwise YYYY-MM-DD, including today
   recPhotos: [],
   recorder: null,
   starting: false,
@@ -39,6 +39,12 @@ function isoLocal(d) {
 
 function localDate(d = new Date()) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function yesterdayDate() {
+  const d = new Date(`${localDate()}T12:00:00`);
+  d.setDate(d.getDate() - 1);
+  return localDate(d);
 }
 
 function captureId(kind, d) {
@@ -243,20 +249,77 @@ function renderPlace() {
 }
 
 function renderDate() {
-  const label = state.date ? dayLabel(state.date) : "today";
+  const today = localDate();
+  const chosen = Boolean(state.date);
+  const label = !chosen ? "pick a day" : (state.date === today ? "today" : dayLabel(state.date));
   document.querySelectorAll(".date-label").forEach((node) => {
-    node.textContent = node.classList.contains("cap") && !state.date ? "Today" : label;
+    node.textContent = node.classList.contains("cap") && label === "today" ? "Today" : label;
+  });
+  document.querySelectorAll(".date-chip").forEach((chip) => {
+    chip.classList.toggle("needs-date", !chosen);
   });
   document.querySelectorAll(".date-input").forEach((input) => {
-    input.max = localDate();
-    input.value = state.date || localDate();
+    input.max = today;
+    const next = state.date || "";
+    if (input.value !== next) input.value = next;
   });
+  $("date-today")?.classList.toggle("picked", state.date === today);
+  $("date-yesterday")?.classList.toggle("picked", state.date === yesterdayDate());
+  const confirm = $("date-confirm");
+  if (confirm) confirm.disabled = !chosen;
+}
+
+function setFilingDate(value) {
+  const today = localDate();
+  state.date = value && value <= today ? value : "";
+  renderDate();
+}
+
+let dateSheetNext = null;
+
+function dateSheetOpen() {
+  const scrim = $("date-scrim");
+  return Boolean(scrim && !scrim.hidden);
+}
+
+function requireFilingDate(next) {
+  if (state.date) {
+    next();
+    return;
+  }
+  openDateSheet(next);
+}
+
+function openDateSheet(next) {
+  const scrim = $("date-scrim");
+  if (!scrim) {
+    toast("Select the date first.", true);
+    return;
+  }
+  dateSheetNext = next;
+  renderDate();
+  scrim.hidden = false;
+  document.body.dataset.dateSheet = "open";
+}
+
+function closeDateSheet() {
+  const scrim = $("date-scrim");
+  if (scrim) scrim.hidden = true;
+  delete document.body.dataset.dateSheet;
+  dateSheetNext = null;
+}
+
+function confirmDateSheet() {
+  if (!state.date) return;
+  const next = dateSheetNext;
+  closeDateSheet();
+  if (next) next();
 }
 
 function baseFields(started) {
   return {
     captured_at: isoLocal(started),
-    date: state.date && state.date !== localDate(started) ? state.date : "",
+    date: state.date || "",
     place: placeName(),
   };
 }
@@ -950,8 +1013,10 @@ async function sendPhotosOnly() {
 }
 
 function onCardSend() {
-  if (state.phase === "review") sendReview();
-  else sendPhotosOnly();
+  requireFilingDate(() => {
+    if (state.phase === "review") sendReview();
+    else sendPhotosOnly();
+  });
 }
 
 async function uploadAudio(input) {
@@ -962,26 +1027,26 @@ async function uploadAudio(input) {
     toast("Send or discard the recording first.", true);
     return;
   }
-  // The file's time is when it was recorded or saved; it picks the day unless one is chosen.
   const saved = new Date(file.lastModified || Date.now());
   const started = saved > new Date() ? new Date() : saved;
-  const day = state.date || localDate(started);
   const size = file.size < 1048576
     ? `${Math.max(1, Math.round(file.size / 1024))} KB`
     : `${(file.size / 1048576).toFixed(1)} MB`;
-  if (!confirm(`Send "${file.name}" (${size}) as Log My Day for ${dayLabel(day)}?`)) return;
-  const ext = (file.name.match(/\.[a-z0-9]{1,5}$/i) || [extensionFor(file.type)])[0].toLowerCase();
-  const item = {
-    capture_id: captureId("rec", started),
-    kind: "recording",
-    created: Date.now(),
-    fields: baseFields(started),
-    audio: file,
-    audioName: `audio${ext}`,
-    photos: takePhotos("recPhotos", "rec-thumbs", "rec-photo-count"),
-    seconds: await audioSeconds(file),
-  };
-  await queueAndSend(item);
+  requireFilingDate(async () => {
+    if (!confirm(`Send "${file.name}" (${size}) as Log My Day for ${dayLabel(state.date)}?`)) return;
+    const ext = (file.name.match(/\.[a-z0-9]{1,5}$/i) || [extensionFor(file.type)])[0].toLowerCase();
+    const item = {
+      capture_id: captureId("rec", started),
+      kind: "recording",
+      created: Date.now(),
+      fields: baseFields(started),
+      audio: file,
+      audioName: `audio${ext}`,
+      photos: takePhotos("recPhotos", "rec-thumbs", "rec-photo-count"),
+      seconds: await audioSeconds(file),
+    };
+    await queueAndSend(item);
+  });
 }
 
 async function discardRecording() {
@@ -1361,6 +1426,7 @@ function go(tab) {
     if (tab !== "capture") toast("Stop or discard the recording first.", true);
     return;
   }
+  closeDateSheet();
   closePromptSheet();
   document.body.dataset.tab = tab;
   window.scrollTo(0, 0);
@@ -1387,7 +1453,13 @@ function wire() {
     if (e.target === $("prompt-scrim") && !promptRecording()) closePromptSheet();
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && promptSheetOpen() && !promptRecording()) {
+    if (e.key !== "Escape") return;
+    if (dateSheetOpen()) {
+      e.preventDefault();
+      closeDateSheet();
+      return;
+    }
+    if (promptSheetOpen() && !promptRecording()) {
       e.preventDefault();
       closePromptSheet();
     }
@@ -1403,12 +1475,16 @@ function wire() {
   $("rec-upload").addEventListener("change", (e) => uploadAudio(e.target));
   $("send-now").addEventListener("click", async () => { await flushOutbox(); await refreshAll(); });
 
+  $("date-scrim")?.addEventListener("click", (e) => {
+    if (e.target === $("date-scrim")) closeDateSheet();
+  });
+  $("date-today")?.addEventListener("click", () => setFilingDate(localDate()));
+  $("date-yesterday")?.addEventListener("click", () => setFilingDate(yesterdayDate()));
+  $("date-cancel")?.addEventListener("click", closeDateSheet);
+  $("date-confirm")?.addEventListener("click", confirmDateSheet);
   document.querySelectorAll(".date-input").forEach((input) => {
     input.addEventListener("click", () => { try { input.showPicker?.(); } catch { /* iOS opens it itself */ } });
-    input.addEventListener("change", () => {
-      state.date = input.value && input.value !== localDate() ? input.value : "";
-      renderDate();
-    });
+    input.addEventListener("change", () => setFilingDate(input.value));
   });
 
   $("place-input").value = placeName();

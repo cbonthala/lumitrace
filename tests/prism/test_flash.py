@@ -399,6 +399,25 @@ def test_recording_is_reviewed_before_it_is_sent(client: TestClient) -> None:
     assert "Stop and send" not in script
 
 
+def test_send_requires_an_explicit_filing_date(client: TestClient) -> None:
+    page = client.get("/flash/").text
+    script = client.get("/flash/app.js").text
+    assert 'id="date-scrim"' in page and 'id="date-title"' in page
+    assert "Select the date" in page
+    assert 'id="date-today"' in page and 'id="date-yesterday"' in page
+    assert 'id="date-picker"' in page and 'id="date-confirm"' in page
+    assert "pick a day" in page
+    assert "requireFilingDate" in script and "openDateSheet" in script
+    send = script[script.index("function onCardSend") : script.index("async function uploadAudio")]
+    assert "requireFilingDate" in send
+    upload = script[
+        script.index("async function uploadAudio") : script.index("async function discardRecording")
+    ]
+    assert "requireFilingDate" in upload
+    assert "input.value !== localDate()" not in script
+    assert "state.date || localDate()" not in script
+
+
 def test_uploaded_voice_memo_is_sent_like_a_recording(app: FastAPI, client: TestClient) -> None:
     page = client.get("/flash/").text
     assert 'id="rec-upload"' in page and 'accept="audio/*' in page

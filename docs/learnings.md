@@ -61,6 +61,9 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 ## Prism (recording API)
 
+- 2026-10-19 — Filing under defaulted to today and treating “today” as no date let a recording
+  about yesterday land on the wrong day → require an explicit day, including today, before Send,
+  and show a Select the date sheet if the chip is still untouched (ADR 0063).
 - 2026-10-19 — A spoken Log My Day take only fills Format 6 cells the owner actually says, and a
   bullet checklist is too long to read at the microphone → a glanceable tile map stays on screen
   while talking, one card per speakable day-file field, opened by the red button (ADR 0062).

@@ -177,6 +177,12 @@ body[data-tab="settings"] .tabs [data-go="settings"] { color: var(--text); }
   border: 1px solid var(--line); color: var(--muted); position: relative; display: inline-block;
 }
 .chip b { color: var(--text); font-weight: 600; }
+.chip.needs-date {
+  border-color: #ffb54788;
+  color: #ffd28a;
+  box-shadow: 0 0 0 1px #ffb54733;
+}
+.chip.needs-date b { color: #ffd28a; }
 .clickable { cursor: pointer; }
 .overlay-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .thumbs { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
@@ -270,6 +276,40 @@ textarea::placeholder, input::placeholder { color: #5e648a; }
   z-index: 10;
 }
 .toast.err { border-color: #ff6b7a66; }
+
+/* filing date: Send needs an explicit day, including today */
+body[data-date-sheet="open"] { overflow: hidden; }
+.date-scrim {
+  position: fixed; inset: 0; background: #05060ccc; z-index: 21;
+  display: grid; align-items: end;
+}
+.date-scrim[hidden] { display: none; }
+.date-sheet {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 22px 22px 0 0; box-shadow: 0 -24px 60px #000a;
+}
+.date-sheet-head { padding: 2px 20px 12px; }
+.date-sheet-head h2 { margin: 0; font-size: 20px; font-weight: 700; }
+.date-sheet-head p { margin: 6px 0 0; font-size: 14px; color: var(--muted); }
+.date-quick {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  padding: 0 16px 4px;
+}
+.date-quick .btn { margin: 0; justify-content: center; }
+.date-quick .btn.picked {
+  border-color: var(--accent); background: #8b7cff24; color: var(--text);
+}
+.date-other { margin: 10px 16px 16px; }
+.date-sheet-actions {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  padding: 10px 16px calc(14px + var(--safe-bottom));
+  border-top: 1px solid var(--line);
+}
+.date-sheet-actions .btn { margin: 0; justify-content: center; }
+@media (min-width: 600px) {
+  .date-scrim { align-items: center; justify-items: center; padding: 24px; }
+  .date-sheet { width: min(400px, 100%); border-radius: 22px; }
+}
 
 /* talk map: Format 6 day-file fields before and during a Log My Day recording */
 body[data-prompt="open"], body[data-prompt="live"] { overflow: hidden; }

@@ -4,7 +4,7 @@
 // Network first (a new version is picked up at once), the cache only when offline. API calls are
 // never cached.
 
-const CACHE = "lumitrace-flash-v10";
+const CACHE = "lumitrace-flash-v11";
 const SHELL = [
   "./", "index.html", "app.css", "app.js", "manifest.webmanifest",
   "icon-180.png", "icon-192.png", "icon-512.png",

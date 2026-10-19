@@ -48,6 +48,9 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Prism
 
+- **Flash asks for the filing date before Send** (ADR 0063). The chip starts on “pick a day”.
+  Choosing today counts. Send, photo-only Send and Upload audio open a **Select the date**
+  sheet if the day is still unset.
 - **Flash opens a talk map before recording** (ADR 0062). The red button shows glanceable
   tiles for every speakable Format 6 day-file field. **Start talking** starts the microphone;
   the same cards stay on screen while you talk, with Discard, Pause/Resume and Stop icons on

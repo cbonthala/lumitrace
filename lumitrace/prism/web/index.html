@@ -102,15 +102,15 @@
       <div class="rec-idle" id="rec-idle">
         <div class="t">Log My Day</div>
           <div class="s">Tap for a day map, then talk. Pause, listen, and crop before you send.
-          Or add a photo and tap Send with no recording.</div>
+          Pick the day — even if it’s today — then Send. Or add a photo and tap Send with no recording.</div>
       </div>
       <div class="s rec-hint" id="rec-hint" hidden>Keep the screen on. Recording stops if you lock the phone.</div>
       <div class="chips">
         <span class="chip" id="place-chip">📍 <b id="place-text">No location</b></span>
         <label class="chip clickable">🖼 <b id="rec-photo-count">0</b> photos
           <input type="file" id="rec-photos" accept="image/*" multiple class="overlay-input"></label>
-        <label class="chip clickable">📅 Filing under <b class="date-label">today</b>
-          <input type="date" class="overlay-input date-input"></label>
+        <label class="chip clickable date-chip needs-date" id="date-chip">📅 Filing under <b class="date-label">pick a day</b>
+          <input type="date" class="overlay-input date-input" id="card-date"></label>
         <label class="chip clickable">🎵 <b>Upload audio</b>
           <input type="file" id="rec-upload" accept="audio/*,.m4a,.mp3,.wav,.aac,.ogg,.webm,.flac" class="overlay-input"></label>
       </div>
@@ -230,6 +230,25 @@
   </nav>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="date-scrim" id="date-scrim" hidden>
+  <div class="date-sheet" role="alertdialog" aria-modal="true" aria-labelledby="date-title" aria-describedby="date-copy">
+    <div class="prompt-handle" aria-hidden="true"></div>
+    <div class="date-sheet-head">
+      <h2 id="date-title">Select the date</h2>
+      <p id="date-copy">Which day is this for? Tap even if it’s today.</p>
+    </div>
+    <div class="date-quick">
+      <button class="btn" id="date-today" type="button">Today</button>
+      <button class="btn" id="date-yesterday" type="button">Yesterday</button>
+    </div>
+    <label class="field date-other" for="date-picker"><span>Or another day</span>
+      <input type="date" class="date-input" id="date-picker"></label>
+    <div class="date-sheet-actions">
+      <button class="btn" id="date-cancel" type="button">Cancel</button>
+      <button class="btn primary" id="date-confirm" type="button" disabled>Send for this day</button>
+    </div>
+  </div>
+</div>
 <div class="prompt-scrim" id="prompt-scrim" hidden>
   <div class="prompt-sheet" role="dialog" aria-modal="true" aria-labelledby="prompt-title">
     <div class="prompt-handle" aria-hidden="true"></div>
