@@ -356,3 +356,84 @@ def test_format_location() -> None:
     assert format_location(None, 1.0, 2.0) == "1.00000, 2.00000"
     assert format_location("  Austin \n TX ", None, None) == "Austin TX"
     assert format_location("", None, 2.0) is None
+
+
+OCT17 = dt.date(2026, 10, 17)
+OPEN_MORNING = "2026-10-17T10:00:00-05:00"
+OPEN_AFTERNOON = "2026-10-17T14:00:00-05:00"
+
+
+def test_deferred_recording_can_be_discarded(
+    app: FastAPI, client: TestClient, api_storage: LocalStorage, nudges: NudgeRecorder
+) -> None:
+    assert (
+        post_recording(
+            client, b"Keep this take with Maya.", capture_id="keep-me", captured_at=OPEN_MORNING
+        ).status_code
+        == 202
+    )
+    drop = post_recording(
+        client,
+        b"Remove this take with Leo.",
+        capture_id="drop-me",
+        captured_at=OPEN_AFTERNOON,
+        photos=[image_bytes()],
+    )
+    assert drop.status_code == 202, drop.text
+    wait_idle(app)
+    status = client.get("/captures/drop-me", headers=AUTH).json()
+    assert status["status"] == "done" and status["generation"] == "deferred"
+    folder = "2026/10/2026-10-17"
+    audio = f"{folder}/{status['audio']}"
+    photos = [f"{folder}/{name}" for name in status["photos"]]
+    assert api_storage.exists(audio)
+    assert all(api_storage.exists(path) for path in photos)
+
+    resp = client.delete("/captures/drop-me", headers=AUTH)
+    assert resp.status_code == 204, resp.text
+    assert client.get("/captures/drop-me", headers=AUTH).status_code == 404
+    assert not api_storage.exists(audio)
+    assert all(not api_storage.exists(path) for path in photos)
+    assert not api_storage.exists(status_path("drop-me"))
+    saved = parse(api_storage.read_text(day_file_path(OCT17)))
+    assert [capture.id for capture in saved.captures] == ["keep-me"]
+    listed = {row["capture_id"] for row in client.get("/captures", headers=AUTH).json()}
+    assert "drop-me" not in listed and "keep-me" in listed
+    nudged = [path for call in nudges.calls for path in call]
+    assert audio in nudged and day_file_path(OCT17) in nudged
+
+
+def test_discard_last_unused_capture_removes_the_day_file(
+    app: FastAPI, client: TestClient, api_storage: LocalStorage
+) -> None:
+    assert (
+        post_recording(
+            client, b"Only take today.", capture_id="only-me", captured_at=OPEN_MORNING
+        ).status_code
+        == 202
+    )
+    wait_idle(app)
+    assert client.delete("/captures/only-me", headers=AUTH).status_code == 204
+    assert not api_storage.exists(day_file_path(OCT17))
+    assert not api_storage.exists(generated_snapshot_path(OCT17))
+    assert client.get("/captures/only-me", headers=AUTH).status_code == 404
+
+
+def test_discard_refused_once_in_the_journal(app: FastAPI, client: TestClient) -> None:
+    assert (
+        post_recording(
+            client, b"Tea with Maya.", capture_id="used", captured_at=OPEN_MORNING
+        ).status_code
+        == 202
+    )
+    wait_idle(app)
+    written = client.post("/journal", json={"date": "2026-10-17"}, headers=AUTH)
+    assert written.status_code == 200 and written.json()["status"] == "full"
+    resp = client.delete("/captures/used", headers=AUTH)
+    assert resp.status_code == 409
+    assert "journal" in resp.json()["detail"]
+    assert client.get("/captures/used", headers=AUTH).json()["status"] == "done"
+
+
+def test_discard_needs_a_login(client: TestClient) -> None:
+    assert client.delete("/captures/used").status_code == 401

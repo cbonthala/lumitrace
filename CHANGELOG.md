@@ -48,6 +48,9 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Prism
 
+- **Flash can discard a take the journal has not used** (ADR 0064). History shows a trash
+  control on **Not in journal** (and **Journal failed**) rows. Confirming deletes the audio,
+  photos, transcript and status; a take already in the journal is refused.
 - **Flash asks for the filing date before Send** (ADR 0063). The chip starts on “pick a day”.
   Choosing today counts. Send, photo-only Send and Upload audio open a **Select the date**
   sheet if the day is still unset.

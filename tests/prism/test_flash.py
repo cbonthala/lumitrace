@@ -399,6 +399,16 @@ def test_recording_is_reviewed_before_it_is_sent(client: TestClient) -> None:
     assert "Stop and send" not in script
 
 
+def test_history_can_discard_a_capture_not_in_the_journal(client: TestClient) -> None:
+    script = client.get("/flash/app.js").text
+    assert "function canDiscardCapture" in script
+    assert "function discardCapture" in script
+    assert 'method: "DELETE"' in script
+    assert "Delete capture" in script
+    assert "not in the journal yet" in script
+    assert "IN_JOURNAL.has(capture.generation)" in script
+
+
 def test_send_requires_an_explicit_filing_date(client: TestClient) -> None:
     page = client.get("/flash/").text
     script = client.get("/flash/app.js").text

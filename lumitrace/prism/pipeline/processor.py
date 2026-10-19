@@ -54,6 +54,7 @@ from lumitrace.frames.dayfile import (
     merge_content_generation_three_way,
     next_photo_names,
     parse,
+    remove_capture,
     render,
     system_path,
     unique_file_name,
@@ -192,6 +193,15 @@ class CaptureProcessor:
         """
         with self._day_lock:
             return self._generate_closed(day_date, nudge=nudge, replace_generated=replace_generated)
+
+    def drop_capture(self, day_date: dt.date, capture_id: str) -> list[str]:
+        """Remove one capture from the day file and delete its audio and photos.
+
+        The caller must have checked that the journal has not used this capture. Returns the
+        storage paths that changed (for a Spectrum nudge).
+        """
+        with self._day_lock:
+            return self._drop_capture_locked(day_date, capture_id)
 
     def generation_mode(self, day_date: dt.date, *, replace_generated: bool = False) -> str:
         """Return ``full``, ``update``, ``unchanged`` or ``skipped`` without calling the model."""
@@ -453,6 +463,47 @@ class CaptureProcessor:
             self._nudge(self.settings, [day_file_path(day_date)])
         except Exception as exc:
             log.warning("nudge after journal %s failed: %s", day_date, safe_error(exc))
+
+    def _drop_capture_locked(self, day_date: dt.date, capture_id: str) -> list[str]:
+        day = self._read_day(day_date)
+        folder = day_dir(day_date)
+        gone = None if day is None else next((c for c in day.captures if c.id == capture_id), None)
+        paths: list[str] = []
+        if gone is not None:
+            names = [gone.audio, *gone.photos] if gone.audio else list(gone.photos)
+            paths = [f"{folder}/{name}" for name in names]
+            for path in paths:
+                self.storage.delete(path, missing_ok=True)
+        day_path = day_file_path(day_date)
+        snapshot_path = generated_snapshot_path(day_date)
+        if day is not None and gone is not None:
+            updated = remove_capture(day, capture_id)
+            if self._keep_day(updated):
+                self._write_day(updated)
+                if not (updated.notes.strip() or any(c.text.strip() for c in updated.captures)):
+                    self._clear_due(day_date)
+                paths.append(day_path)
+            else:
+                self.storage.delete(day_path, missing_ok=True)
+                self.storage.delete(snapshot_path, missing_ok=True)
+                self._clear_due(day_date)
+                paths.extend([day_path, snapshot_path])
+        try:
+            if paths:
+                self._nudge(self.settings, paths)
+        except Exception as exc:
+            log.warning("nudge after discard %s failed: %s", capture_id, safe_error(exc))
+        return paths
+
+    @staticmethod
+    def _keep_day(day: DayFile) -> bool:
+        if day.captures or day.notes.strip() or day.journal.strip():
+            return True
+        if day.meta.generated_at is not None:
+            return True
+        if day.content is not None and day.content != DayContent():
+            return True
+        return not day.facts.is_empty()
 
     @staticmethod
     def _note_baseline(day: DayFile) -> None:

@@ -141,6 +141,11 @@ def generation_for_display(status: CaptureStatus, day: DayFile | None) -> str | 
     return stored or "deferred"
 
 
+def in_journal(status: CaptureStatus, day: DayFile | None) -> bool:
+    """True when Generate or the 4:05 a.m. run has already used this capture's source."""
+    return generation_for_display(status, day) in _IN_JOURNAL
+
+
 def _read_day(storage: Storage, day: dt.date) -> DayFile | None:
     path = day_file_path(day)
     if not storage.exists(path):

@@ -227,6 +227,8 @@ textarea::placeholder, input::placeholder { color: #5e648a; }
 .day-head b { font-size: 13px; font-weight: 650; }
 .day-head .btn { flex: none; }
 .item { display: flex; gap: 8px; align-items: center; padding: 5px 0; border-top: 1px solid var(--line); }
+.item .iconbtn { width: 36px; height: 36px; flex: none; margin-left: 0; }
+.item .iconbtn svg { width: 16px; height: 16px; }
 .day-group .item:first-of-type { border-top: 0; }
 .ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--panel2); font-size: 14px; flex: none; }
 .item .a .when { color: var(--muted); font-weight: 550; font-variant-numeric: tabular-nums; margin-right: 6px; }

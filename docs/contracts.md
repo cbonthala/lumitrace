@@ -151,6 +151,7 @@ Functions:
   `parse_facts_section(markdown) -> (DayFacts, stray)` (the "At a glance" region; Spectrum makes
   its facts passages from the `include_empty=False` text)
 * `merge_capture(day | None, capture, day_date) -> DayFile` (idempotent by `capture.id`)
+* `remove_capture(day, capture_id) -> DayFile` (no-op if missing; never touches journal or notes)
 * `content_for_day(day) -> DayContent` (copy Format 6 content or conservatively project a legacy
   day)
 * `apply_content_generation(day, *, content, title=None, prompt_version=None, models_used=None,

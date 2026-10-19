@@ -6,7 +6,8 @@ Endpoints (details and examples: ``docs/prism.md``):
   ``lon``, ``place``, ``captured_at``, ``date``, ``capture_id``.
 * ``POST /notes``: multipart, urlencoded or JSON; ``text`` and/or an ``audio`` clip, same
   optional fields.
-* ``GET /captures/{id}``, ``POST /captures/{id}/retry``: status of a capture / retry a failed one.
+* ``GET /captures/{id}``, ``POST /captures/{id}/retry``, ``DELETE /captures/{id}``: status of a
+  capture, retry a failed one, or discard one the journal has not used.
 * ``GET /health``: unauthenticated liveness check.
 * The Flash web app and its sign-in, recent-captures and summary endpoints:
   :mod:`lumitrace.prism.flash`.
@@ -31,7 +32,7 @@ from typing import Any
 
 import anyio
 from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from starlette.datastructures import UploadFile
 
@@ -40,7 +41,7 @@ from lumitrace.config import Settings, get_settings
 from lumitrace.frames.dayfile import Capture, CaptureKind
 from lumitrace.frames.storage import Storage, get_storage
 from lumitrace.prism.auth import login_problem, require_auth, token_problem
-from lumitrace.prism.flash import register_flash
+from lumitrace.prism.flash import in_journal, register_flash
 from lumitrace.prism.inbox import CAPTURE_ID_RE, CaptureStatus, Inbox, inbox_dir, now_utc
 from lumitrace.prism.journal_schedule import JournalScheduler
 from lumitrace.prism.pipeline.processor import CaptureProcessor, CaptureRequest, UploadedFile
@@ -438,6 +439,23 @@ def create_app(
             built.inbox.put_status(found)
         built.worker.submit(capture_id)
         return found
+
+    @app.delete("/captures/{capture_id}", dependencies=auth, status_code=204)
+    def delete_capture(capture_id: str) -> Response:
+        built = services()
+        with built.inbox.id_lock(capture_id):
+            found = _status_or_404(built, capture_id)
+            if found.status != "done":
+                raise HTTPException(status.HTTP_409_CONFLICT, f"capture is {found.status}")
+            day = built.processor._read_day(found.entry_date)
+            if in_journal(found, day):
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT, "this capture is already in the journal"
+                )
+            built.processor.drop_capture(found.entry_date, found.capture_id)
+            built.inbox.remove(capture_id)
+            built.inbox.delete_status(capture_id)
+        return Response(status_code=204)
 
     register_flash(app, settings, services, auth)
     return app

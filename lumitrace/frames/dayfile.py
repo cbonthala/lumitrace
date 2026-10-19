@@ -18,7 +18,8 @@ Full specification with an example: ``docs/frames-format.md``. Summary of the la
 
     ## Transcript
 
-    <!-- lumitrace:transcript:start ... -->      one block per Capture, oldest first; append-only
+    <!-- lumitrace:transcript:start ... -->      one block per Capture, oldest first;
+                                                 append-only except discarding an unused capture
     <!-- lumitrace:capture {json} -->
     ### 21:30 · Log My Day
     ![[2026-10-10-2130.m4a]]
@@ -1679,6 +1680,29 @@ def merge_capture(day: DayFile | None, capture: Capture, day_date: dt.date) -> D
     for photo in capture.photos:
         if photo not in result.meta.photos:
             result.meta.photos.append(photo)
+    return result
+
+
+def remove_capture(day: DayFile, capture_id: str) -> DayFile:
+    """Remove one capture from a day. Returns a new DayFile.
+
+    * Missing id is a no-op.
+    * Never touches title, journal, notes, facts, content or ``generated_hash``.
+    * Drops that capture's audio and photos from front matter unless another capture still
+      lists them.
+    """
+    result = day.model_copy(deep=True)
+    gone = next((capture for capture in result.captures if capture.id == capture_id), None)
+    if gone is None:
+        return result
+    result.captures = [capture for capture in result.captures if capture.id != capture_id]
+    kept_audio = {capture.audio for capture in result.captures if capture.audio}
+    kept_photos = {photo for capture in result.captures for photo in capture.photos}
+    if gone.audio and gone.audio not in kept_audio:
+        result.meta.audio = [name for name in result.meta.audio if name != gone.audio]
+    result.meta.photos = [
+        name for name in result.meta.photos if name not in gone.photos or name in kept_photos
+    ]
     return result
 
 

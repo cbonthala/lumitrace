@@ -1111,7 +1111,7 @@ function clockTime(iso) {
 
 let generatingDay = "";
 
-function captureRow({ kind, capturedAt, photos, local, chip, onChip }) {
+function captureRow({ kind, capturedAt, photos, local, chip, onChip, onDiscard }) {
   const row = el("div", "item");
   const [icon, title] = describe(kind, local, photos);
   row.append(el("div", "ico", icon));
@@ -1125,6 +1125,14 @@ function captureRow({ kind, capturedAt, photos, local, chip, onChip }) {
   if (local?.preview) bits.push(`“${local.preview}”`);
   if (bits.length) meta.append(el("div", "b", bits.join(" · ")));
   row.append(meta);
+  if (onDiscard) {
+    const trash = el("button", "btn iconbtn danger");
+    trash.type = "button";
+    trash.setAttribute("aria-label", "Delete capture");
+    trash.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M8 7l1 12h6l1-12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    trash.addEventListener("click", onDiscard);
+    row.append(trash);
+  }
   const status = el(onChip ? "button" : "span", `st ${chip[0]}`, chip[1]);
   if (onChip) {
     status.type = "button";
@@ -1168,6 +1176,27 @@ async function retryCapture(id) {
   await refreshCaptures();
 }
 
+function canDiscardCapture(capture) {
+  return capture.status === "done" && !IN_JOURNAL.has(capture.generation);
+}
+
+async function discardCapture(id, day, kind) {
+  const label = kind === "recording" ? "recording" : "note";
+  if (!confirm(`Delete this ${label} from ${groupLabel(day)}? It is not in the journal yet. The file and transcript will be removed.`)) {
+    return;
+  }
+  try {
+    await api(`/captures/${encodeURIComponent(id)}`, { method: "DELETE" });
+    const map = sentMap();
+    delete map[id];
+    localStorage.setItem(SENT_KEY, JSON.stringify(map));
+    toast("Removed.");
+  } catch (err) {
+    toast(err instanceof HttpError ? err.message : "Can't reach the server.", true);
+  }
+  await refreshAll();
+}
+
 async function renderCaptures() {
   const box = $("captures");
   const local = sentMap();
@@ -1200,6 +1229,9 @@ async function renderCaptures() {
         kind: c.kind, capturedAt: c.captured_at, photos: c.photos.length || local[c.capture_id]?.photos || 0,
         local: local[c.capture_id], chip: statusChip(c),
         onChip: c.status === "failed" ? () => retryCapture(c.capture_id) : null,
+        onDiscard: canDiscardCapture(c)
+          ? () => discardCapture(c.capture_id, filedDay(c.entry_date, c.captured_at), c.kind)
+          : null,
       }),
     });
   }

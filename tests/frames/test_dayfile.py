@@ -970,6 +970,27 @@ def test_merge_capture_wrong_day_raises(sample_day_markdown: str) -> None:
         )
 
 
+def test_remove_capture_drops_files_and_keeps_the_journal(sample_day_markdown: str) -> None:
+    day = D.parse(sample_day_markdown)
+    extra = capture(
+        "extra",
+        at(23),
+        kind="recording",
+        text="one more",
+        audio="2026-10-10-2300.m4a",
+        photos=["photo-03.jpg"],
+    )
+    with_extra = D.merge_capture(day, extra, DAY)
+    gone = D.remove_capture(with_extra, "extra")
+    assert [c.id for c in gone.captures] == [c.id for c in day.captures]
+    assert "2026-10-10-2300.m4a" not in gone.meta.audio
+    assert "photo-03.jpg" not in gone.meta.photos
+    assert (gone.title, gone.journal, gone.notes) == (day.title, day.journal, day.notes)
+    assert gone.meta.generated_hash == with_extra.meta.generated_hash
+    assert D.remove_capture(gone, "missing") == gone
+    assert D.remove_capture(with_extra, extra.id).captures == day.captures
+
+
 # --- generation -----------------------------------------------------------------------------
 
 

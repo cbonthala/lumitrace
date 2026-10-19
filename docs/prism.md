@@ -104,6 +104,13 @@ response.
 Re-queues a `failed` capture whose upload is still in the inbox. `409` if it is not failed,
 `410` if the upload is gone (send it again). Returns the status.
 
+### `DELETE /captures/{capture_id}`
+
+Removes a **done** capture the journal has not used yet (ADR 0064). Deletes its audio and
+photos, its transcript block, its status record, and leftover inbox files. `204` on success.
+`404` if unknown. `409` if it is still being saved, or if Generate / 4:05 a.m. has already
+used it (`full`, `update` or `unchanged` in History).
+
 ### `GET /health`
 
 `{"status": "ok", "service": "api", "version": "0.1.0"}`, no token.
@@ -193,7 +200,8 @@ regenerated), creates a status for manifests that have none, cleans up `done` le
 leaves `failed` ones alone. On shutdown the worker finishes the capture in progress.
 
 The status files stay after processing (small, no journal content) so `GET /captures/{id}` and
-retries keep working. The inbox folder is deleted once a capture is `done`.
+retries keep working. `DELETE /captures/{id}` removes an unused capture and its status file.
+The inbox folder is deleted once a capture is `done`.
 
 ## Pipeline
 

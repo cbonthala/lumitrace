@@ -168,6 +168,7 @@ File: `tests/prism/test_flash.py`
 - Checks that the Capture page has an "Upload audio" button for audio files, and that an uploaded voice memo (an `.mp3` here) is sent like a recording: filed under the day it was recorded and processed into that day's file. <sub>`test_uploaded_voice_memo_is_sent_like_a_recording`</sub>
 - Checks that the header has a Home button that opens Capture, and that History groups captures by day with a Generate button on each day. <sub>`test_home_button_and_history_grouped_by_day`</sub>
 - Checks that a capture's status chip follows the journal: a recording in progress says Transcribing…, a saved capture whose journal is still waiting says Not in journal, and In journal is used only once the words are in the journal. <sub>`test_capture_status_chip_matches_the_journal`</sub>
+- Checks that History can discard a capture that is not in the journal yet, by calling DELETE, and does not offer that for a capture the journal has used. <sub>`test_history_can_discard_a_capture_not_in_the_journal`</sub>
 - Checks that the history list says a saved capture is not in the journal yet, says it is once Generate has written the day, and says a later capture is still waiting. <sub>`test_capture_list_follows_the_journal`</sub>
 - Checks that Generate needs a login, writes one Format 6 timeline and family trackers from every saved recording, returns unchanged without another model call when clicked again, refuses a future date, skips a day with no source, and never returns journal text. <sub>`test_generate_journal_writes_the_day_from_saved_recordings`</sub>
 - Checks that the record talk map has a tile for every speakable Format 6 day-file field, that tags and pregnant-person are omitted, that tapping the red button opens that sheet before the microphone starts, that starting to talk does not close the sheet, and that Skip is gone while pause, stop and discard icons are on the sheet. <sub>`test_record_prompt_covers_every_day_file_field`</sub>
@@ -229,6 +230,10 @@ File: `tests/prism/test_capture_api.py`
 
 - Checks that if speech-to-text fails once (service unreachable), the capture is retried automatically and finishes, after two attempts and with one entry in the day. <sub>`test_failed_capture_is_retried_automatically`</sub>
 - Checks that when every automatic retry fails, the capture is marked "failed" with the error and nothing is written to the day; a manual retry is accepted (and fails again while the service is down); re-sending it after the service is back works and is not treated as a duplicate; retrying a finished capture is refused (409); and the day has one entry. <sub>`test_exhausted_capture_can_be_resent_or_retried`</sub>
+- Checks that a recording saved while the day is still open (not in the journal yet) can be deleted: the audio and photos go, the transcript leaves the day file, the status is gone, History no longer lists it, and the other recording that day stays. <sub>`test_deferred_recording_can_be_discarded`</sub>
+- Checks that deleting the only unused capture of a day removes the day file and its generated snapshot. <sub>`test_discard_last_unused_capture_removes_the_day_file`</sub>
+- Checks that deleting a capture after Generate has written the journal is refused (409) and the capture stays. <sub>`test_discard_refused_once_in_the_journal`</sub>
+- Checks that deleting a capture without a login is refused (401). <sub>`test_discard_needs_a_login`</sub>
 - Checks that after a crash or restart, captures left in the inbox (half processed, still queued, or saved without a status) are processed on start-up, while an incomplete upload with no list of its files is left alone. <sub>`test_inbox_is_resumed_on_startup`</sub>
 
 ### How locations are written
@@ -692,6 +697,7 @@ File: `tests/frames/test_dayfile.py`
 - Checks that entries are kept in time order, adding the same entry twice changes nothing, and the earlier version of the day is left untouched. <sub>`test_merge_capture_sorts_is_idempotent_and_pure`</sub>
 - Checks that adding an entry never changes the title, journal, notes or facts, and the day stays "unedited". <sub>`test_merge_capture_never_touches_generated_or_notes`</sub>
 - Checks that adding an entry to the wrong day is refused. <sub>`test_merge_capture_wrong_day_raises`</sub>
+- Checks that removing a capture drops its audio and photos from the front matter, leaves the journal and notes alone, ignores an unknown id, and restores the earlier capture list. <sub>`test_remove_capture_drops_files_and_keeps_the_journal`</sub>
 
 ### Never overwriting your edits
 

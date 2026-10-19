@@ -248,7 +248,8 @@ We went to the park, and Leo played on the slide for a long time.
 * **Notes** (`My notes`) are never modified by the system.
   They are direct generation input: the first write and later safe updates use them alongside
   the recordings.
-* **Transcript** blocks are append-only; edits to their text are kept.
+* **Transcript** blocks are append-only except discarding a capture the journal has not used
+  (`remove_capture`, ADR 0064). Edits to remaining transcript text are kept.
 * **Generated content** carries `generated_hash`. For Format 6 it hashes the title and complete
   typed content; for legacy files it hashes facts, title and journal.
   `DayFile.is_user_edited()` compares the stored hash with the current value.

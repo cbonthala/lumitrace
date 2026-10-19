@@ -153,3 +153,8 @@ class Inbox:
         )
         with self._lock:
             self._cache[status.capture_id] = status.model_copy(deep=True)
+
+    def delete_status(self, capture_id: str) -> None:
+        self.storage.delete(status_path(capture_id), missing_ok=True)
+        with self._lock:
+            self._cache.pop(capture_id, None)

@@ -80,3 +80,4 @@ Template:
 | [0061](0061-format-6-family-day-files.md) | Format 6 uses one structured timeline and family-tracker content region |
 | [0062](0062-flash-talk-map-before-recording.md) | Flash shows a Format 6 talk map before the microphone starts |
 | [0063](0063-flash-requires-filing-date.md) | Flash requires an explicit filing date, including today, before Send |
+| [0064](0064-discard-unused-captures.md) | Flash can discard a capture the journal has not used |
