@@ -61,6 +61,13 @@ Entry format: `- YYYY-MM-DD — observation → action (link to PR/ADR)`.
 
 ## Prism (recording API)
 
+- 2026-10-19 — LiteLLM `num_retries` imports tenacity at call time; the image did not install it,
+  so Gemini 3.8 Flash failed and a blank 3.6 Flash fill wrote an empty Format 6 day → add
+  `tenacity` as a direct dependency and reject blank fill-day replies.
+- 2026-10-19 — `--replace-generated` on a Format 5 day used `update_day` because the facts JSON
+  had no journal, so the projection looked owner-edited and the story stayed in Time not stated
+  → fill Format 6 from transcripts for a format upgrade or `--replace-generated`, then three-way
+  merge owner edits (ADR 0061).
 - 2026-10-19 — Format 5 generated-facts JSON has facts and journal but no `content`; constructing
   an empty `DayFile()` as the merge base raises `ValidationError` on every production day →
   project the previous model page with `from_legacy_day` (ADR 0061).

@@ -65,6 +65,8 @@ def parse_day_draft(raw: Any, members: Sequence[str]) -> DayDraft:
         content = keep_content_family(
             from_legacy_day(facts.model_dump(mode="json"), journal), members
         )
+    if content.is_blank():
+        raise ValueError("day reply has no timeline or tracker facts")
     facts = DayFacts.model_validate(to_legacy_facts(content))
     return DayDraft(
         headline=raw.get("headline") or "",

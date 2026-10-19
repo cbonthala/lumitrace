@@ -35,6 +35,7 @@ from lumitrace.frames.daycontent import (
     to_legacy_facts,
 )
 from lumitrace.frames.dayfile import (
+    FORMAT_VERSION,
     Capture,
     CaptureKind,
     DayFacts,
@@ -494,8 +495,9 @@ class CaptureProcessor:
         base_content = self._base_content(facts_state, snapshot)
         source_changed = day.meta.generated_source_hash != source_hash
         content_clean = self._content_is_model_owned(day, base_content)
-        rewrite_content = mode == "full" or (
-            content_clean and (source_changed or replace_generated)
+        legacy = day.content is None or day.meta.lumitrace_format < FORMAT_VERSION
+        rewrite_content = (
+            mode == "full" or replace_generated or legacy or (content_clean and source_changed)
         )
         generated = self._run_ai(
             mode,
@@ -543,6 +545,8 @@ class CaptureProcessor:
 
     @staticmethod
     def _content_is_model_owned(day: DayFile, model_content: DayContent | None) -> bool:
+        if day.content is None or day.meta.lumitrace_format < FORMAT_VERSION:
+            return not day.is_user_edited()
         if model_content is not None:
             return content_for_day(day) == model_content
         return not day.is_user_edited()

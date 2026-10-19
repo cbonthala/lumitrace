@@ -7,6 +7,9 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- **Regenerate fills Format 6 from the transcripts.** `--replace-generated` and a first upgrade
+  from Formats 1–5 call `fill_day`, then three-way merge so owner wording stays. A blank fill
+  reply is rejected. LiteLLM retries need `tenacity` in the image.
 - **Regenerate converts Format 5 generated-facts JSON** into Format 6 without crashing: the
   previous model base is projected from stored facts and journal instead of constructing an
   empty `DayFile()`.

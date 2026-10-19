@@ -343,6 +343,7 @@ File: `tests/prism/test_prompts_llm.py`
 - Checks that the AI client passes the timeout, retry and "reply in JSON" settings to the provider, switches to the backup model when the main one fails, records each attempt, tries a model only once when it is also the backup, and gives a clear error naming both models when all fail. <sub>`test_llm_client_passes_config_and_falls_back`</sub>
 - Checks that the fill-day and update-day prompts, and the day template, tell the model to cover each recording through its last sentence (including the final third), to keep first-person facts with the author, to record a stated absence, and not to invent durations. <sub>`test_fill_day_prompt_covers_the_ending_and_keeps_an_i_item_with_the_author`</sub>
 - Checks that a legacy fill-day reply with per-person meals becomes Format 6 trackers in configured order and spelling, that unknown people are dropped, and that a reply with no configured family members keeps no invented family rows. <sub>`test_legacy_draft_becomes_canonical_per_person_meals`</sub>
+- Checks that a fill-day reply with an empty timeline and empty trackers is rejected instead of writing a blank day. <sub>`test_fill_day_rejects_a_blank_timeline`</sub>
 - Checks that a long transcript is sent to the model in full, through its last sentence, and that the log records the captures length, the transcript length, that nothing was cut, and the model's maximum output tokens. <sub>`test_fill_day_sends_the_whole_transcript`</sub>
 - Checks that a journal call asks for the model's maximum output tokens. <sub>`test_journal_call_asks_for_the_model_max_output_tokens`</sub>
 - Checks that a reply cut off by a lower output ceiling is requested again at the model's maximum, and that the first attempt is recorded as truncated. <sub>`test_output_token_limit_is_raised_when_the_reply_is_cut_off`</sub>
@@ -617,6 +618,7 @@ File: `tests/frames/test_daycontent.py`
 - Checks that timeline patches use exact case-sensitive bullet matches, apply replacements, deletions and additions, avoid an exact duplicate, and can move a bullet between named sections without changing the original object. <sub>`test_timeline_patch_helpers_use_exact_matching_and_can_move`</sub>
 - Checks that legacy facts supplied as a mapping are conservatively converted into a Format 6 highlight, Time not stated details, places, family meals, health, feelings and growth fields. <sub>`test_legacy_conversion_uses_only_mapping_data`</sub>
 - Checks that Format 6 content projects back into the older facts shape: tagged places and people, skipped meals, exercise minutes, feelings, memories and activities. <sub>`test_legacy_projection_keeps_compatible_tracker_facts`</sub>
+- Checks that empty family rows do not count as filled content, and that a morning bullet does. <sub>`test_blank_content_ignores_empty_family_rows`</sub>
 
 ### Where files go
 
@@ -853,7 +855,7 @@ File: `tests/test_entrypoints.py`
 File: `tests/prism/test_regenerate.py`
 
 - Checks that bulk regenerate rewrites an older day's model-owned journal and facts, keeps the title, notes and transcripts, and a second run does nothing. <sub>`test_regenerate_updates_an_existing_format_2_day_like_generate`</sub>
-- Checks that `--replace-generated` rewrites a clean journal even when the recordings are unchanged, and still keeps a journal you edited. <sub>`test_replace_generated_rewrites_a_clean_journal_and_keeps_an_edit`</sub>
+- Checks that `--replace-generated` rewrites a clean journal even when the recordings are unchanged, and still keeps a journal you edited by filling Format 6 and merging. <sub>`test_replace_generated_rewrites_a_clean_journal_and_keeps_an_edit`</sub>
 - Checks that `--replace-generated` converts a Format 5 generated-facts file that has no `content` field into Format 6 instead of failing validation. <sub>`test_replace_generated_converts_format_5_facts_without_content`</sub>
-- Checks that bulk regenerate updates a day you edited instead of skipping it: your timeline words stay, and a new Evening bullet can be added. <sub>`test_regenerate_preserves_legacy_owner_timeline_edits`</sub>
+- Checks that bulk regenerate of an edited Format 5 day fills Format 6 from the transcripts and still keeps your timeline words. <sub>`test_regenerate_preserves_legacy_owner_timeline_edits`</sub>
 - Checks that a dry run lists `would update` without writing anything or calling the AI, that a day without any transcript text is skipped, and that a date range limits which days are processed. <sub>`test_regenerate_dry_run_range_and_days_without_text`</sub>

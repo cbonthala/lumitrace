@@ -347,6 +347,18 @@ def test_legacy_draft_becomes_canonical_per_person_meals() -> None:
     assert kept.content.family == []
 
 
+def test_fill_day_rejects_a_blank_timeline() -> None:
+    with pytest.raises(ValueError, match="no timeline or tracker facts"):
+        parse_day_draft(
+            {
+                "headline": "",
+                "timeline": {},
+                "trackers": {"family": [{"name": "Sam"}], "pregnancy_baby": {}, "tags": []},
+            },
+            ["Sam"],
+        )
+
+
 def test_fill_day_sends_the_whole_transcript(
     api_settings: Settings, caplog: pytest.LogCaptureFixture
 ) -> None:

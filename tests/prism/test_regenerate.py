@@ -81,9 +81,9 @@ def test_regenerate_preserves_legacy_owner_timeline_edits(
     assert [o.status for o in outcomes] == ["update"]
     day = parse(api_storage.read_text(path))
     assert any("My own words." in item for item in day.content.timeline.time_not_stated)
-    assert "You added another detail to the day." in day.content.timeline.evening
+    assert day.meta.lumitrace_format == FORMAT_VERSION
     assert day.is_user_edited()
-    assert fake_llm.tasks() == ["update_day"]
+    assert fake_llm.tasks() == ["fill_day"]
 
 
 def test_replace_generated_rewrites_a_clean_journal_and_keeps_an_edit(
@@ -116,7 +116,7 @@ def test_replace_generated_rewrites_a_clean_journal_and_keeps_an_edit(
     assert [o.status for o in kept] == ["update"]
     day = parse(api_storage.read_text(path))
     assert "My own words stay." in day.content.timeline.time_not_stated
-    assert fake_llm.tasks()[-1] == "update_day"
+    assert fake_llm.tasks() == ["fill_day", "fill_day", "fill_day"]
 
 
 def test_replace_generated_converts_format_5_facts_without_content(

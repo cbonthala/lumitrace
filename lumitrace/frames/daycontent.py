@@ -269,6 +269,35 @@ class DayContent(_ContentModel):
     def _normalise_tags(cls, value: list[str]) -> list[str]:
         return [tag.removeprefix("#") for tag in value if tag.removeprefix("#")]
 
+    def is_blank(self) -> bool:
+        """True when the model returned no timeline, context, trackers or tags."""
+        timeline = self.timeline
+        context = timeline.context
+        if (
+            timeline.highlight
+            or timeline.remember
+            or timeline.morning
+            or timeline.afternoon
+            or timeline.evening
+            or timeline.night
+            or timeline.time_not_stated
+            or context.weather
+            or context.places_visited
+            or context.people_met
+            or context.special_occasions
+            or context.media
+            or self.tags
+        ):
+            return False
+        if self.pregnancy_baby.model_dump(exclude_defaults=True):
+            return False
+        for member in self.family:
+            dumped = member.model_dump(exclude_defaults=True)
+            dumped.pop("name", None)
+            if dumped:
+                return False
+        return True
+
     @classmethod
     def from_legacy(cls, data: dict[str, Any]) -> DayContent:
         return from_legacy_facts(data)

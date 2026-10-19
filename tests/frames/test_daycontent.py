@@ -428,3 +428,10 @@ def test_legacy_projection_keeps_compatible_tracker_facts() -> None:
     assert legacy["family"][0]["health"] == ["walk (20 min)"]
     assert legacy["family"][0]["feelings"] == ["happy"]
     assert legacy["activities"] == [{"kind": "school pickup (Sam)", "minutes": None}]
+
+
+def test_blank_content_ignores_empty_family_rows() -> None:
+    blank = C.DayContent(family=[C.FamilyTracker(name="Sam")])
+    assert blank.is_blank()
+    filled = C.DayContent(timeline=C.Timeline(morning=["Woke up"]))
+    assert not filled.is_blank()
