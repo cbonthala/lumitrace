@@ -9,6 +9,7 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 - **Lumitrace is MIT-licensed.** `LICENSE` is in the repo, and the root README explains the
   modules, speech and model choices, and the local, Docker, and Lightsail deployment options.
+  The README also shows a fictional English recording becoming a Format 6 Frame.
 - **Regenerate fills Format 6 from the transcripts.** `--replace-generated` and a first upgrade
   from Formats 1–5 call `fill_day`, then three-way merge so owner wording stays. A blank fill
   reply is rejected. LiteLLM retries need `tenacity` in the image.
@@ -23,8 +24,6 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
   schema 4 adds canonical content passages and `content_facts`, and the Lens returns complete
   content with new timeline, trackers, pregnancy, tags and all-content fact views while keeping
   legacy queries.
-- **GitHub Actions CI** runs `uv sync --frozen`, `uv run pytest` and `uv run ruff check .` on
-  push and pull request.
 - **Day file format 5 restores structured facts** (ADR 0059). At a glance again writes Highlight,
   Food, Places, People, Health, Feelings, Memories, Weather and Things we did. Format 4 still
   parses and its next Generate repairs the missing facts. English translations remain absent.

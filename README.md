@@ -40,6 +40,102 @@ package, one Docker image, three commands: `lumitrace-prism`, `lumitrace-spectru
 
 Day file layout: `docs/frames-format.md`. How the programs share contracts: `docs/architecture.md`.
 
+## From a recording to a Frame
+
+Speech-to-text keeps the words as spoken. The model then fills one Format 6 day file. Names
+below are the fictional household in `docs/templates/family.example.md`. A real file also has
+Health, Pregnancy, Daily routine, Interests, and Growth tables; a cell the recording never
+mentioned is `—`.
+
+The Saturday evening recording, after transcription:
+
+```text
+We walked the river trail this morning. I had oatmeal with blueberries before we left.
+Maya and I got fish tacos from the truck at lunch, and we ran into our neighbor Ravi.
+Leo had pasta for dinner, then wiggled a loose tooth and said, "Look, it moved!"
+He was so proud. It was warm and clear all day.
+```
+
+The Frame Prism writes, `2026/10/2026-10-10/2026-10-10.md`, with the audio kept beside it:
+
+```markdown
+---
+date: 2026-10-10
+audio:
+- 2026-10-10-2130.m4a
+prompt_version: fill_day
+models_used:
+  stt: openai/gpt-4o-transcribe
+  fill_day: gemini/gemini-3.8-flash
+generated_at: '2026-10-11T04:05:00-05:00'
+lumitrace_format: 6
+---
+
+# Saturday, October 10, 2026 · First loose tooth
+
+## Day timeline
+
+### Highlight
+
+- Leo found his first loose tooth and was proud of it
+
+### Day context
+
+- **Weather:** Warm and clear
+- **Places visited:** the river trail (Family: Sam, Maya)<br>the taco truck (Family: Sam, Maya)<br>home (Family: Sam, Maya, Leo)
+- **People we met:** Ravi — relationship: neighbor — context: on the river trail — family: Sam, Maya
+- **Special occasion:** —
+- **Photos / videos:** —
+
+### Morning
+
+- Sam and Maya walked the river trail. Sam had oatmeal with blueberries before they left.
+
+### Afternoon
+
+- Sam and Maya had fish tacos from the truck and saw their neighbor Ravi.
+
+### Evening
+
+- —
+
+### Night
+
+- Leo had pasta, then wiggled a loose tooth and said, "Look, it moved!"
+
+- **Remember:** Leo said, "Look, it moved!"
+
+## Family trackers
+
+### Food
+
+| Person | Breakfast | Lunch | Dinner | Snacks / drinks | Food response |
+|---|---|---|---|---|---|
+| Sam | oatmeal<br>blueberries | fish tacos | — | — | — |
+| Maya | — | fish tacos | — | — | — |
+| Leo | — | — | pasta | — | — |
+
+## Tags
+
+#family #river-trail #first-tooth
+
+## My notes
+
+## Transcript
+
+### 21:30 · Log My Day
+
+![[2026-10-10-2130.m4a]]
+
+We walked the river trail this morning. I had oatmeal with blueberries before we left.
+Maya and I got fish tacos from the truck at lunch, and we ran into our neighbor Ravi.
+Leo had pasta for dinner, then wiggled a loose tooth and said, "Look, it moved!"
+He was so proud. It was warm and clear all day.
+```
+
+You can edit the timeline and the tables in Obsidian. The next recording updates the page and
+leaves those edits in place. The Transcript section stays the original words.
+
 ## Get started
 
 You need Python 3.12. [uv](https://docs.astral.sh/uv/) installs the locked dependencies.
