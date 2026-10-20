@@ -1,4 +1,4 @@
-# Lumitrace
+# Lumitrace: a life log from your spoken day
 
 Lumitrace turns your spoken day into a day-file journal. You record from a phone or a laptop.
 It transcribes the recording, writes one Markdown file for that day, and keeps the audio. That
