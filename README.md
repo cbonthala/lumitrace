@@ -1,36 +1,11 @@
 # Lumitrace
 
-Lumitrace keeps the high-level facts of each day — who was there, where you went, what you ate,
-sleep, exercise, health, what a child learned, and the moment worth remembering — in one
-Markdown file per day. The file and the original recording live in storage you control: a folder
-on your computer, or your own Google Drive. You read and correct the page in Obsidian. This
-repository is the program. Your days stay in your storage.
-
-Spectrum then builds a database on those facts, so an AI app can answer questions about your
-own past:
-
-- How many hours did I exercise last month?
-- How many times did we eat out?
-- When did Leo first start talking? When did he start walking?
-- What do we remember from the weekend at the lake?
-
-If a day never mentioned it, the answer says so. Every fact it uses is cited with the date.
-
-## How the Lens answers
-
-The Lens is an [MCP](https://modelcontextprotocol.io) server. Claude, ChatGPT, or Cursor
-connect to it and call tools. The app does not open your files itself.
-
-| Tool | What the app uses it for |
-|---|---|
-| `search` | Find a memory by words and by meaning |
-| `query_facts` | Count and total: meals, exercise minutes, places, people, growth |
-| `get_day` | Read one day's page |
-| `on_this_day` | The same date in earlier years |
-| `feedback` | Record that an answer was wrong |
-
-The app turns "last month" into real dates, calls a tool, and cites each day (`2026-10-10`).
-Connecting an app is under [Ask from an AI app](#ask-from-an-ai-app).
+Lumitrace turns your spoken day into a day-file journal. You record from a phone or a laptop.
+It transcribes the recording, writes one Markdown file for that day, and keeps the audio. That
+page holds the high-level facts — who was there, where you went, what you ate, sleep, exercise,
+health, what a child learned, and the moment worth remembering — in storage you control: a
+folder on your computer, or your own Google Drive. You read and correct the page in Obsidian.
+This repository is the program. Your days stay in your storage.
 
 > A **Flash** captures the moment, the **Prism** splits it into its colors, each day becomes a
 > **Frame**, the **Spectrum** lays everything out in order, and the **Lens** lets you zoom into
@@ -262,6 +237,26 @@ Later deploys are `deploy/lightsail/deploy.sh` with a clean git tree. Full steps
 to delete from `.env.production` so container paths win: `docs/runbook.md`.
 
 ## Ask from an AI app
+
+Once the day files exist, Spectrum builds a database on those facts. The Lens is the
+[MCP](https://modelcontextprotocol.io) server Claude, ChatGPT, or Cursor connect to. The app
+calls tools. It does not open your files itself. You can ask:
+
+- How many hours did I exercise last month?
+- How many times did we eat out?
+- When did Leo first start talking? When did he start walking?
+- What do we remember from the weekend at the lake?
+
+| Tool | What the app uses it for |
+|---|---|
+| `search` | Find a memory by words and by meaning |
+| `query_facts` | Count and total: meals, exercise minutes, places, people, growth |
+| `get_day` | Read one day's page |
+| `on_this_day` | The same date in earlier years |
+| `feedback` | Record that an answer was wrong |
+
+The app turns "last month" into real dates, calls a tool, and cites each day (`2026-10-10`).
+If a day never mentioned it, the answer says so.
 
 * **Same machine:** point Claude Desktop or Cursor at `lumitrace-lens --transport stdio`.
 * **Phone or the web:** serve the Lens over HTTPS and add `https://<your host>/mcp`. Sign-in is
