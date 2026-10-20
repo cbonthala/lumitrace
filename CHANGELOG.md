@@ -7,6 +7,8 @@ edits only its own subsection under *Unreleased* to avoid merge conflicts.
 
 ### Foundation
 
+- **Lumitrace is MIT-licensed.** `LICENSE` is in the repo, and the root README explains the
+  modules, speech and model choices, and the local, Docker, and Lightsail deployment options.
 - **Regenerate fills Format 6 from the transcripts.** `--replace-generated` and a first upgrade
   from Formats 1–5 call `fill_day`, then three-way merge so owner wording stays. A blank fill
   reply is rejected. LiteLLM retries need `tenacity` in the image.

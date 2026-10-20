@@ -22,6 +22,9 @@
     </filter>
   </defs>
 
+  <!-- dark card so the light labels stay readable on a white page (GitHub README) -->
+  <rect width="600" height="150" fill="#141726"/>
+
   <!-- connectors: white light into the Prism, colors out of it -->
   <line x1="80" y1="60" x2="160" y2="60" stroke="#e8eaf6" stroke-width="3" stroke-linecap="round"/>
   <g stroke-width="2.5" stroke-linecap="round">

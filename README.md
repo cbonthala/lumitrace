@@ -1,145 +1,176 @@
 # Lumitrace
 
-Talk about your day into your iPhone. Lumitrace turns it into a daily Markdown journal in Google
-Drive, which you read in Obsidian and can ask questions about from an AI app like Claude
-("What did I eat last Tuesday?").
+Lumitrace turns a spoken day into one Markdown file you own. You record from an iPhone or a
+browser. A small server transcribes it, writes the day's page, and keeps the audio. You read
+and edit that page in Obsidian. Any AI app that speaks [MCP](https://modelcontextprotocol.io)
+can search it and answer with the dates it used.
+
+Your journal stays in your storage. This repository holds the program, not your days.
 
 > A **Flash** captures the moment, the **Prism** splits it into its colors, each day becomes a
 > **Frame**, the **Spectrum** lays everything out in order, and the **Lens** lets you zoom into
 > any day.
 
-> Status: 0.1.0. The Prism, the Spectrum and the Lens are implemented and tested
-> offline end to end (`tests/e2e/`). Not yet verified with real providers, real Google Drive, the
-> Flash shortcuts on a device, or the Claude/ChatGPT connectors. See `CHANGELOG.md`.
+![A capture travels from the Flash through the Prism, Frames and Spectrum to the Lens.](lumitrace/prism/web/flow.svg)
 
-## The names
-
-| Name | What it is | Where the code lives |
+| | What it does | Where you see it |
 |---|---|---|
-| **Lumitrace** | the whole project: one Python package, one Docker image | `lumitrace/` |
-| **Flash** | what you capture with: the web app at `/flash/` (phone or laptop, add it to the Home Screen) and the iPhone Shortcuts (**Log My Day**, **Send pending**, ...) | `lumitrace/prism/web/`; Shortcuts on your phone; guide `docs/flash.md` |
-| **Prism** | the recording API and processing pipeline: splits one beam of raw voice into its colors (facts, journal, mood, transcript) | `lumitrace/prism/` (pipeline in `lumitrace/prism/pipeline/`), `prompts/` |
-| **Frames** | the day files in Google Drive (one Markdown file per day, one Frame per day), their format and the storage layer | `lumitrace/frames/dayfile.py`, `lumitrace/frames/storage/` |
-| **Spectrum** | the indexer: keeps a SQLite search index of the Frames | `lumitrace/spectrum/` (schema shared in `lumitrace/index/`) |
-| **Lens** | the MCP server: lets AI apps search and read your Frames | `lumitrace/lens/` |
+| **Flash** | The capture clients. The web app the Prism serves at `/flash/` (sign in, add it to the iPhone Home Screen) and the iPhone Shortcuts. | Capture tab. Shortcuts are built on the phone (`docs/flash.md`). |
+| **Prism** | The recording API and pipeline. It takes the voice, photos and notes, transcribes them, and writes the day. | Generate, beside a day in History, writes that day now. Otherwise the write waits until 4:05 a.m. |
+| **Frames** | One Markdown file per day, plus the audio and photos beside it. This is the source of truth. The search index can be thrown away and rebuilt. | "This week" counts the files. Open the folder in Obsidian. |
+| **Spectrum** | Watches the Frames and builds a SQLite index by words and by meaning. | Runs on the server. |
+| **Lens** | The MCP server AI apps connect to. Tools: `search`, `get_day`, `query_facts`, `on_this_day`, `feedback`. Answers come only from your entries, with dates. | Claude, ChatGPT, or Cursor. |
 
-## How it works
+Code: Flash web app in `lumitrace/prism/web/`, Prism in `lumitrace/prism/`, Frames in
+`lumitrace/frames/`, Spectrum in `lumitrace/spectrum/`, Lens in `lumitrace/lens/`. One Python
+package, one Docker image, three commands: `lumitrace-prism`, `lumitrace-spectrum`,
+`lumitrace-lens`.
 
-1. **Capture (Flash):** the Flash web app or an iPhone Shortcut sends your voice, location
-   and photos to the Prism (`POST /recordings`). A photo with no recording uses `POST /notes`.
-2. **Split (Prism):** it transcribes the audio, writes the day's journal from that Telugu
-   transcript, and stores a compressed copy of the audio and photos in
-   `Lumitrace/YYYY/MM/YYYY-MM-DD/` in Google Drive. Anything before 4 a.m. counts as the previous
-   day.
-3. **Look at the Frames:** open the Drive folder in Obsidian. Each day embeds its audio with a
-   play button.
-4. **Zoom in (Spectrum + Lens):** the Spectrum keeps a small SQLite search index; the Lens lets AI
-   apps search it.
+## How a day moves through
 
-Details: `docs/architecture.md`. Day file format: `docs/frames-format.md`.
+1. **Capture.** Flash sends audio to `POST /recordings`, or a photo with no recording to
+   `POST /notes`. You pick the filing date first, including today. Anything before 4 a.m. local
+   time belongs to the previous day.
+2. **Keep the original.** Prism stores the audio and resized photos next to the day file and
+   appends the transcript. Your later edits to the page are not overwritten.
+3. **Write the page.** The first write fills a Format 6 day: a timeline, who and where, food,
+   health, and the other family trackers. A later recording updates that page and keeps sentences
+   you changed. Prompts live in `prompts/`.
+4. **Index.** Spectrum reads the Markdown and updates SQLite. The Lens answers from that index.
 
-## Quick start
+Day file layout: `docs/frames-format.md`. How the programs share contracts: `docs/architecture.md`.
 
-The first time on a real deployment, follow the **First-run checklist** in `docs/runbook.md`.
+## Get started
 
-### 1. Set up
-
-Requirements: Python 3.12 via [uv](https://docs.astral.sh/uv/), or Docker.
+You need Python 3.12. [uv](https://docs.astral.sh/uv/) installs the locked dependencies.
+Docker is the other way to run it. Everything below can stay offline: the tests use fake speech,
+fake models, and a folder on disk instead of Google Drive.
 
 ```bash
-uv sync                 # or see AGENTS.md for a workspace-local uv install
-cp .env.example .env    # then edit (below)
-uv run pytest           # everything runs offline
+uv sync
+cp .env.example .env
 ```
 
-In `.env`, set `LUMITRACE_API_TOKEN` to an `openssl rand -hex 32` value and
-`LUMITRACE_MCP_OWNER_PASSWORD` to a long passphrase: with `change-me` or anything under 16
-characters the Prism refuses every request (`503`) and the Lens refuses to start. Choose the speech, AI and embedding providers and
-add their keys (`GEMINI_API_KEY`, `LUMITRACE_SARVAM_API_KEY`, ...). To try it without any provider, set
-`LUMITRACE_STT_PROVIDER=fake`, the three `LUMITRACE_LLM_*_MODEL=fake` and
-`LUMITRACE_EMBEDDING_MODEL=fake`.
-
-### 2. Storage and Google Drive login
-
-* **Local (default):** files go to `LUMITRACE_LOCAL_ROOT` (`data/Lumitrace`). Good for trying it
-  out.
-* **Google Drive:** create a Google Cloud OAuth client of type *Desktop app* with the Drive API
-  enabled and the consent screen set to **In production**, save the JSON as
-  `secrets/gdrive_client_secret.json`, set `LUMITRACE_STORAGE_BACKEND=gdrive`, then run
-  `uv run lumitrace-drive-login` once. Lumitrace only asks for the `drive.file` scope, so it can
-  see only the files it creates (in a `Lumitrace` folder in My Drive). Token renewal:
-  `docs/runbook.md`.
-
-### 3. Run the three services
+In `.env`, set `LUMITRACE_API_TOKEN` (`openssl rand -hex 32`) and `LUMITRACE_MCP_OWNER_PASSWORD`
+(at least 16 characters). `change-me` makes the Prism refuse requests and the Lens refuse to
+start. For a first look with no API keys:
 
 ```bash
-uv run lumitrace-prism      # Prism (recording API) on :8000 (GET /health)
-uv run lumitrace-spectrum   # Spectrum (indexer): poll loop + nudge endpoint on :8001 (keep it internal)
-uv run lumitrace-lens       # Lens (MCP server) on :8002/mcp
-# or all three (services prism, spectrum, lens), sharing a /data volume
-# (only 8000 and 8002 are published):
+# in .env
+LUMITRACE_STT_PROVIDER=fake
+LUMITRACE_LLM_WRITE_JOURNAL_MODEL=fake
+LUMITRACE_LLM_FALLBACK_MODEL=fake
+LUMITRACE_EMBEDDING_MODEL=fake
+```
+
+Then:
+
+```bash
+uv run pytest          # offline
+uv run lumitrace-prism # http://localhost:8000/health  and  /flash/
+```
+
+Open `http://localhost:8000/flash/`, sign in with `LUMITRACE_FLASH_USERNAME` and
+`LUMITRACE_FLASH_PASSWORD` (at least 10 characters), and record. Day files land in
+`data/Lumitrace/`. Copy `docs/templates/family.example.md` to `secrets/family.md` when you want
+the model to know who is who. That file is gitignored.
+
+A note without the browser:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"text": "Fish tacos for lunch."}' localhost:8000/notes
+```
+
+Start Spectrum and the Lens when you want search: `uv run lumitrace-spectrum` and
+`uv run lumitrace-lens`. The first-run checklist is in `docs/runbook.md`.
+
+## Speech and model options
+
+Providers are settings, not code changes (`lumitrace/config.py`). Chat and embedding models are
+[LiteLLM](https://docs.litellm.ai/) model strings, so `gemini/...`, `openai/...`,
+`anthropic/...`, `bedrock/...`, or a local `ollama/...` all use the same call. Put the provider
+key in `.env` under the name that provider expects (`GEMINI_API_KEY`, `OPENAI_API_KEY`, ...).
+Those lines are blank in `.env.example`.
+
+| Job | Setting | What to set |
+|---|---|---|
+| Speech to text | `LUMITRACE_STT_PROVIDER` | `fake` (offline), `litellm` (OpenAI, Groq, Azure, ... via `LUMITRACE_STT_MODEL`), `sarvam` (Indian languages mixed with English; `LUMITRACE_SARVAM_API_KEY`, model `saaras:v4`, mode `codemix`), or `aws_transcribe` (needs `LUMITRACE_AWS_TRANSCRIBE_BUCKET`) |
+| Write and update the day | `LUMITRACE_LLM_WRITE_JOURNAL_MODEL` | Default `gemini/gemini-3.8-flash`. Any LiteLLM chat model. `fake` writes a stand-in page for tests. |
+| Fallback | `LUMITRACE_LLM_FALLBACK_MODEL` | Used when the first model fails or returns bad JSON. Default `gemini/gemini-3.6-flash`, same `GEMINI_API_KEY`. |
+| Search vectors | `LUMITRACE_EMBEDDING_MODEL` | Default `gemini/gemini-embedding-2` at 1536 dimensions. Spectrum and the Lens must use the same model. Changing it rebuilds the index. `fake` is for tests. |
+
+The shipped defaults assume a Gemini key and, for Telugu–English recordings, a Sarvam key.
+Set every model to `fake` when you only want to try the app.
+
+## Deployment
+
+Three ways to run the same image. Ports: Prism `8000`, Spectrum `8001` (keep it internal; `/nudge`
+has no auth), Lens `8002` (`/mcp`).
+
+**On your computer.** The commands in Get started. Storage defaults to the `local` backend
+(`data/Lumitrace`).
+
+**Docker Compose.** From the repo:
+
+```bash
 docker compose up -d --build
 ```
 
-Try it: `curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json'
--d '{"text": "Fish tacos for lunch."}' localhost:8000/notes`, then look in `data/Lumitrace/`.
+That starts Prism, Spectrum, and Lens with a shared data volume. Delete the path settings that
+the image already sets (`LUMITRACE_PROMPTS_DIR`, `LUMITRACE_LOCAL_ROOT`, `LUMITRACE_INDEX_PATH`,
+and the two `LUMITRACE_GDRIVE_*_FILE` lines) from a `.env` you use with Docker, or they point at
+folders that do not exist in the container.
 
-### 4. Connect Claude, ChatGPT or Cursor (Lens)
+**Google Drive instead of a local folder.** Create a Google Cloud OAuth client (Desktop app)
+with the Drive API, save it as `secrets/gdrive_client_secret.json`, set
+`LUMITRACE_STORAGE_BACKEND=gdrive`, and run `uv run lumitrace-drive-login` once. The scope is
+`drive.file`: Lumitrace only sees files it created, in a `Lumitrace` folder. Renewal steps are
+in `docs/runbook.md`.
 
-* **Claude Desktop / Cursor on the same machine:** run
-  `lumitrace-lens --transport stdio` from the app's MCP config.
-* **Claude (web and phone) / ChatGPT / Cursor remote:** serve the Lens over HTTPS, then add
-  `https://<your host>/mcp` as a connector and sign in with the owner password (OAuth is the
-  only login; sessions last `LUMITRACE_MCP_SESSION_DAYS`, default 7).
+**A server on AWS Lightsail, reached through Tailscale.** `deploy/lightsail/` is the path used
+for a single small Ubuntu box. It does not contain an account id, an IP, or keys.
 
-Exact configs: `docs/lens.md`. Turn off "use my chats for training" in the app you
-connect.
+1. Sign in with the AWS CLI (`deploy/lightsail/iam-policy.json` is the permission set).
+2. `deploy/lightsail/provision.sh` creates, if missing, an SSH key at
+   `~/.ssh/lumitrace-lightsail`, an instance named `lumitrace` in `us-east-2`, a static IP named
+   `lumitrace-ip`, and a firewall that allows SSH only from your current address. The script
+   asks AWS for the IP. It is not written in the repo.
+3. `ENV_FILE=.env.production SECRETS_DIR=secrets deploy/lightsail/deploy.sh` uploads that env
+   file and `secrets/`, then ships the last git commit and starts the containers with ports
+   bound to `127.0.0.1`.
+4. `deploy/lightsail/tailscale.sh` on the server publishes the Prism on your tailnet
+   (`https://lumitrace.<tailnet>.ts.net`, the Flash app) and the Lens through Funnel
+   (`https://lumitrace.<tailnet>.ts.net:8443/mcp`).
 
-### 5. Flash (web app and iPhone Shortcuts)
+Later deploys are `deploy/lightsail/deploy.sh` with a clean git tree. Full steps, including what
+to delete from `.env.production` so container paths win: `docs/runbook.md`.
 
-Quickest: set `LUMITRACE_FLASH_USERNAME` and `LUMITRACE_FLASH_PASSWORD`, open
-`https://<prism address>/flash/`, sign in and add it to the Home Screen (`docs/flash.md` →
-section 0). For Siri, the Action Button and the share sheet, also build **Flash Config**, **Log My Day**, **Quick Note**, **Send pending**, **Send to Lumitrace**
-and the nightly reminder automation, and reach the Prism over HTTPS (Tailscale or a reverse
-proxy): `docs/flash.md`.
+## Ask from an AI app
 
-## Everyday use
+* **Same machine:** point Claude Desktop or Cursor at `lumitrace-lens --transport stdio`.
+* **Phone or the web:** serve the Lens over HTTPS and add `https://<your host>/mcp`. Sign-in is
+  the owner password (`LUMITRACE_MCP_AUTH_MODE=oauth`). A session lasts
+  `LUMITRACE_MCP_SESSION_DAYS` (7 by default).
 
-* **Log My Day** Shortcut at night (the nightly reminder starts it), **Quick Note** during the day.
-* No signal? The Shortcut saves to a "Flash Inbox" folder in Files; "Send pending" uploads later.
-  The web app keeps captures in the browser and sends them when you're back online.
-* Add extra source material under **My notes**. Generate and the 4:05 a.m. run read it alongside
-  every recording but never modify it. **Generate** beside a day in Flash History writes the
-  first journal and structured facts now; later clicks process changed source or repair a
-  format-4 day whose facts are missing.
-* Edit the title, journal or At a glance facts in Obsidian after the first generation. Those
-  edits are kept. New
-  recordings or changed My notes add bullets directly to Morning, Afternoon, Evening, Thoughts
-  or Summary, and merge complete new facts with owner changes winning—there is no Later section
-  and no full rewrite. A journal typed before its first generation is still replaced. The file
-  has no English translation.
-* Ask your AI app about your days; answers cite the dates they come from. If an answer is wrong,
-  say so and the app records feedback.
+Setup for each app is in `docs/lens.md`.
 
-## Privacy
+## License
 
-No personal content is ever stored in this repository. Your journal, audio, photos, activity
-records and feedback stay in your own storage (`Lumitrace/` and `Lumitrace/_system/`). The index
-lives on the server's disk and is backed up to your Drive. Logs never contain journal text.
+[MIT](LICENSE). Copyright (c) 2026 Chakri Bonthala.
 
 ## Documentation
 
 | Topic | Where |
 |---|---|
-| Conventions and context for AI coding agents | `AGENTS.md` |
-| How the pieces fit | `docs/architecture.md`, `docs/contracts.md` |
-| Tech stack, services and licenses | `docs/tech-stack.md` |
-| Prism (recording API) and Flash (iPhone Shortcuts) | `docs/prism.md`, `docs/flash.md` |
-| Spectrum (indexer) | `docs/spectrum.md`, `docs/index-schema.md` |
-| Lens (MCP server) and AI-app setup | `docs/lens.md` |
-| Frames (day file format) | `docs/frames-format.md` |
-| Why things are the way they are | `docs/decisions/` (names: `0042-rename-to-lumitrace.md`) |
-| Maintenance, first run, upgrading from LifeLog, Bookshelf or Lumen | `docs/runbook.md` |
-| Trying the APIs by hand (Bruno collection, one folder per module) | `bruno/`, `docs/runbook.md` |
-| What each test checks, in plain English | `docs/test-cases.md` |
-| What we learned | `docs/learnings.md`, `CHANGELOG.md` |
+| Conventions for people and coding agents changing the code | `AGENTS.md` |
+| How the pieces fit, and the shared contracts | `docs/architecture.md`, `docs/contracts.md` |
+| Libraries, services, and their licenses | `docs/tech-stack.md` |
+| Prism API and the Flash web app / Shortcuts | `docs/prism.md`, `docs/flash.md` |
+| Spectrum and the index | `docs/spectrum.md`, `docs/index-schema.md` |
+| Lens and connecting an AI app | `docs/lens.md` |
+| Day file format | `docs/frames-format.md` |
+| Decisions | `docs/decisions/` |
+| First run, backups, Lightsail | `docs/runbook.md` |
+| What each test checks | `docs/test-cases.md` |
+| Changelog | `CHANGELOG.md` |

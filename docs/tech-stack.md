@@ -3,8 +3,8 @@
 Everything Lumitrace is built with or depends on, grouped by module, and whether it is open source.
 Versions are the ones locked in `uv.lock` (Python packages) or pinned in the `Dockerfile`.
 Providers and services are swappable through config (`lumitrace/config.py`, decision 0005) unless
-noted. Lumitrace itself is one Python package and one Docker image; `pyproject.toml` marks it
-proprietary. Examples below use fictional data.
+noted. Lumitrace itself is one Python package and one Docker image, released under the MIT
+license (`LICENSE`). Examples below use fictional data.
 
 ## Shared by all three programs
 
