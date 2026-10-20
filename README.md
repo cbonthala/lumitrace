@@ -1,11 +1,36 @@
 # Lumitrace
 
-Lumitrace turns a spoken day into one Markdown file you own. You record from an iPhone or a
-browser. A small server transcribes it, writes the day's page, and keeps the audio. You read
-and edit that page in Obsidian. Any AI app that speaks [MCP](https://modelcontextprotocol.io)
-can search it and answer with the dates it used.
+Lumitrace keeps the high-level facts of each day — who was there, where you went, what you ate,
+sleep, exercise, health, what a child learned, and the moment worth remembering — in one
+Markdown file per day. The file and the original recording live in storage you control: a folder
+on your computer, or your own Google Drive. You read and correct the page in Obsidian. This
+repository is the program. Your days stay in your storage.
 
-Your journal stays in your storage. This repository holds the program, not your days.
+Spectrum then builds a database on those facts, so an AI app can answer questions about your
+own past:
+
+- How many hours did I exercise last month?
+- How many times did we eat out?
+- When did Leo first start talking? When did he start walking?
+- What do we remember from the weekend at the lake?
+
+If a day never mentioned it, the answer says so. Every fact it uses is cited with the date.
+
+## How the Lens answers
+
+The Lens is an [MCP](https://modelcontextprotocol.io) server. Claude, ChatGPT, or Cursor
+connect to it and call tools. The app does not open your files itself.
+
+| Tool | What the app uses it for |
+|---|---|
+| `search` | Find a memory by words and by meaning |
+| `query_facts` | Count and total: meals, exercise minutes, places, people, growth |
+| `get_day` | Read one day's page |
+| `on_this_day` | The same date in earlier years |
+| `feedback` | Record that an answer was wrong |
+
+The app turns "last month" into real dates, calls a tool, and cites each day (`2026-10-10`).
+Connecting an app is under [Ask from an AI app](#ask-from-an-ai-app).
 
 > A **Flash** captures the moment, the **Prism** splits it into its colors, each day becomes a
 > **Frame**, the **Spectrum** lays everything out in order, and the **Lens** lets you zoom into
@@ -15,16 +40,23 @@ Your journal stays in your storage. This repository holds the program, not your 
 
 | | What it does | Where you see it |
 |---|---|---|
-| **Flash** | The capture clients. The web app the Prism serves at `/flash/` (sign in, add it to the iPhone Home Screen) and the iPhone Shortcuts. | Capture tab. Shortcuts are built on the phone (`docs/flash.md`). |
+| **Flash** | The capture clients. A page in the browser at `/flash/`, which you can save as a web app on a phone or a laptop, and the iPhone Shortcuts. | Capture tab. Shortcuts are built on the phone (`docs/flash.md`). |
 | **Prism** | The recording API and pipeline. It takes the voice, photos and notes, transcribes them, and writes the day. | Generate, beside a day in History, writes that day now. Otherwise the write waits until 4:05 a.m. |
 | **Frames** | One Markdown file per day, plus the audio and photos beside it. This is the source of truth. The search index can be thrown away and rebuilt. | "This week" counts the files. Open the folder in Obsidian. |
 | **Spectrum** | Watches the Frames and builds a SQLite index by words and by meaning. | Runs on the server. |
-| **Lens** | The MCP server AI apps connect to. Tools: `search`, `get_day`, `query_facts`, `on_this_day`, `feedback`. Answers come only from your entries, with dates. | Claude, ChatGPT, or Cursor. |
+| **Lens** | The MCP server an AI app calls to search and count your days. | Claude, ChatGPT, or Cursor. |
 
 Code: Flash web app in `lumitrace/prism/web/`, Prism in `lumitrace/prism/`, Frames in
 `lumitrace/frames/`, Spectrum in `lumitrace/spectrum/`, Lens in `lumitrace/lens/`. One Python
 package, one Docker image, three commands: `lumitrace-prism`, `lumitrace-spectrum`,
 `lumitrace-lens`.
+
+Flash is a page in the browser. Open `/flash/`, sign in, and save it as a web app on a phone or
+a laptop: **Add to Home Screen** on a phone, or the browser's **Install** or **Add to Dock** on
+a laptop. It then opens full screen, like an app you installed. The same page works in a normal
+browser tab if you would rather not install it.
+
+<img src="docs/images/flash.png" alt="The Flash capture screen in a phone browser: Log My Day, the filing date, and this week." width="280">
 
 ## How a day moves through
 
@@ -49,27 +81,13 @@ mentioned is `—`.
 
 The Saturday evening recording, after transcription:
 
-```text
-We walked the river trail this morning. I had oatmeal with blueberries before we left.
-Maya and I got fish tacos from the truck at lunch, and we ran into our neighbor Ravi.
-Leo had pasta for dinner, then wiggled a loose tooth and said, "Look, it moved!"
-He was so proud. It was warm and clear all day.
-```
+> We walked the river trail this morning. I had oatmeal with blueberries before we left.
+> Maya and I got fish tacos from the truck at lunch, and we ran into our neighbor Ravi.
+> Leo had pasta for dinner, then wiggled a loose tooth and said, "Look, it moved!"
+> He was so proud. It was warm and clear all day.
 
-The Frame Prism writes, `2026/10/2026-10-10/2026-10-10.md`, with the audio kept beside it:
-
-```markdown
----
-date: 2026-10-10
-audio:
-- 2026-10-10-2130.m4a
-prompt_version: fill_day
-models_used:
-  stt: openai/gpt-4o-transcribe
-  fill_day: gemini/gemini-3.8-flash
-generated_at: '2026-10-11T04:05:00-05:00'
-lumitrace_format: 6
----
+Prism writes that into `2026/10/2026-10-10/2026-10-10.md` and keeps `2026-10-10-2130.m4a` in
+the same folder. This is the page, as you would read it:
 
 # Saturday, October 10, 2026 · First loose tooth
 
@@ -117,7 +135,7 @@ lumitrace_format: 6
 
 ## Tags
 
-#family #river-trail #first-tooth
+\#family \#river-trail \#first-tooth
 
 ## My notes
 
@@ -131,7 +149,8 @@ We walked the river trail this morning. I had oatmeal with blueberries before we
 Maya and I got fish tacos from the truck at lunch, and we ran into our neighbor Ravi.
 Leo had pasta for dinner, then wiggled a loose tooth and said, "Look, it moved!"
 He was so proud. It was warm and clear all day.
-```
+
+---
 
 You can edit the timeline and the tables in Obsidian. The next recording updates the page and
 leaves those edits in place. The Transcript section stays the original words.
